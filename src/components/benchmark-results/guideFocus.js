@@ -1,0 +1,38 @@
+export const GUIDE_FOCUS = {
+    'optimized-baseline': {
+        label: 'Optimized Baseline',
+        title: 'Latency, throughput & load balance',
+        objective: 'Lower tail TTFT and sustain throughput without concentrating token load on one instance.',
+        primary: ['ttft', 'throughput', 'tokenLoadCv', 'queue'],
+        supporting: ['cacheHit', 'actualCachedPromptFraction'],
+        series: [['queue_depth', 'Waiting requests']], unit: 'requests',
+        workload: 'Compare no-reuse and shared-prefix traffic across increasing load.',
+    },
+    'pd-disaggregation': {
+        label: 'PD Disaggregation',
+        title: 'Prefill & decode performance',
+        objective: 'Keep generation latency stable while separating Prefill and Decode; check transfer cost and pressure on both pools.',
+        primary: ['ttft', 'itl', 'tpot', 'transferLatency'],
+        supporting: ['prefillQueue', 'decodeQueue', 'prefillRunning', 'decodeRunning', 'prefillGpu', 'decodeGpu', 'transferRate', 'transferBandwidth', 'transferFailures'],
+        series: [['prefill_waiting_requests', 'Prefill queue'], ['decode_waiting_requests', 'Decode queue']], unit: 'requests',
+        workload: 'Compare long inputs, long outputs and different P:D resource ratios.',
+    },
+    'precise-prefix-cache-routing': {
+        label: 'Precise Prefix Cache Routing',
+        title: 'Cache reuse & prefill work',
+        objective: 'Verify real engine reuse and computation savings alongside TTFT; index activity alone does not prove a benefit.',
+        primary: ['actualCachedPromptFraction', 'engineCompute', 'engineRecompute', 'ttft'],
+        supporting: ['actualRecomputedTokens', 'engineLocalReuse', 'engineExternalReuse', 'indexLookup', 'indexLookups', 'indexAdmissions', 'indexEvictions', 'subscribers', 'cachedPromptFraction', 'recomputedTokens'],
+        series: [['engine_prompt_local_compute_tps', 'Local computation'], ['engine_prompt_local_cache_tps', 'Local cache reuse'], ['engine_prompt_recomputed_tps', 'Cached-token recomputation']], unit: 'tokens/s',
+        workload: 'Compare approximate and precise routing with shared prefixes, eviction and cache location changes.',
+    },
+    'tiered-prefix-cache': {
+        label: 'Tiered Prefix Cache',
+        title: 'KV restore & cache pressure',
+        objective: 'Verify KV is restored during revisits, then weigh TTFT against cache pressure and restore cost.',
+        primary: ['restore', 'ttft', 'hbmPeak', 'hbmCapacity'],
+        supporting: ['restoredBytes', 'restoreTime', 'offload', 'offloadedBytes', 'hbmUsage', 'cpuUsage', 'cpuCapacity', 'cpuMemory', 'externalCacheHit', 'workingSet', 'configuredPrefixScale'],
+        series: [['kv_restore_bytes_per_second', 'KV restore'], ['kv_offload_bytes_per_second', 'KV offload']], unit: 'bytes/s',
+        workload: 'Revisit prefixes after the reusable working set exceeds HBM capacity; high occupancy by itself is insufficient.',
+    },
+};

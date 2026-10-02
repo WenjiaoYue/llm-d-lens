@@ -1,0 +1,70 @@
+---
+title: Troubleshooting
+description: Fixes for the failure modes you're most likely to hit running Lens.
+---
+
+## First request after installing/publishing a model service fails, retry succeeds
+
+**Symptom:** right after installing the shared Gateway or publishing a new
+service provider, the first `curl` to the gateway returns
+`upstream connect error or disconnect/reset before headers ... Connection
+refused`, but an identical retry a few seconds later succeeds.
+
+**Cause:** `kubectl apply` only means the Envoy Gateway controller has *seen*
+the desired `Gateway`/`HTTPRoute` resources — it still
+needs a moment to translate them into real Envoy xDS config and push it to
+the proxy. Lens polls the `Gateway`'s `status.conditions[Programmed]` after
+apply and only reports the install as ready once that flips to `True`
+(default timeout 30s); if you still hit this within that window, wait a few
+seconds and retry, or check the install operation's log drawer for a
+"still programming the route" message.
+
+## Gateway stays `Programmed=False` (`AddressNotAssigned`)
+
+**Cause:** the Gateway's `LoadBalancer` Service has no external address, so
+Envoy Gateway never assigns one. **Fix:** on cloud clusters the provider
+assigns it; on local kind clusters install `cloud-provider-kind` or MetalLB.
+Check with `kubectl get svc -n envoy-gateway-system`.
+
+## HTTPRoute `ResolvedRefs=False` (`InvalidKind`) for InferencePool
+
+**Cause:** Envoy Gateway was installed without the inference-pool addon, so it
+does not accept `inference.networking.k8s.io` backends and replaces the route
+with a 500 direct response. **Fix:** install Envoy Gateway with the
+[inference-pool addon](/user-guide/clusters#model-gateway-prerequisites).
+
+## "no matches for kind ... ensure CRDs are installed first" during Gateway install
+
+**Cause:** `kubectl`'s client-side discovery cache can report a CRD as
+unknown for a short window right after it becomes `Established`, or after an
+earlier failed install attempt cached a stale "unknown API group". Lens
+retries the apply a few times with a short delay and invalidates the
+discovery cache before applying; if it still fails, re-run the install — the
+CRDs themselves are already present.
+
+## Model Service permission change isn't visible in the UI
+
+**Cause:** the session's permission set is fetched once when the browser tab
+loads and cached in memory; it is not re-fetched automatically after a role
+or backend permission-catalog change. **Fix:** hard-refresh the page or
+sign out and back in.
+
+## Backend fails to start after a code/dependency change
+
+Check `~/.local/state/lens/logs/dev/backend.log` for the actual exception.
+Common causes: a missing Python dependency after a `[project.dependencies]`
+change (`python3 -m pip install -e '.[dev]'`), or a port already in use —
+`scripts/dev.sh` picks free ports automatically and logs which ones it used.
+
+## The MCP tool catalog is missing a route you just added
+
+Regenerate it: `node scripts/generate-mcp-tools.mjs`. `scripts/dev.sh
+start`/`restart` do this automatically; only a manual backend restart
+(without going through `scripts/dev.sh`) can leave it stale.
+
+## Reuse map / task-start validation blocks `scripts/dev.sh start`
+
+The reuse-first workflow validates the capability map before starting
+services; an invalid registration or an unresolved pending decision blocks
+startup without stopping already-running services. See the
+[reuse workflow](/development/reuse-workflow) for how to resolve it.

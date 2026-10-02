@@ -1,0 +1,36 @@
+---
+title: Evaluate a deployment
+description: Benchmark a deployment's latency and throughput with a guided evaluation task.
+---
+
+Once a deployment is ready (see
+[Bootstrap a cluster and deploy a model](/tutorials/bootstrap-and-deploy)),
+benchmark it without hand-written scripts.
+
+## 1. Create an evaluation task
+
+Open [Evaluation](/user-guide/evaluation) and start a new task:
+
+1. Select the target deployment.
+2. Pick a workload/parameter profile — reuse an existing
+   [guide](/evaluation/guides) or [parameter preset](/evaluation/parameters)
+   instead of tuning every field by hand.
+3. Confirm and run the task.
+
+## 2. Watch it run
+
+The task view streams progress and logs while the benchmark executes against
+the deployment.
+
+## 3. Read the results
+
+Once it finishes, open the results dashboard: latency/throughput charts, the
+exact configuration snapshot used, and exportable raw data — useful for
+comparing two configurations of the same model/hardware pair.
+
+## Next
+
+If the results look good, [publish the deployment as a model service](/tutorials/publish-a-model-service)
+so clients can call it through the gateway; if not, adjust the deployment's
+resources on [Deployments](/user-guide/deployments) and re-run the
+evaluation.

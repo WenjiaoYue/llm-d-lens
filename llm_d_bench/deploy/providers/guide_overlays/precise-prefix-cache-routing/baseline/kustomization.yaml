@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Prism-authored comparison baseline for the precise-prefix-cache-routing Guide.
+#
+# Upstream ships no such Service -- this exists purely so Evaluate can compare
+# precise, event-driven prefix-cache routing against "a stock Kubernetes Service
+# that round-robins requests across the same pods (no EPP, no scoring)", which is
+# the Guide's own published benchmark methodology (see upstream
+# guides/precise-prefix-cache-routing/benchmark-results/*.md). Deployed
+# unconditionally alongside the model server and render Service so Evaluate can
+# hit either endpoint against identical, already-warmed pods without a second
+# deployment.
+#
+# NOTE: this lands on resource metadata ONLY (kustomize `labels` defaults to
+# includeSelectors:false) -- the selector in service.yaml is written out
+# literally because it must match the model server pods, not this Service's
+# own (nonexistent) pods.
+namePrefix: precise-prefix-cache-routing-
+
+resources:
+  - service.yaml
+
+labels:
+  - pairs:
+      llm-d.ai/guide: precise-prefix-cache-routing

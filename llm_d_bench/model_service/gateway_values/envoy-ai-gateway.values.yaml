@@ -1,0 +1,39 @@
+# Envoy AI Gateway values for the shared llm-d inference Gateway.
+#
+# Merges the Envoy AI Gateway base configuration
+# (manifests/envoy-gateway-values.yaml) with the InferencePool addon
+# (examples/inference-pool/envoy-gateway-values-addon.yaml) from
+# github.com/envoyproxy/ai-gateway, so Envoy Gateway accepts
+# `inference.networking.k8s.io` (InferencePool) HTTPRoute backends.
+#
+# Without backendResources Envoy Gateway rejects InferencePool backendRefs with
+# `InvalidKind` and replaces the route with a 500 direct response.
+config:
+  envoyGateway:
+    extensionApis:
+      enableEnvoyPatchPolicy: true
+      enableBackend: true
+    extensionManager:
+      hooks:
+        xdsTranslator:
+          translation:
+            listener:
+              includeAll: true
+            route:
+              includeAll: true
+            cluster:
+              includeAll: true
+            secret:
+              includeAll: true
+          post:
+            - Translation
+            - Cluster
+            - Route
+      service:
+        fqdn:
+          hostname: ai-gateway-controller.envoy-ai-gateway-system.svc.cluster.local
+          port: 1063
+      backendResources:
+        - group: inference.networking.k8s.io
+          kind: InferencePool
+          version: v1

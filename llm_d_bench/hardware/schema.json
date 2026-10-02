@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HardwareProfile",
+  "description": "One accelerator family's declarative capabilities.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "display_name", "vendor", "request_model", "deployment"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9.-]*$" },
+    "display_name": { "type": "string", "minLength": 1 },
+    "vendor": { "type": "string", "minLength": 1 },
+    "accelerator_keys": { "$ref": "#/$defs/string_list" },
+    "benchmark_profile": { "type": "string" },
+    "upstream_variant": { "type": "string" },
+    "upstream_vendor": { "type": "string" },
+    "request_model": { "type": "string", "enum": ["dra", "extended-resource"] },
+    "device_classes": { "$ref": "#/$defs/string_list" },
+    "resource_prefixes": { "$ref": "#/$defs/string_list" },
+    "monitor_resource_suffixes": { "$ref": "#/$defs/string_list" },
+    "node_label_selector": { "$ref": "#/$defs/string_map" },
+    "dranet_device_class": { "type": ["string", "null"] },
+    "access_modes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "driver": { "oneOf": [{ "$ref": "#/$defs/driver" }, { "type": "null" }] },
+    "presence": { "oneOf": [{ "$ref": "#/$defs/presence" }, { "type": "null" }] },
+    "telemetry": { "oneOf": [{ "$ref": "#/$defs/telemetry" }, { "type": "null" }] },
+    "deployment": { "$ref": "#/$defs/deployment" },
+    "evaluation_profile": { "type": "string" },
+    "planning": { "$ref": "#/$defs/planning" },
+    "ui": { "$ref": "#/$defs/ui" }
+  },
+  "$defs": {
+    "string_list": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "string_map": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "matcher_list": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": { "type": "string" }
+      }
+    },
+    "driver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["installer"],
+      "properties": {
+        "installer": { "type": "string", "enum": ["kustomize", "helm"] },
+        "modes": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/accessModeDriver" }
+        },
+        "nfd_manifest_refs": { "$ref": "#/$defs/string_list" }
+      }
+    },
+    "accessModeDriver": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manifest_ref": { "type": ["string", "null"] },
+        "chart_version": { "type": ["string", "null"] },
+        "repo": { "type": ["string", "null"] },
+        "min_kubernetes_version": { "type": ["string", "null"] },
+        "daemonset_matchers": { "$ref": "#/$defs/matcher_list" },
+        "monitoring_flag": { "type": ["string", "null"] },
+        "options": { "type": "object" }
+      }
+    },
+    "presence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_label_selector"],
+      "properties": {
+        "node_label_selector": { "$ref": "#/$defs/string_map" },
+        "ensure_refs": { "$ref": "#/$defs/string_list" },
+        "timeout_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "poll_interval_seconds": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "device_metric_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "metric": { "type": "string" },
+        "unit": { "type": "string" },
+        "scale": { "type": "number" },
+        "match": { "$ref": "#/$defs/string_map" }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider_id": { "type": ["string", "null"] },
+        "device_metrics": { "$ref": "#/$defs/string_map" },
+        "device_metric_sources": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/device_metric_source" }
+        },
+        "label_schema": { "$ref": "#/$defs/string_map" },
+        "allocation_join": { "enum": ["dra", "extended-resource", "none", null] },
+        "pod_metrics": { "$ref": "#/$defs/string_map" },
+        "scrape_path": { "type": ["string", "null"] }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overlay_root", "arch"],
+      "properties": {
+        "overlay_root": { "type": "string", "minLength": 1 },
+        "arch": { "type": "string", "minLength": 1 },
+        "device_class": { "type": "string" },
+        "claim_request_name": { "type": "string" },
+        "node_selector": { "$ref": "#/$defs/string_map" },
+        "resource_name": { "type": ["string", "null"] },
+        "supports_pci_allowlist": { "type": "boolean" },
+        "runtime_image": { "type": ["string", "null"] }
+      }
+    },
+    "planning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "aic_system_patterns": { "$ref": "#/$defs/string_list" },
+        "default_backend": { "type": "string" },
+        "device_class_allow_pattern": { "type": "string" }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "icon": { "type": "string" },
+        "labels": { "$ref": "#/$defs/string_map" }
+      }
+    }
+  }
+}

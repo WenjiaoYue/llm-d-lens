@@ -1,0 +1,26 @@
+# Neutral Router baseline: preserve the EPP/Envoy data path while removing
+# prefix-cache and load-aware scheduling. random-picker is the router's
+# supported neutral endpoint picker; this is not a Kubernetes Service bypass.
+router:
+  extraServicePorts:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8081
+
+  epp:
+    pluginsConfigFile: "router-neutral-plugins.yaml"
+    pluginsCustomConfig:
+      router-neutral-plugins.yaml: |
+        apiVersion: llm-d.ai/v1alpha1
+        kind: EndpointPickerConfig
+        plugins:
+        - type: random-picker
+        schedulingProfiles:
+        - name: default
+          plugins:
+          - pluginRef: random-picker
+
+  modelServers:
+    matchLabels:
+      llm-d.ai/guide: "optimized-baseline"

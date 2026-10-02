@@ -1,0 +1,43 @@
+---
+title: Bootstrap a cluster and deploy a model
+description: End-to-end walkthrough from a fresh cluster registration to a running deployment.
+---
+
+This walkthrough takes you from zero to a running inference deployment.
+
+## 1. Register or bootstrap a cluster
+
+Open [Clusters](/user-guide/clusters) and either:
+
+- **Register an existing cluster** by supplying its kubeconfig, or
+- **Bootstrap a new one** with the guided Create cluster wizard (see
+  [Clusters](/user-guide/clusters) for what the wizard automates).
+
+## 2. Pick a model
+
+Open [Model market](/user-guide/model-market), browse the catalog, and open a
+model's detail view to confirm its parameter size and license fit your
+cluster's resources.
+
+## 3. Deploy it
+
+Use **One-click deployment** from the model's detail view, which hands off
+to [Deployments](/user-guide/deployments) with the model pre-filled. Either:
+
+- Manually choose the cluster and resource shape, or
+- Describe the target workload and let agentic planning propose a plan (see
+  [Architecture overview](/architecture)).
+
+Review and approve the plan.
+
+## 4. Watch it come up
+
+From the Deployments page, track status, view pods, and stream logs from
+the slide-in panel until the deployment reports ready.
+
+## Next
+
+- [Evaluate](/tutorials/evaluate-a-deployment) it to measure real latency
+  and throughput.
+- [Publish it as a model service](/tutorials/publish-a-model-service) so
+  clients can call it through one stable, OpenAI-compatible endpoint.

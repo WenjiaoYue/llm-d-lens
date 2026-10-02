@@ -1,0 +1,46 @@
+---
+title: Publish a model service
+description: Turn a cluster deployment into a stable, OpenAI-compatible endpoint.
+---
+
+Once a deployment exists (see
+[Bootstrap a cluster and deploy a model](/tutorials/bootstrap-and-deploy)),
+publish it through the shared gateway so callers get one stable endpoint
+regardless of cluster or replica.
+
+## 1. Install the cluster's shared Gateway (once per cluster)
+
+On [Model services](/user-guide/model-services), open your cluster's **Gateway**
+node menu and choose **Install**. The provider is selected on the cluster; see the
+[model gateway prerequisites](/user-guide/clusters#model-gateway-prerequisites)
+(provider with InferencePool support and a LoadBalancer address). Watch the live
+log drawer until it reports ready — Envoy Gateway needs a few seconds after
+`kubectl apply` to actually program the route (see [Troubleshooting](/troubleshooting)
+if the very first request fails).
+
+## 2. Create or choose a model service
+
+Create a model service (admin) with a name, model reference and selection
+policy — or use an existing one your deployment matches.
+
+## 3. Add your deployment as a provider
+
+Add your cluster's deployment as a service provider (member) for that model
+service. This is available to maintainers for clusters they manage, not
+just admins.
+
+## 4. Issue a token and call it
+
+Issue a personal API token (`lens-mk-...`) from the Model services page, then
+call the gateway:
+
+```bash
+curl http://<gateway-host>/v1/chat/completions \
+  -H "Authorization: Bearer lens-mk-..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"<your model name>","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+See [Integrations](/integrations) for using this endpoint from the OpenAI
+SDK or other OpenAI-compatible frameworks, and
+[Observability](/user-guide/observability) to review usage afterward.

@@ -1,0 +1,49 @@
+---
+title: Integrations
+description: Point OpenAI-compatible clients and tools at a published model service.
+---
+
+A published [model service](/user-guide/model-services) is a standard
+OpenAI-compatible endpoint, so any client or framework that speaks that API
+can call it by setting its base URL and API key — no Lens-specific client
+required.
+
+## curl
+
+```bash
+curl http://<edge-host>:<edge-port>/v1/chat/completions \
+  -H "Authorization: Bearer lens-mk-..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"Qwen/Qwen3-8B","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+## OpenAI Python SDK
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://<edge-host>:<edge-port>/v1",
+    api_key="lens-mk-...",
+)
+response = client.chat.completions.create(
+    model="Qwen/Qwen3-8B",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+## LangChain / LlamaIndex / other OpenAI-compatible frameworks
+
+Any framework that accepts a custom `base_url` and `api_key` for an
+"OpenAI-compatible" provider works the same way — point it at
+`http://<edge-host>:<edge-port>/v1` with a Lens API token
+(`lens-mk-...`, issued from the [Model services](/user-guide/model-services)
+page).
+
+## Lens Assistant's own provider
+
+[Lens Assistant](/user-guide/lens-assistant) and agentic deployment planning
+go the other direction: Lens is the *client*, calling out to an
+[external provider](/user-guide/external-providers) you configure (OpenAI,
+Azure OpenAI, Anthropic, or a self-hosted OpenAI-compatible server — which
+can itself be another Lens model service).

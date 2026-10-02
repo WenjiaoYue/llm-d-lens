@@ -1,0 +1,380 @@
+{
+  "version": 1,
+  "requests": [
+    {
+      "id": "ca783e76-c2cd-4880-b745-0f73ee1e5ff2",
+      "status": "resolved",
+      "kind": "index",
+      "summary": "PageInfo, TaskRef and TaskStatus definitions changed since the recorded DB ownership decision; confirm whether to keep these unused definitions for the DB PR or delete them",
+      "options": [
+        "Keep definitions for the DB PR",
+        "Delete unused refactor definitions"
+      ],
+      "createdAt": "2026-09-30T03:25:35.747Z",
+      "evidence": [
+        {
+          "path": "llm_d_bench/schemas/common.py",
+          "hash": "353a755d674f395e29a540c0c766075ac8b70c5acb0af8d488e551998d426012"
+        },
+        {
+          "path": "llm_d_bench/tasks/models.py",
+          "hash": "74a3fb1199af1763b8d84f0e331c8f7aa38641aa881d21062afea4418102a2f5"
+        },
+        {
+          "path": "llm_d_bench/tasks/__init__.py",
+          "hash": "dd576004be95bcc0da78025468dbc067f11be29bc36396f8530a575647456ad3"
+        }
+      ],
+      "history": [
+        {
+          "id": "ca783e76-c2cd-4880-b745-0f73ee1e5ff2",
+          "status": "pending",
+          "kind": "index",
+          "summary": "Unused PageInfo TaskRef TaskStatus ownership in DB PR needs user keep/delete decision",
+          "options": [
+            "Delete unused refactor definitions",
+            "Keep definitions for DB PR"
+          ],
+          "createdAt": "2026-09-18T06:47:36.813Z",
+          "evidence": [
+            {
+              "path": "llm_d_bench/schemas/common.py",
+              "hash": "eea9a0ab9e82cfb3af3f2ec03477320e645f10e46ec5c926c6a496efc76139ca"
+            },
+            {
+              "path": "llm_d_bench/tasks/models.py",
+              "hash": "04bf39fc10de4f69e7663c15655f73360260106b4b752fa1f08425920917cd7f"
+            }
+          ]
+        },
+        {
+          "id": "ca783e76-c2cd-4880-b745-0f73ee1e5ff2",
+          "status": "pending",
+          "kind": "index",
+          "summary": "Unused PageInfo TaskRef TaskStatus ownership in DB PR needs user keep/delete decision",
+          "options": [
+            "Delete unused refactor definitions",
+            "Keep definitions for DB PR"
+          ],
+          "createdAt": "2026-09-20T08:59:21.505Z",
+          "evidence": [
+            {
+              "path": "llm_d_bench/schemas/common.py",
+              "hash": "eea9a0ab9e82cfb3af3f2ec03477320e645f10e46ec5c926c6a496efc76139ca"
+            },
+            {
+              "path": "llm_d_bench/tasks/models.py",
+              "hash": "04bf39fc10de4f69e7663c15655f73360260106b4b752fa1f08425920917cd7f"
+            },
+            {
+              "path": "llm_d_bench/tasks/__init__.py",
+              "hash": "55dfd92f3ee294a8db049f93ec37327c2830ea49c132342303a553bd4613faec"
+            }
+          ],
+          "scope": {
+            "files": [
+              "llm_d_bench/schemas/common.py",
+              "llm_d_bench/tasks/models.py"
+            ],
+            "callers": [
+              "llm_d_bench/tasks/__init__.py"
+            ],
+            "capabilityIds": [],
+            "operations": [
+              "change-shared-pagination-schema",
+              "change-shared-task-reference",
+              "change-shared-task-status",
+              "delete-shared-db-model-definitions"
+            ],
+            "rationale": "Reviewed all repository references to PageInfo, TaskRef, TaskStatus and schemas.common/tasks.models. Only definitions and TaskStatus package re-export exist; no registered capability or business caller uses these symbols. Reuse tools parse source text/AST rather than import these models. This PR changes tooling and evidence, not these contracts. Scope does not authorize keeping/deleting definitions; new callers require renewed review. See specs/changes/reuse-agent-validation.md.",
+            "reviewedBy": "Codex (scope analysis, not user approval)",
+            "reviewRef": "PR #55 follow-up: specs/changes/reuse-agent-validation.md"
+          }
+        }
+      ],
+      "decision": "Keep PageInfo, TaskRef and TaskStatus definitions for the DB PR; do not delete them as part of this provider/proxy fix",
+      "approvedBy": "User (VS Code chat)",
+      "approvalRef": "2026-09-30 user message: Keep them; continue with commit and push",
+      "resolvedAt": "2026-09-30T03:28:32.357Z"
+    },
+    {
+      "id": "f5f3625b-a8e5-46f6-a4a9-29c935ea635e",
+      "status": "resolved",
+      "kind": "similarity",
+      "summary": "Storage lifecycle defaults: diagnostic and conversation/audio retention periods and whether recording upload is opt-in need user choice",
+      "options": [
+        "Diagnostics 30 days; conversations/audio 90 days; audio opt-in",
+        "User-selected retention and archive defaults"
+      ],
+      "createdAt": "2026-09-18T08:49:45.974Z",
+      "evidence": [
+        {
+          "path": "llm_d_bench/utils/storage_admin.py",
+          "hash": "26fda1e06382c289742725d73ade87b1679afd0169cd80571cf79f83d4c11bde"
+        },
+        {
+          "path": "src/components/Playground/PlaygroundPage.jsx",
+          "hash": "24e60088341188622031e153b362af0980087d1c6da01fd66c6c0a428f241130"
+        }
+      ],
+      "decision": "Withdraw lifecycle expansion and its retention/upload defaults; keep storage path standardization only, per user instruction",
+      "approvedBy": "user",
+      "approvalRef": "Current conversation (English translation): Withdraw the unnecessary changes, then give me the documentation for the existing functionality.",
+      "resolvedAt": "2026-09-18T09:02:01.632Z"
+    },
+    {
+      "id": "e9f8dfbd-ee2b-4421-8fe0-ff3f014cbc35",
+      "status": "resolved",
+      "kind": "ci",
+      "summary": "PR #48 run 35345510740 checkout failed: organization IP allow list rejected ubuntu-latest runner 172.214.155.233 (403). Repository runner API returned 404; no authorized runner labels are known. Test credential and dependent summary fixes are complete; runner selection or organization network configuration needs owner decision.",
+      "options": [
+        "Provide an existing authorized runner label or runner group; update runs-on accordingly",
+        "Administrator configures an approved static egress runner and organization IP allow list; retain current checks"
+      ],
+      "createdAt": "2026-09-18T14:03:43.307Z",
+      "evidence": [
+        {
+          "path": ".github/workflows/reuse-checks.yml",
+          "hash": "27ae4d1b8c37f87e7027949f118f12a1c4d7e438697e61661c0785f7ebe1ed3a"
+        }
+      ],
+      "decision": "Remove the added reuse-checks.yml workflow; retain local reuse commands. No runner or organization network changes.",
+      "approvedBy": "user",
+      "approvalRef": "Current conversation: user explicitly instructed removal (English translation) after explanation of removing reuse-checks.yml",
+      "resolvedAt": "2026-09-18T14:18:59.592Z"
+    },
+    {
+      "id": "fa61254b-43dd-4633-a135-9bad8fb6c79e",
+      "status": "resolved",
+      "kind": "ci",
+      "summary": "Run 35354452652 job 105630250095 fails at checkout: organization IP allow list rejects ubuntu-latest runner 20.168.136.162 (HTTP 403). Tests never start. Repository runner API returns 404; approved runner labels and network availability are unknown. Affects reuse workflow and other ubuntu-latest CI jobs. Recommend an existing organization-approved self-hosted runner; otherwise administrator must provision static-IP larger runner and allowlist its egress. No workflow changes made. Await user runner choice and exact labels/group.",
+      "options": [
+        "Use an existing allowlisted self-hosted runner; provide its exact labels/group and repository access.",
+        "Administrator provisions a static-IP larger runner and allowlists its egress; provide runner name/group."
+      ],
+      "createdAt": "2026-09-18T14:11:49.491Z",
+      "evidence": [
+        {
+          "path": ".github/workflows/reuse-checks.yml",
+          "hash": "27ae4d1b8c37f87e7027949f118f12a1c4d7e438697e61661c0785f7ebe1ed3a"
+        },
+        {
+          "path": ".github/workflows/ci-pr-checks.yaml",
+          "hash": "3dae4451bce511ca660a56c5af16f4f1252bf2a0524bb9d4a0376bbd91c811bc"
+        }
+      ],
+      "decision": "Remove the added reuse-checks.yml workflow; retain local reuse commands. No runner or organization network changes.",
+      "approvedBy": "user",
+      "approvalRef": "Current conversation: user explicitly instructed removal (English translation) after explanation of removing reuse-checks.yml",
+      "resolvedAt": "2026-09-18T14:19:00.406Z"
+    },
+    {
+      "id": "70add8b5-4984-42e1-a55d-66be3bf826bc",
+      "status": "resolved",
+      "kind": "semantic",
+      "summary": "Cluster-level llm-d Gateway provider is unselected; cluster Gateway bootstrap, deployment proxy removal, and model-service HTTPRoute/IPP all depend on it",
+      "options": [
+        "Reuse an already-installed provider; if none, install Envoy AI Gateway (Gateway Mode) - Lens already installs it",
+        "Install Istio as the Gateway provider",
+        "Install GKE Gateway",
+        "Install agentgateway"
+      ],
+      "createdAt": "2026-09-24T15:58:27.089Z",
+      "evidence": [
+        {
+          "path": "llm_d_bench/model_service/gateway_ops.py",
+          "hash": "127ed368ecfeef794f85ab87ad0302a551fef9750a81c6e2abc87ab376d6ad12"
+        },
+        {
+          "path": "llm_d_bench/model_service/agent_router_config.py",
+          "hash": "762d76b2aebcba1e2340ea40c538f56f467df40f1ee38f5a9216f75295a5d855"
+        },
+        {
+          "path": "llm_d_bench/deploy/providers/optimized_baseline.py",
+          "hash": "8af69cf96a0ec008e1a27a8c7f8e3da5ece83fea82f0dfc8215d28e7240aeac0"
+        }
+      ],
+      "decision": "Gateway provider is user-selectable; Lens supports istio, gke, agentgateway, envoy-ai-gateway. Default: reuse an already-installed provider, otherwise install the selected one at cluster creation.",
+      "approvedBy": "user",
+      "approvalRef": "conversation (English translation): Lens supports all of them; let the user choose",
+      "resolvedAt": "2026-09-24T16:24:53.310Z"
+    },
+    {
+      "id": "3ed8cd47-956b-4b12-b2cd-b282ef532f31",
+      "status": "resolved",
+      "kind": "semantic",
+      "summary": "Model Service topology: independent component nodes, no cluster/model-service frames, status + start/stop on process components; IPP runtime not deployed",
+      "options": [
+        "Independent nodes; status + start/stop where target known (Gateway, EPP); IPP status-only",
+        "Deploy IPP and expose its start/stop too"
+      ],
+      "createdAt": "2026-09-25T00:47:57.822Z",
+      "evidence": [
+        {
+          "path": "llm_d_bench/model_service/gateway_ops.py",
+          "hash": "4d51c3b2201c87eb5a275cc9d6c9c3bb1eedeca8e280ec7231fda9fb1a3c34d1"
+        },
+        {
+          "path": "llm_d_bench/model_service/gateway_contracts.py",
+          "hash": "12210fbf950bf7e8d71970f9a8d946740e7ca0f36cc333ea5300b60da4465d47"
+        },
+        {
+          "path": "src/components/ModelService/DataPlaneTopology.jsx",
+          "hash": "3bca111b9cbd4530844ee749710417ac577ea7471e9e1eb7b11a8b0458668100"
+        }
+      ],
+      "history": [
+        {
+          "id": "3ed8cd47-956b-4b12-b2cd-b282ef532f31",
+          "status": "pending",
+          "kind": "semantic",
+          "summary": "Model Service topology must match the real deployed components and expose per-component status + start/stop; the exact component set (is IPP deployed?) and start/stop targets (Gateway data-plane deployment per provider, EPP deployment name, model-server/vLLM deployment name) are not recorded by Lens and cannot be resolved from source alone",
+          "options": [
+            "Show only deployed components (Gateway, HTTPRoute, InferencePool, EPP, model server; no IPP) and scale EPP + model-server deployments + Gateway data plane via Kubernetes discovery",
+            "Also deploy IPP per Gateway at cluster creation, then show/control it too (Git-shows IPP box)",
+            "Use Lens-known names only (EPP deployment = <release>-epp; model server name from execution) and skip discovery"
+          ],
+          "createdAt": "2026-09-24T18:24:19.247Z",
+          "evidence": [
+            {
+              "path": "llm_d_bench/model_service/gateway_ops.py",
+              "hash": "5e86d52d434767446802c4e2f7fbf2fd6aa561be353588169cc19ee20379f708"
+            },
+            {
+              "path": "llm_d_bench/model_service/gateway_contracts.py",
+              "hash": "902039ae50dca5cb9752ce2fbce1f3d3ec55907ab3608693f86d58a54782f42f"
+            },
+            {
+              "path": "src/components/ModelService/DataPlaneTopology.jsx",
+              "hash": "6a93045ef78359c186e989a442185976d8d48663ac451d3c1dd68777a45ed348"
+            },
+            {
+              "path": "llm_d_bench/deploy/providers/optimized_baseline.py",
+              "hash": "a0172afc0decb61fd0cfda266395b9b0627b426e2ac00d392ea3c91b75586154"
+            }
+          ]
+        }
+      ],
+      "decision": "Independent component nodes (Gateway, IPP, EPP, HTTPRoute, InferencePool, model server); no cluster/service frames; status on all; start/stop for Gateway install and EPP scale; IPP shown status-only (not deployed).",
+      "approvedBy": "user",
+      "approvalRef": "conversation: independent boxes, remove frames, controls",
+      "resolvedAt": "2026-09-25T00:47:58.566Z"
+    },
+    {
+      "id": "28d1b327-2179-4dea-912c-7369b3714a8d",
+      "status": "resolved",
+      "kind": "similarity",
+      "summary": "Evaluation capacity conflict: router._validate_evaluation_capacity rejects 8 required XPU cards with 4 allowlisted; test_deployments.py:test_evaluation_capacity_allows_waiting_for_cards expects acceptance. Existing rule untouched; user decision requested in current conversation.",
+      "options": [
+        "Keep rejecting impossible allowlisted capacity and update stale test",
+        "Allow queueing despite insufficient allowlisted capacity"
+      ],
+      "createdAt": "2026-09-21T11:21:43.763Z",
+      "evidence": [
+        {
+          "path": "llm_d_bench/evaluate/router.py",
+          "hash": "ca086d5deb916758f2a0ce8339843211725149f30ed8aa3aef9b53a75f6673e4"
+        },
+        {
+          "path": "llm_d_bench/evaluate/test_deployments.py",
+          "hash": "e34d03c03106d198fa7eb08ecb37a152f36a73f14bb560f5f3ae3839fb89c060"
+        }
+      ],
+      "decision": "Keep existing rejection when required XPU cards exceed the allowlist; update the old test to assert rejection.",
+      "approvedBy": "User",
+      "approvalRef": "Current conversation: user explicitly answered \"Then update the old test\" (English translation) after explanation of the 8-card requirement versus 4-card allowlist.",
+      "resolvedAt": "2026-09-21T11:58:36.578Z"
+    },
+    {
+      "id": "e0327565-6da1-429e-bc18-dfbf81f0ece9",
+      "status": "resolved",
+      "kind": "similarity",
+      "summary": "SSH clients automatically trust unknown host keys; strict verification needs a trust source and can block first-time bootstrap targets.",
+      "options": [
+        "Add explicit host-key fingerprint or trust confirmation to bootstrap request/UI, then enforce verification.",
+        "Use system known_hosts with strict rejection; operators must pre-provision host keys.",
+        "Keep current AutoAddPolicy and add a narrow S507 exception, accepting the MITM risk."
+      ],
+      "createdAt": "2026-09-29T07:37:10.980Z",
+      "evidence": [
+        {
+          "path": "llm_d_bench/utils/ssh.py",
+          "hash": "971bf5ac225e6cd86388c5e2c0e63bbc21570de0a4c43dd11fce52ba9dd44c01"
+        }
+      ],
+      "decision": "Add an explicit host-key fingerprint trust flow to bootstrap and enforce exact host-key verification.",
+      "approvedBy": "user",
+      "approvalRef": "VS Code user response to SSH Trust decision e0327565-6da1-429e-bc18-dfbf81f0ece9",
+      "resolvedAt": "2026-09-29T07:42:03.409Z"
+        },
+        {
+      "id": "b6665735-4f2f-4e3a-bf94-4e75d9e5f048",
+      "status": "resolved",
+      "kind": "semantic",
+      "summary": "English-only request intersects functional Chinese preference recognition in planner.py and Chinese retrieval regression coverage. Awaiting user choice between explicit functional-language exceptions and removing Chinese input coverage; document translation and checker implementation are independent.",
+      "options": [
+        "Preserve functional Chinese matching and tests as explicit narrow exceptions",
+        "Strict zero Chinese including functional keywords and retrieval samples"
+      ],
+      "createdAt": "2026-09-30T03:14:15.316Z",
+      "evidence": [
+        {
+          "path": "llm_d_bench/agentic/planner.py",
+          "hash": "b6c14616723729cb19ff650799661c36798ae4046489bca3e470aa5162ad9dff"
+        },
+        {
+          "path": "tools/reuse/semantic.smoke.mjs",
+          "hash": "d77c5b83ce9235e3730e0251d5d7cd1442949a52b7717690f4de4e5b27d4e968"
+        },
+        {
+          "path": "tools/reuse/retrieval-cases.json",
+          "hash": "9aa8958fda3795fd8b4fd53ca860586e70be2e51b142472727504d71ad23bbd8"
+        }
+      ],
+      "decision": "Apply strict English-only content, including planner preference aliases and retrieval fixtures; accept loss of those Chinese preference matches.",
+      "approvedBy": "User",
+      "approvalRef": "Conversation: user requested continue and submit PR after the strict-zero-Chinese recommendation and compatibility explanation",
+      "resolvedAt": "2026-09-30T04:00:20.708Z"
+    },
+    {
+      "id": "c845fe70-a8f1-43ff-a1c7-b44fb6a9617b",
+      "status": "resolved",
+      "kind": "semantic",
+      "summary": "Backend uses http://proxy-ir.intel.com:912; proxy CONNECT to api.deepseek.com succeeds (unauthenticated models returns 401), 127.0.0.1 and 10.255.255.1 return 403, but 169.254.169.254 times out. No policy proof that proxy rejects every non-public IPv4/IPv6 result and pins the validated DNS result for each CONNECT tunnel; cannot safely delegate SSRF enforcement.",
+      "options": [
+        "Obtain network-admin proxy egress policy/configuration proof covering public-only DNS and same-tunnel address pinning, then enable explicit trusted-proxy hostname CONNECT mode.",
+        "Keep app-side IP pinning and request proxy IP CONNECT support or direct egress."
+      ],
+      "createdAt": "2026-09-30T09:04:06.125Z",
+      "evidence": [
+        {
+          "path": "llm_d_bench/ai_providers/service.py",
+          "hash": "dfde6e77879c01cc2f9515ff2600ce2b748084af1685e9be908cc7923244515b"
+        }
+      ],
+      "history": [
+        {
+          "id": "c845fe70-a8f1-43ff-a1c7-b44fb6a9617b",
+          "status": "pending",
+          "kind": "semantic",
+          "summary": "Trusted proxy hostname CONNECT requires evidence that proxy resolves every provider hostname itself, rejects all non-public IPv4/IPv6 DNS results and pins the validated result for the same tunnel; current proxy only demonstrably rejects loopback CONNECT, and no policy/configuration evidence is available.",
+          "options": [
+            "Obtain network-admin proxy egress policy/configuration proof, then add explicit trusted-proxy hostname CONNECT mode while keeping default IP pinning.",
+            "Keep current IP-pinned transport and request proxy support for CONNECT to public IPs or direct egress."
+          ],
+          "createdAt": "2026-09-30T08:58:12.298Z",
+          "evidence": [
+            {
+              "path": "llm_d_bench/ai_providers/service.py",
+              "hash": "dfde6e77879c01cc2f9515ff2600ce2b748084af1685e9be908cc7923244515b"
+            }
+          ]
+        }
+      ],
+      "decision": "User confirmed the proxy at http://proxy-ir.intel.com:912 enforces per-CONNECT hostname DNS resolution, rejects all non-public IPv4/IPv6 results, and pins the validated result for the same tunnel; proceed with an explicit trusted-proxy mode while preserving default IP pinning.",
+      "approvedBy": "User",
+      "approvalRef": "This conversation: 2026-09-30 user affirmative reply to the explicit proxy-policy confirmation request",
+      "resolvedAt": "2026-09-30T09:07:31.858Z"
+    }
+  ]
+}

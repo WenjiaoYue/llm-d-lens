@@ -1,0 +1,105 @@
+---
+title: Installation
+description: Install Lens with the Ubuntu installer, or run the services from source.
+---
+
+## Install with the Ubuntu installer
+
+On Ubuntu 22.04 LTS or newer (x86_64), install Lens as a standalone,
+production-ready deployment with the bundled installer. From a checkout of the
+repository:
+
+```bash
+./scripts/LensInstaller-Ubuntu-x86_64.sh
+```
+
+Interactive mode asks for the install directory (default `$HOME/llm-d-lens`) and
+ports (app `3000`, internal backend `8081`); press Enter to accept each default.
+The installer fetches missing system packages, provisions a local Node and Python
+virtualenv, configures the embedded PostgreSQL database, builds the app, sets up
+TLS, and writes a control script.
+
+For scripted or CI installs, use silent mode:
+
+```bash
+./scripts/LensInstaller-Ubuntu-x86_64.sh --silent
+```
+
+Common options:
+
+| Option | Purpose |
+| --- | --- |
+| `--install-dir DIR` | Install location (default `$HOME/llm-d-lens`). |
+| `--app-port PORT` | Web app/API port (default `3000`). |
+| `--backend-port PORT` | Internal FastAPI backend port (default `8081`). |
+| `--no-https` | Serve plain HTTP instead of auto-HTTPS (self-signed cert). |
+| `--no-start` | Install without starting services. |
+| `--db-mode embedded\|external` | Use the built-in database or an external one. |
+| `-h, --help` | Show every option. |
+
+## Manage the installation
+
+The installer writes `lensctl.sh` into the install directory:
+
+```bash
+"$HOME/llm-d-lens/lensctl.sh" start
+"$HOME/llm-d-lens/lensctl.sh" status
+"$HOME/llm-d-lens/lensctl.sh" stop
+```
+
+To remove an installation, run the installer with `--uninstall`; data is kept by
+default. Use `--purge` to remove data as well, or `--keep-data` to skip the
+prompt non-interactively.
+
+To upgrade an existing installation instead of a fresh install, see
+[Upgrade](/upgrade).
+
+## Develop from source
+
+To work on the code instead of running an installed deployment:
+
+```bash
+npm install
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -e '.[dev]'
+node scripts/generate-mcp-tools.mjs
+npm run dev
+```
+
+The frontend runs on port `5173`, the Node API on `3000`, and the Python backend
+is started by `scripts/run-backend.sh`. Use `npm run dev:web` when running the
+Python backend separately.
+
+`scripts/dev.sh start` and `restart` regenerate and validate the reuse map before
+changing services. Invalid registrations or pending user decisions block startup
+without stopping existing services. See the [CLI Reference](/cli-reference) for
+every `scripts/dev.sh` subcommand.
+
+## Build and test
+
+```bash
+npm run build
+npm run type-check
+make test-js
+make test-python
+```
+
+## Documentation site
+
+This site is built with [Fern](https://buildwithfern.com). Preview it locally
+with hot reload:
+
+```bash
+npm run docs:dev
+```
+
+Validate configuration and page paths:
+
+```bash
+npm run docs:check
+```
+
+The generated MCP catalog is required for the assistant and Node server.
+Regenerate it when backend routes change; Docker builds generate it
+automatically.

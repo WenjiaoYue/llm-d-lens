@@ -1,0 +1,5 @@
+[
+  { "query": "Send JSON requests consistently and handle server errors", "path": "src/api/httpClient.js" },
+  { "query": "Show loading, retry failed requests, and display an empty-state message", "path": "src/components/shared/AsyncState.jsx" },
+  { "query": "Generate artifact SHA256 checksums and manifests with source version tracking", "path": "llm_d_bench/utils/artifact_store.py" }
+]

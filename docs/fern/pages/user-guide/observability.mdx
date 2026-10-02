@@ -1,0 +1,82 @@
+---
+title: Observability
+description: Install and monitor the Prometheus/Grafana cluster stack, and review usage reports.
+---
+
+Use the Observability page to inspect cluster monitoring, accelerator monitoring, and per-deployment monitoring from one place. The steps below only describe controls that exist in the current UI under **Cluster**, **Accelerators**, and **Deployments**.
+
+## Inspect cluster observability status
+
+1. Open the **Cluster** tab.
+2. Use **Target cluster** to choose the cluster you want to inspect.
+3. In **Namespace**, enter the namespace you want to check and click **Inspect**.
+4. Review **Live state**, **Installation operation**, and **Stack components**.
+5. Use **Refresh**, **Retry**, or **Recheck** when those buttons are shown for the current state.
+
+## Install the cluster observability stack
+
+1. In the **Cluster** tab, choose the target cluster.
+2. If the page shows **Install stack** or **Install observability stack**, click it.
+3. In **Install observability stack**, confirm **Namespace** and review **Installation mode**. The available choice is **Central (recommended)**; **Individual** is shown but disabled.
+4. Click **Run preflight**.
+5. Review the **Preflight passed** or **Preflight did not pass** result, along with any checks, warnings, and **Command preview**.
+6. When preflight succeeds, click **Install stack**.
+7. Follow progress in **Installation operation** until the page reports **Cluster observability stack installed successfully**.
+
+## Reinstall the cluster observability stack
+
+1. In the **Cluster** tab, click **Reinstall** when that action is available.
+2. In **Reinstall observability stack**, review the warning that reinstalling deletes stored metrics.
+3. Select **I understand existing metrics data will be permanently deleted**.
+4. Click **Run preflight**.
+5. After preflight passes, click **Reinstall stack**.
+
+## Open the cluster dashboards
+
+1. Stay on the **Cluster** tab.
+2. In **GUIs**, click **Prometheus** or **Grafana**.
+3. If the dashboard cannot be opened, read the inline error message shown beside the buttons.
+
+## Inspect accelerator observability
+
+1. Open the **Accelerators** tab.
+2. Choose an accelerator under **Accelerator type**. The tabs are built from the hardware profiles registered with Lens, so every connected device plugin / DRA driver appears here and the page copy and chart names follow the selected vendor.
+3. Review **GPU access mode** and, if needed, switch between the modes that accelerator supports (for example **DRA** and **Device plugin**).
+4. Review **Observability UI** and **Stack components** for the selected accelerator.
+5. Use **Prometheus**, **Grafana**, **Refresh**, or **Retry** when those actions are available.
+
+## Install or repair accelerator observability
+
+1. Open the **Accelerators** tab and pick the target cluster.
+2. If the page shows **Install accelerator observability**, **Repair / reinstall**, or **Reinstall**, click the action that matches your current state.
+3. In **Install accelerator observability**, set **Namespace** and **GPU access mode**.
+4. Click **Run preflight**.
+5. Review the preflight checks, warnings, and **Command preview**.
+6. When preflight succeeds, click **Install**.
+7. Watch **Installation operation** until the page reports the selected accelerator installed successfully (for example **NVIDIA GPU observability installed successfully**).
+
+## Manage deployment monitoring for a deployment
+
+1. Open the **Deployments** tab.
+2. Choose the cluster in **Target cluster**.
+3. In **Deployment monitoring**, open the **Monitoring** menu for the deployment you want to manage.
+4. Choose **Install** when monitoring is not present, **Enable** when it is disabled, **Disable** when it is enabled, or **Uninstall** to remove it.
+5. Wait for the status chip in the **Monitoring** column to update. The page notes that **Status refreshes automatically every 10 seconds.**
+
+## Open deployment dashboards
+
+1. In the **Deployments** tab, open the **Monitoring** menu for a deployment whose monitoring is enabled.
+2. Click **Open Grafana** or **Open Prometheus**.
+
+## Inspect deployment profiling
+
+1. In the **Deployments** tab, open a deployment's **Monitoring** menu and click **Profiling**.
+2. In **Deployment profiling**, switch the **Flow metric** between **Request** and **Token** as needed.
+3. Keep **Flow Map** selected to view the current pipeline map.
+4. Use the node buttons under **Inspect live flow nodes** to open per-node metrics in the side drawer.
+5. In the flow-map toolbar, use **Zoom in**, **Zoom out**, **Reset view**, and **Fit view**.
+6. Click the button whose aria-label is **Back to deployments** to return to the deployment list.
+
+## Shared monitoring behavior
+
+Installation dialogs share preflight and request handling; operation polling pauses while the page is hidden and stops at terminal states. Accelerator and cluster-stack options and installation verification remain separate.

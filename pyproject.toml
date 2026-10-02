@@ -1,0 +1,106 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-d-prism-backend"
+version = "0.1.0"
+description = "Simulation backend for llm-d-prism"
+requires-python = ">=3.11"
+dependencies = [
+    "aiconfigurator==0.11.0.dev20260728",
+    "aiohttp>=3.9",
+    "alembic>=1.13",
+    "argon2-cffi>=23",
+    "casbin>=1.30",
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "jsonschema>=4",
+    "kubernetes==36.0.3",
+    "mcp>=1.13,<2",
+    "paramiko>=3.4",
+    "psycopg[binary]>=3",
+    "pydantic>=2.8",
+    "python-multipart>=0.0.9",
+    "pyarrow>=14",
+    "plotext>=5.3.2,<6",
+    "PyYAML>=6",
+    "sqlalchemy>=2.0",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+embedded-db = [
+    # Only needed when running with LLM_D_BENCH_DB_MODE=embedded (the default);
+    # not required for users who connect to their own externally managed
+    # PostgreSQL instance via LLM_D_BENCH_DATABASE_URL. See
+    # docs/design/sqlalchemy-data-access-layer-design.md section 4.
+    "pgserver>=0.1",
+]
+# DBAPI drivers for the experimental non-PostgreSQL engines selectable in the
+# Step 0 "connect to a database I already deployed" wizard step (see
+# cluster-creation-wizard-design.md §4.0 and llm_d_bench/db/settings.py's
+# SUPPORTED_EXTERNAL_ENGINES). Only installed on request -- most deployments
+# only ever need PostgreSQL (bundled unconditionally, see the "psycopg"
+# dependency above).
+mysql = ["pymysql>=1.1"]
+oracle = ["oracledb>=2.0"]
+mssql = ["pyodbc>=5.1"]
+external-db = [
+    "llm-d-prism-backend[mysql]",
+    "llm-d-prism-backend[oracle]",
+    "llm-d-prism-backend[mssql]",
+]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+# Hardware plugin discovery (see docs/design/hardware-plugin-architecture.md).
+# Built-ins declare the same entry points as third-party packages; they are
+# loaded through one discovery path in llm_d_bench.hardware.discovery.
+[project.entry-points."llm_d_bench.hardware.profiles"]
+intel-xpu = "llm_d_bench.hardware.providers.intel_xpu:load_profiles"
+nvidia = "llm_d_bench.hardware.providers.nvidia:load_profiles"
+
+[project.entry-points."llm_d_bench.hardware.providers"]
+intel-xpu = "llm_d_bench.hardware.providers.intel_xpu:IntelXpuProvider"
+nvidia = "llm_d_bench.hardware.providers.nvidia:NvidiaProvider"
+
+[tool.setuptools.packages.find]
+include = ["llm_d_bench*"]
+
+[tool.setuptools.package-data]
+"llm_d_bench.hardware" = ["schema.json", "profiles/*.json"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "S",     # flake8-bandit (security)
+    "A",     # flake8-builtins
+    "C4",    # flake8-comprehensions
+    "RET",   # flake8-return
+    "SIM",   # flake8-simplify
+]
+ignore = [
+    "S101",  # assert used (OK in tests)
+    "S603",  # subprocess call with shell=false (OK)
+    "S607",  # start process with partial path (OK)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["E501", "S101", "S108"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

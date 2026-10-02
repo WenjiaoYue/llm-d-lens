@@ -1,0 +1,133 @@
+"""Auth runtime settings, loaded from the environment.
+
+Follows the repository's ``frozen dataclass + from_environment()`` convention
+(see ``llm_d_bench/cluster/settings.py``). Design reference: section 13.1.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, fields
+from typing import Any
+
+_TRUE = {"1", "true", "yes", "on"}
+_FALSE = {"0", "false", "no", "off"}
+
+VALID_AUTH_MODES = ("local", "external", "hybrid", "disabled")
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    lowered = raw.strip().lower()
+    if lowered in _TRUE:
+        return True
+    if lowered in _FALSE:
+        return False
+    return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+@dataclass(frozen=True)
+class AuthSettings:
+    auth_mode: str = "local"
+    allow_unauthenticated: bool = False
+    secret_key: str = ""
+    internal_auth_secret: str = ""
+    # Absolute cap on a session's lifetime, independent of activity (prevents
+    # infinite sliding renewal). Deliberately much larger than the idle
+    # timeout below: the practical "log me out" signal for an active user is
+    # inactivity, not the clock since login.
+    session_ttl_seconds: int = 43200
+    # Sliding idle timeout: a session with no request in this many seconds is
+    # invalid, even though the absolute cap above hasn't been reached yet.
+    session_idle_seconds: int = 1800
+    remember_session_ttl_seconds: int = 2592000
+    remember_session_idle_seconds: int = 2592000
+    session_touch_interval_seconds: int = 60
+    session_max_per_user: int = 10
+    #: Only one active session per account: a new login revokes the previous one.
+    session_single_active: bool = True
+    session_revoked_retention_seconds: int = 86400
+    session_sweep_interval_seconds: int = 900
+    cookie_secure: bool = True
+    login_max_failures: int = 5
+    login_lockout_seconds: int = 900
+    audit_retention_days: int = 180
+    expose_api_docs: bool = True
+    auto_seed_admin: bool = True
+    initial_admin_username: str = "admin"
+    initial_admin_password: str = ""
+
+    @classmethod
+    def from_environment(cls) -> AuthSettings:
+        mode = (os.environ.get("PRISM_AUTH_MODE") or "local").strip().lower()
+        allow_unauthenticated = _env_bool("PRISM_ALLOW_UNAUTHENTICATED", False)
+        # Legacy alias (design section 5.1): treated as disabled auth.
+        if _env_bool("SIMULATION_ALLOW_UNAUTHENTICATED", False):
+            mode = "disabled"
+            allow_unauthenticated = True
+        if mode not in VALID_AUTH_MODES:
+            mode = "local"
+        return cls(
+            auth_mode=mode,
+            allow_unauthenticated=allow_unauthenticated,
+            secret_key=os.environ.get("PRISM_SECRET_KEY", ""),
+            internal_auth_secret=os.environ.get("PRISM_INTERNAL_AUTH_SECRET", ""),
+            session_ttl_seconds=_env_int("PRISM_SESSION_TTL_SECONDS", 43200),
+            session_idle_seconds=_env_int("PRISM_SESSION_IDLE_SECONDS", 1800),
+            remember_session_ttl_seconds=_env_int("PRISM_REMEMBER_SESSION_TTL_SECONDS", 2592000),
+            remember_session_idle_seconds=_env_int("PRISM_REMEMBER_SESSION_IDLE_SECONDS", 2592000),
+            session_touch_interval_seconds=_env_int("PRISM_SESSION_TOUCH_INTERVAL_SECONDS", 60),
+            session_max_per_user=_env_int("PRISM_SESSION_MAX_PER_USER", 10),
+            session_single_active=_env_bool("PRISM_SESSION_SINGLE_ACTIVE", True),
+            session_revoked_retention_seconds=_env_int("PRISM_SESSION_REVOKED_RETENTION_SECONDS", 86400),
+            session_sweep_interval_seconds=_env_int("PRISM_SESSION_SWEEP_INTERVAL_SECONDS", 900),
+            cookie_secure=_env_bool("PRISM_COOKIE_SECURE", True),
+            login_max_failures=_env_int("PRISM_LOGIN_MAX_FAILURES", 5),
+            login_lockout_seconds=_env_int("PRISM_LOGIN_LOCKOUT_SECONDS", 900),
+            audit_retention_days=_env_int("PRISM_AUDIT_RETENTION_DAYS", 180),
+            expose_api_docs=_env_bool("PRISM_EXPOSE_API_DOCS", True),
+            auto_seed_admin=_env_bool("PRISM_ADMIN_AUTOSEED", True),
+            initial_admin_username=os.environ.get("PRISM_ADMIN_USERNAME", "admin"),
+            initial_admin_password=os.environ.get("PRISM_ADMIN_PASSWORD", ""),
+        )
+
+    @property
+    def disabled(self) -> bool:
+        return self.auth_mode == "disabled"
+
+    def as_public_dict(self) -> dict[str, Any]:
+        """Non-sensitive subset safe to log or return."""
+        hidden = {"secret_key", "internal_auth_secret"}
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in hidden}
+
+
+settings = AuthSettings.from_environment()
+
+_override: AuthSettings | None = None
+
+
+def get_settings() -> AuthSettings:
+    """Current settings (test override wins, else the environment-derived default)."""
+    return _override if _override is not None else settings
+
+
+def set_settings_for_testing(replacement: AuthSettings | None) -> None:
+    """Override settings for a test; always reset to ``None`` afterward."""
+    global _override
+    _override = replacement
+
+
+def reset_settings_override() -> None:
+    set_settings_for_testing(None)

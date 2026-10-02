@@ -1,0 +1,471 @@
+/* Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+@import "tailwindcss";
+
+@keyframes benchmark-inspector-enter {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.benchmark-inspector-drawer { animation: benchmark-inspector-enter 220ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .benchmark-inspector-drawer { animation: none; }
+}
+
+/* Directional flow for the model-service data-plane chain highlight. The path
+   itself is built source -> target, so a decreasing dash offset flows forward. */
+@keyframes lens-chain-flow {
+  to { stroke-dashoffset: -24; }
+}
+.lens-chain-flow {
+  stroke-dasharray: 4 20;
+  stroke-linecap: round;
+  animation: lens-chain-flow 0.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lens-chain-flow { animation: none; }
+}
+
+/* Evaluation Setup owns this shared context; hide duplicate standalone fields
+   when Configuration is embedded in the task wizard. */
+[data-evaluation-configuration-editor] #configuration-cluster,
+[data-evaluation-configuration-editor] #configuration-model {
+  display: none !important;
+}
+
+/* The Evaluation wizard already owns the page title and flow guidance. Keep the
+   embedded editor focused on configuration fields and actions only. */
+[data-evaluation-configuration-editor] > section > header {
+  display: none !important;
+}
+
+.configuration-editor [data-configuration-field] {
+  scroll-margin-block: 6rem;
+}
+.configuration-editor .configuration-source {
+  border-color: #cbd5e1;
+  background: linear-gradient(135deg, #e8f2f8, #f1f5f9 65%);
+  box-shadow: 0 4px 16px rgb(15 23 42 / 0.04);
+}
+.configuration-editor .configuration-comparison,
+.configuration-editor .configuration-disclosure {
+  border-color: #cbd5e1;
+  background: rgb(226 232 240 / 0.6);
+}
+.dark .configuration-editor .configuration-source {
+  border-color: rgb(71 85 105 / 0.75);
+  background: linear-gradient(135deg, #102435, #0f172a 65%);
+}
+.dark .configuration-editor .configuration-comparison,
+.dark .configuration-editor .configuration-disclosure {
+  border-color: rgb(6 182 212 / 0.4);
+  background: linear-gradient(120deg, rgb(8 35 49 / 0.6), rgb(2 6 23 / 0.6));
+}
+.configuration-editor .configuration-comparison:disabled :is(input, button) {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+}
+.configuration-editor .configuration-override:has([aria-invalid="true"]) {
+  border-color: rgb(251 113 133 / 0.65);
+}
+.configuration-editor .configuration-disclosure > summary {
+  list-style-position: inside;
+}
+.configuration-editor .configuration-disclosure:has([aria-invalid="true"]) > summary {
+  color: rgb(253 164 175);
+}
+
+/* Current standalone editor renders shared model/runtime inputs as the first
+   direct grid after the header/alert, without a section id. */
+[data-evaluation-configuration-editor] > section > div.grid.sm\:grid-cols-2 {
+  display: none !important;
+}
+
+/* Legacy editor compatibility: shared Model/Runtime form is the first direct
+   grid and "Open Evaluate" is the final direct action button. */
+[data-evaluation-configuration-editor] > div > section > div.grid.sm\:grid-cols-2,
+[data-evaluation-configuration-editor] > div > section > button:last-child,
+[data-evaluation-configuration-editor] > section > button:last-child {
+  display: none !important;
+}
+
+[data-evaluation-configuration-editor] > section > div.flex.justify-end.border {
+  display: none !important;
+}
+
+[data-evaluation-configuration-editor] > div > section,
+[data-evaluation-configuration-editor] > section {
+  position: relative;
+}
+
+[data-evaluation-configuration-editor] button[aria-label="Close configuration"] {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 10;
+}
+
+[data-evaluation-configuration-editor] nav button:nth-child(1),
+[data-evaluation-configuration-editor] nav button:nth-child(2) {
+  display: none !important;
+}
+
+[data-evaluation-configuration-editor] details.group {
+  border-color: rgb(34 211 238 / 0.55) !important;
+  background: linear-gradient(135deg, rgb(8 145 178 / 0.14), rgb(2 6 23 / 0.9)) !important;
+  box-shadow: 0 0 24px rgb(34 211 238 / 0.08);
+}
+
+[data-evaluation-configuration-editor] details.group > summary {
+  min-height: 4.25rem;
+  padding: 1rem !important;
+}
+
+[data-evaluation-configuration-editor] details.group > summary span.block:first-child {
+  color: rgb(207 250 254) !important;
+  font-size: 0.875rem !important;
+  font-weight: 700 !important;
+}
+
+[data-evaluation-configuration-editor] > section > footer button:last-child {
+  min-width: 12rem;
+  border-color: rgb(103 232 249) !important;
+  background: rgb(34 211 238) !important;
+  color: rgb(8 15 30) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 8px 24px rgb(8 145 178 / 0.25);
+}
+
+/* Configuration editor hierarchy: keep capacity guidance compact and make the
+   optional tuning path plus final YAML action impossible to overlook. */
+main details.group:has(summary span:first-child) {
+  border-color: rgb(34 211 238 / 0.5) !important;
+  background: linear-gradient(135deg, rgb(8 145 178 / 0.13), rgb(2 6 23 / 0.92)) !important;
+  box-shadow: 0 0 22px rgb(34 211 238 / 0.08);
+}
+
+
+main details.group > summary {
+  min-height: 4.25rem;
+  padding: 1rem !important;
+}
+
+main details.group > summary span.block:first-child {
+  color: rgb(207 250 254) !important;
+  font-size: 0.875rem !important;
+  font-weight: 700 !important;
+}
+
+main button:has(> svg.lucide-wand-sparkles) {
+  min-width: 10rem;
+  border-color: rgb(103 232 249) !important;
+  background: rgb(34 211 238) !important;
+  color: rgb(8 15 30) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 8px 24px rgb(8 145 178 / 0.25);
+}
+
+/* Evidence views should emphasize measured signals, not repeat a paragraph for
+   every optional metric that the runtime did not expose. */
+main span:has(> :only-child) + p.text-slate-600 {
+  display: none;
+}
+
+.compact-evaluation-wizard .configuration-saved-panel > summary:focus-visible {
+  outline: 2px solid rgb(34 211 238 / 0.65);
+  outline-offset: -2px;
+}
+
+@source "./**/*.{js,jsx}";
+
+@theme {
+  --color-theme-bg: var(--bg-primary);
+  --color-theme-card: var(--bg-card);
+  --color-theme-border: var(--border-color);
+  --color-theme-text: var(--text-primary);
+  --color-theme-muted: var(--text-muted);
+}
+
+@variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-card: #ffffff;
+    --border-color: #e2e8f0;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    
+    --brand-accent: #059669;
+    --brand-accent-hover: #047857;
+    --brand-accent-bg: rgba(16, 185, 129, 0.1);
+    
+    --chart-grid: #cbd5e1;
+    --chart-axis: #475569;
+  }
+
+  .dark {
+    --bg-primary: #020617;
+    --bg-secondary: #0f172a;
+    --bg-card: #090d16;
+    --border-color: #1e293b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    
+    --brand-accent: #34d399;
+    --brand-accent-hover: #10b981;
+    --brand-accent-bg: rgba(52, 211, 153, 0.15);
+    
+    --chart-grid: #1e293b;
+    --chart-axis: #64748b;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  button, a, select, [role="button"] {
+    cursor: pointer !important;
+  }
+  
+  .recharts-dot, 
+  .recharts-active-dot,
+  .recharts-symbols,
+  .recharts-layer,
+  .recharts-scatter-symbol {
+    cursor: pointer !important;
+  }
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Prism Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 rgba(15, 23, 42, 0.4);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 rgba(15, 23, 42, 0.4);
+}
+
+/* Rendered Markdown (react-markdown + remark-gfm) -- used by both the
+   HuggingFace README viewer and Chat with Lens' assistant answers. */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-top: 0.9em;
+  margin-bottom: 0.4em;
+}
+
+.markdown-body h1 { font-size: 1.15rem; }
+.markdown-body h2 { font-size: 1.05rem; }
+.markdown-body h3 { font-size: 0.95rem; }
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body table {
+  margin-bottom: 0.6em;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.4em;
+}
+
+.markdown-body ul { list-style: disc; }
+.markdown-body ol { list-style: decimal; }
+
+.markdown-body li > p {
+  margin-bottom: 0.2em;
+}
+
+.markdown-body code {
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 0.25rem;
+  padding: 0.05em 0.35em;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+}
+
+.markdown-body pre {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 0.5rem;
+  padding: 0.6em 0.8em;
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-body a {
+  color: #7dd3fc;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid #334155;
+  padding-left: 0.8em;
+  color: #94a3b8;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid rgba(51, 65, 85, 0.6);
+  margin: 0.8em 0;
+}
+
+@keyframes benchmark-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+.benchmark-progress { animation: benchmark-progress 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .benchmark-progress { animation: none; }
+}
+
+/* GFM tables (remark-gfm) -- not emitted by the older hand-rolled README
+   renderer, so these rules are new. */
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: rgba(51, 65, 85, 0.4);
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+
+/* Chat with Lens: playful bot icon that blinks and hops. */
+@keyframes prism-bot-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+
+@keyframes prism-bot-hop {
+  0%, 80%, 100% { transform: translateY(0); }
+  85% { transform: translateY(-8px); }
+  90% { transform: translateY(0); }
+  93% { transform: translateY(-4px); }
+  96% { transform: translateY(0); }
+}
+
+.prism-bot-icon {
+  animation: prism-bot-hop 6s ease-in-out infinite;
+}
+
+.prism-bot-icon .prism-bot-eyes {
+  transform-origin: center;
+  animation: prism-bot-blink 4.5s ease-in-out infinite;
+}
+
+/* Chat with Lens: suggested-question speech bubbles that float near
+   the empty-state bot icon, one at a time, staying up long enough to click. */
+@keyframes prism-bubble-float {
+  0% { opacity: 0; visibility: hidden; transform: translateY(6px) scale(0.92); }
+  1% { visibility: visible; }
+  2% { opacity: 1; transform: translateY(0) scale(1); }
+  6% { opacity: 1; transform: translateY(0) scale(1); }
+  8% { opacity: 0; transform: translateY(-4px) scale(0.95); }
+  8.5% { visibility: hidden; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
+.prism-bubble {
+  animation-name: prism-bubble-float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  opacity: 0;
+  visibility: hidden;
+}

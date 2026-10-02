@@ -1,0 +1,66 @@
+SIMULATION_API_URL="http://127.0.0.1:8081"
+LLM_D_DEPLOY_API_URL="http://127.0.0.1:8081"
+
+# Authentication (see docs/design/auth-rbac-design.md section 13.1).
+# local = Lens-managed accounts only; hybrid = local + external IdP;
+# external = external IdP only; disabled = no authentication (dev only).
+PRISM_AUTH_MODE="hybrid"
+# Required to encrypt stored IdP secrets and sign internal assertions. Replace
+# with strong, unique values in production; rotating PRISM_SECRET_KEY requires
+# re-encrypting stored secrets (PRISM_SECRET_KEYS_OLD lists decryption fallbacks).
+PRISM_SECRET_KEY=""
+PRISM_INTERNAL_AUTH_SECRET=""
+# Disable public API documentation in production.
+PRISM_EXPOSE_API_DOCS="false"
+# First-run administrator. With no users yet, the backend creates one admin and
+# prints the credentials. Leave these unset to auto-generate a password (written
+# to $LENS_DATA_DIR/credentials/initial_admin.txt); set both to choose your own.
+# The account must change its password at first sign-in.
+# PRISM_ADMIN_AUTOSEED="true"
+# PRISM_ADMIN_USERNAME="admin"
+# PRISM_ADMIN_PASSWORD=""
+
+# Deploy runtime is enabled by default. Set this to "false" only when this
+# process must not create cluster resources. Secret-bearing cluster access must
+# be mounted by the runtime and must not be placed in this file.
+LLM_D_BENCH_DEPLOY_RUNTIME_ENABLED="true"
+# Single Guide source root for the local Deploy runtime and Deployment Source
+# form default. Set it to a local llm-d checkout containing guides/.
+LLM_D_ROOT="/path/to/llm-d"
+# kubectl, Helm, and Docker are discovered from PATH. Set these only when an
+# explicit executable override is required.
+# LLM_D_BENCH_KUBECTL_PATH="/path/to/kubectl"
+# LLM_D_BENCH_HELM_PATH="/path/to/helm"
+# LLM_D_BENCH_DOCKER_PATH="/path/to/docker"
+LLM_D_BENCH_NAMESPACE_PREFIX="llm-d-bench-"
+LLM_D_BENCH_READINESS_TIMEOUT_SECONDS="900"
+LLM_D_BENCH_KUBECTL_TIMEOUT_SECONDS="120"
+# Preserve failed namespaces and their Pods for troubleshooting instead of
+# deleting them after diagnostics capture.
+LLM_D_BENCH_RETAIN_NAMESPACE_ON_FAILURE="false"
+# Optional IP address or DNS name reachable by Model API clients. Setting this
+# exposes kubectl port-forward listeners on all host interfaces.
+PRISM_MODEL_API_PUBLIC_HOST=""
+# Values in this allowlist are injected into the local Deploy runtime's
+# modelserver Deployment. They also initialize the corresponding Remote Deploy
+# Target fields when that browser has no saved override.
+HTTP_PROXY="http://proxy.ims.intel.com:911"
+HTTPS_PROXY="http://proxy.ims.intel.com:911"
+NO_PROXY="intel.com,.intel.com,localhost,127.0.0.1"
+HF_ENDPOINT="https://hf-mirror.com"
+
+# Deployment Source and Model Runtime form defaults. These values are exposed
+# through the allowlisted general configuration endpoint; other process
+# environment variables are never returned to the browser.
+LLM_D_BRANCH="tpc-llmdbench"
+# Set both fields to use a hostPath-backed model cache in the modelserver.
+LLM_D_MOUNT_PATH=""
+LLM_D_MOUNT_MODEL_NAME=""
+
+# Compatibility aliases for deployments that adopted the first Remote Deploy
+# Target configuration draft. New deployments should use LLM_D_ROOT and the
+# standard proxy variables above.
+# LLM_D_REPOSITORY="https://github.com/llm-d/llm-d.git"
+# LLM_D_HTTP_PROXY="http://proxy.ims.intel.com:911"
+# LLM_D_HTTPS_PROXY="http://proxy.ims.intel.com:911"
+# LLM_D_NO_PROXY="intel.com,.intel.com,localhost,127.0.0.1"
