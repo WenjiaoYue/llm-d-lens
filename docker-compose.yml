@@ -16,10 +16,10 @@ services:
       - PUBLIC_URL=http://localhost:8081
       - SIMULATION_API_URL=http://simulation:8081
       # Local dev bypasses login. For production set PRISM_AUTH_MODE=local
-      # (or hybrid/ldap) and provide PRISM_INTERNAL_AUTH_SECRET.
+      # (or hybrid/ldap) and provide LENS_INTERNAL_AUTH_SECRET.
       - PRISM_AUTH_MODE=disabled
       - PRISM_ALLOW_UNAUTHENTICATED=true
-      - PRISM_INTERNAL_AUTH_SECRET=dev-internal-secret
+      - LENS_INTERNAL_AUTH_SECRET=dev-internal-secret
     ports:
       - "8081:5173"
       - "3000:3000"
@@ -39,8 +39,8 @@ services:
       # these dev values (see docs/design/auth-rbac-design.md section 13.1).
       - PRISM_AUTH_MODE=disabled
       - PRISM_ALLOW_UNAUTHENTICATED=true
-      - PRISM_SECRET_KEY=dev-secret-key
-      - PRISM_INTERNAL_AUTH_SECRET=dev-internal-secret
+      - LENS_SECRET_KEY=dev-secret-key
+      - LENS_INTERNAL_AUTH_SECRET=dev-internal-secret
     volumes:
       - lens-data:/var/lib/lens
       - lens-cache:/var/cache/lens

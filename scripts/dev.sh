@@ -90,7 +90,7 @@ PRISM_GPU_PCI_ALLOWLIST="${PRISM_GPU_PCI_ALLOWLIST:-}"
 # The Express server signs internal reads with the authenticated caller's
 # principal id; the FastAPI backend verifies the HMAC. Both processes must see
 # the same value, so a local default keeps them in sync in development.
-PRISM_INTERNAL_AUTH_SECRET="${PRISM_INTERNAL_AUTH_SECRET:-dev-internal-secret}"
+LENS_INTERNAL_AUTH_SECRET="${LENS_INTERNAL_AUTH_SECRET:-dev-internal-secret}"
 
 # Deploy/Model Cache render Guide manifests from an llm-d checkout containing
 # guides/. Default to a well-known location under $HOME so this works without
@@ -702,13 +702,13 @@ start_services() {
         PRISM_GPU_PCI_ALLOWLIST="$PRISM_GPU_PCI_ALLOWLIST" \
         PRISM_MCP_URL="$scheme://127.0.0.1:$SERVER_PORT/api/mcp" \
         PRISM_MCP_CA_FILE="${TLS_CERT_FILE:-}" \
-        PRISM_INTERNAL_AUTH_SECRET="$PRISM_INTERNAL_AUTH_SECRET" \
+        LENS_INTERNAL_AUTH_SECRET="$LENS_INTERNAL_AUTH_SECRET" \
         .venv/bin/python -m uvicorn llm_d_bench.api:app \
         --host "${BACKEND_HOST:-0.0.0.0}" --port "$BACKEND_PORT"
 
     start_one server env SERVER_PORT="$SERVER_PORT" PORT="$SERVER_PORT" \
         PRISM_GPU_PCI_ALLOWLIST="$PRISM_GPU_PCI_ALLOWLIST" \
-        PRISM_INTERNAL_AUTH_SECRET="$PRISM_INTERNAL_AUTH_SECRET" \
+        LENS_INTERNAL_AUTH_SECRET="$LENS_INTERNAL_AUTH_SECRET" \
         SIMULATION_API_URL="http://127.0.0.1:$BACKEND_PORT" \
         TLS_CERT_FILE="${TLS_CERT_FILE:-}" TLS_KEY_FILE="${TLS_KEY_FILE:-}" \
         ./node_modules/.bin/tsx server/server.js
