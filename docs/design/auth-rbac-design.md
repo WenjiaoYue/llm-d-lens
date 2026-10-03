@@ -1559,7 +1559,7 @@ Pagination/filtering reuse the existing DTO + DAO conventions; import/export is 
 - `authMiddleware` reads `LENS_INTERNAL_AUTH_SECRET`, `PRISM_AUTH_MODE`,
   `PRISM_AUTH_INTROSPECT_TTL_MS`.
 - See §9.2 for the adjusted mount order in `server.js`.
-- `Dockerfile` / `docker-compose.yml`: inject `LENS_SECRET_KEY`,
+- `.deploy_config.example` and the installer-written environment: inject `LENS_SECRET_KEY`,
   `LENS_INTERNAL_AUTH_SECRET` through secrets; in production set `PRISM_COOKIE_SECURE=true`.
 - `scripts/dev.sh`: for development paths other than the default `PRISM_AUTH_MODE=disabled`,
   provide a bootstrap admin; keep `SIMULATION_ALLOW_UNAUTHENTICATED` compatibility.
@@ -1990,7 +1990,7 @@ Connected through `llm_d_bench/auth/access.py` (`current_principal` / `visible_c
 - **Manual full LDAP sync**: `LdapProvider.list_group_members` +
   `AuthService.sync_directory`; `POST /identity-providers/{id}/sync` now reconciles
   group members by mapping (JIT-create users, write external members/roles).
-- **Deployment configuration**: `docker-compose.yml` and `.deploy_config.example` add examples for
+- **Deployment configuration**: `.deploy_config.example` adds examples for
   `PRISM_AUTH_MODE` / `LENS_SECRET_KEY` / `LENS_INTERNAL_AUTH_SECRET` /
   `PRISM_EXPOSE_API_DOCS` (local default is disabled).
 - **Frontend account UI**: show the current user and “Sign out” at the bottom of the sidebar.
