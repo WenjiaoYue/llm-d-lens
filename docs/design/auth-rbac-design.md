@@ -1575,7 +1575,9 @@ Pagination/filtering reuse the existing DTO + DAO conventions; import/export is 
   - `ldap3` (**optional extra `[ldap]`**, decision D19, needed only by the `ldap` provider).
 - Node: **no additions required** (use built-in `crypto` and `fetch`; introspection uses existing fetch;
   Node does not embed Casbin and instead matches introspection results, decisions D8/D11).
-- New dependencies must be explained in the PR; `ldap3` is made an extra to avoid making the default image heavier.
+- New dependencies must be explained in the PR; `ldap3` stays an extra so slim or custom builds can omit it, while the default
+  development and installer install paths include `[ldap]` so the Administration directory provider "Test" action works out of
+  the box.
 
 ---
 

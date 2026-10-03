@@ -441,11 +441,12 @@ ensure_venv() {
     fi
 
     # '[embedded-db]' pulls in pgserver, needed by ensure_database's default
-    # built-in PostgreSQL fallback below.
-    log "installing Python dependencies (pip install -e .[embedded-db])..."
+    # built-in PostgreSQL fallback below. '[ldap]' pulls in ldap3 so the
+    # Administration directory provider "Test" action works in local dev.
+    log "installing Python dependencies (pip install -e .[embedded-db,ldap])..."
     .venv/bin/python -m pip install --upgrade pip >/dev/null 2>&1 || true
-    run_with_tail 5 .venv/bin/python -m pip install -e ".[embedded-db]" || {
-        fail "pip install -e .[embedded-db] failed — see output above"
+    run_with_tail 5 .venv/bin/python -m pip install -e ".[embedded-db,ldap]" || {
+        fail "pip install -e .[embedded-db,ldap] failed — see output above"
         return 1
     }
     echo "$current_hash" > "$stamp"
