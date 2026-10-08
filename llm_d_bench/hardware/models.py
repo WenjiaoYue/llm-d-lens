@@ -240,6 +240,11 @@ class DeploymentContribution:
     # Vendor's llm-d model-server image (e.g. llm-d-cuda vs llm-d-xpu); the
     # deploy default must follow the target hardware, not a hardcoded Intel image.
     runtime_image: str | None = None
+    # Router topology some guides (e.g. tiered-prefix-cache) publish per-topology
+    # values overlays for (single-host vs a multi-host LeaderWorkerSet, such as
+    # multi-chip TPU pods); unset means "single-host", the topology every
+    # currently registered profile uses.
+    router_topology: str | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> DeploymentContribution:
@@ -252,6 +257,7 @@ class DeploymentContribution:
             resource_name=data.get("resource_name"),
             supports_pci_allowlist=bool(data.get("supports_pci_allowlist", False)),
             runtime_image=data.get("runtime_image"),
+            router_topology=data.get("router_topology"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -264,6 +270,7 @@ class DeploymentContribution:
             "resource_name": self.resource_name,
             "supports_pci_allowlist": self.supports_pci_allowlist,
             "runtime_image": self.runtime_image,
+            "router_topology": self.router_topology,
         }
 
 
