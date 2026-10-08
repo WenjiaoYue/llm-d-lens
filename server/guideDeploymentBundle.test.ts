@@ -1,3 +1,5 @@
+import { seedHardwareProfiles } from './testing/hardwareProfiles.ts';
+await seedHardwareProfiles();
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import yaml from 'js-yaml';

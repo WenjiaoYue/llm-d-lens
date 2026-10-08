@@ -170,10 +170,9 @@ async def test_readiness_uses_contract_deployment_names():
 def test_guide_sources_follow_the_active_accelerator(monkeypatch, tmp_path):
     import llm_d_bench.deploy.providers.pd_disaggregation as pd
 
-    monkeypatch.setattr(pd, "overlay_variant", lambda: "gpu")
-    assert PdDisaggregationAdapter._guide_sources(tmp_path) == {
-        "base": tmp_path / "guides/pd-disaggregation/modelserver/gpu/vllm/base"
-    }
-
-    monkeypatch.setattr(pd, "overlay_variant", lambda: "xpu")
-    assert set(PdDisaggregationAdapter._guide_sources(tmp_path)) == {"vllm", "vllm-rdma"}
+    for relative in ("gpu/vllm/base", "xpu/vllm", "xpu/vllm-rdma"):
+        overlay = tmp_path / "guides/pd-disaggregation/modelserver" / relative
+        overlay.mkdir(parents=True)
+        (overlay / "kustomization.yaml").write_text("resources: []")
+    assert set(PdDisaggregationAdapter._guide_sources(tmp_path, "gpu")) == {"base"}
+    assert set(PdDisaggregationAdapter._guide_sources(tmp_path, "xpu")) == {".", "vllm", "vllm-rdma"}

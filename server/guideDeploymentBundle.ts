@@ -1,3 +1,5 @@
+import { hardwareProfileSnapshot } from './hardwareProfiles.ts';
+import { managedImageProfile } from '../src/features/hardware/profiles.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import yaml from 'js-yaml';
@@ -12,28 +14,8 @@ const stackProfile = yaml.load(fs.readFileSync(new URL('../llm_d_bench/versions/
 export const ROUTER_CHART_VERSION = String(stackProfile.llm_d_router);
 export const ROUTER_DISAGG_SIDECAR_IMAGE = `ghcr.io/llm-d/llm-d-router-disagg-sidecar:${ROUTER_CHART_VERSION}`;
 
-/* Model-server images are owned by the hardware profiles (repository and
- * version), resolved from the profile registry directory so the planner never
- * branches on a vendor or hardcodes a file path. */
-function loadModelServerImages(): Record<string, string> {
-    const directory = new URL('../llm_d_bench/hardware/profiles/', import.meta.url);
-    const images: Record<string, string> = {};
-    for (const entry of fs.readdirSync(directory)) {
-        if (!entry.endsWith('.json')) continue;
-        const profile = JSON.parse(fs.readFileSync(new URL(entry, directory), 'utf8')) as RecordValue;
-        const image = profile?.deployment?.runtime_image;
-        if (typeof image === 'string' && image) images[image.split('@')[0].split(':')[0]] = image;
-    }
-    return images;
-}
-const modelServerImages = loadModelServerImages();
-
-/* The deployed manifest must carry the model-server image the backend pins, so
- * the configuration validates. A repository a profile owns is replaced by that
- * profile's full image; a custom image passes through unchanged. */
-export function pinModelServerImage(image: string): string {
-    const repository = image.split('@')[0].split(':')[0];
-    return modelServerImages[repository] ?? image;
+export function pinModelServerImage(image: string, profiles = hardwareProfileSnapshot()): string {
+    return managedImageProfile(profiles, image)?.deployment?.runtime_image || image;
 }
 const routerPaths = {
     'optimized-baseline': 'optimized-baseline.values.yaml',

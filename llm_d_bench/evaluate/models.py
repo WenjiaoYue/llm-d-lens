@@ -103,7 +103,10 @@ class BenchmarkSpec(BaseModel):
         description="Optional inline workload YAML, scoped to this benchmark run.",
     )
     parallelism: int = Field(default=1, ge=1, le=32)
-    wait_timeout_seconds: int = Field(default=1800, ge=1, le=14400)
+    wait_timeout_seconds: int | None = Field(
+        default=None, ge=1, le=14400,
+        description="Per-invocation execution limit in seconds. Null selects a workload-based automatic budget.",
+    )
     harness_memory_gib: int = Field(
         default=8,
         ge=1,
@@ -112,7 +115,7 @@ class BenchmarkSpec(BaseModel):
         description="Host memory request and limit in GiB per benchmark worker; independent of model GPU memory.",
     )
     accelerator_profile: str | None = Field(
-        default=None, max_length=253, pattern=r"^[a-z0-9]([-.a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-.a-z0-9]*[a-z0-9])?)+$"
+        default=None, max_length=253, pattern=r"^[a-z0-9]([-.a-z0-9]*[a-z0-9])?$"
     )
     storage_class_name: str | None = Field(default=None, max_length=253, pattern=r"^[a-z0-9]([-.a-z0-9]*[a-z0-9])?$")
     matrix: list[WorkloadMatrixPoint] = Field(default_factory=list, max_length=50)

@@ -8,6 +8,7 @@ import { historicalFlows } from "./benchmark-results/historicalFlow.js";
 import { liveDeployments } from "./benchmark-results/deploymentEvidence.js";
 import { benchmarkDetails } from "./benchmark-results/benchmarkDetails.js";
 import BenchmarkLiveFlow from "./benchmark-results/BenchmarkLiveFlow.jsx";
+import BenchmarkTiming from "./evaluation/BenchmarkTiming.jsx";
 import GuideResultExplorer from "./benchmark-results/GuideResultExplorer.jsx";
 import { buildResultReport } from "./benchmark-results/resultReport.js";
 import { resolveExplorerGuide } from "./benchmark-results/resultExplorer.js";
@@ -354,6 +355,7 @@ export default function OptimizationEvaluationDetails({ onNavigate }) {
             <div title="Heartbeat shows runner liveness; it does not represent request progress"><span className="block uppercase tracking-wider text-slate-600">Runner heartbeat</span><b className="mt-1 block truncate text-slate-300">{details.workflow.heartbeat_at || "—"}</b></div>
             <div title={details.workflow.last_log_at || ""}><span className="block uppercase tracking-wider text-slate-600">Last output</span><b className="mt-1 block truncate text-slate-300">{details.workflow.last_log_at || "—"}</b></div>
         </div>}
+        {details && <div className="flex flex-wrap items-center gap-2">{(details.cases ? details.cases.map(entry => entry.evaluation).filter(Boolean) : [details.evaluation || details.workflow]).map(run => <BenchmarkTiming key={run.id} run={run} compact />)}</div>}
         <nav aria-label="Benchmark detail sections" className="sticky top-0 z-30 flex gap-0 overflow-x-auto rounded-xl border border-slate-800/70 bg-[#080d17]/95 p-1 shadow-xl backdrop-blur-xl">{[
             ["overview", "Benchmark results", <Gauge key="overview-icon" className="h-3.5 w-3.5" />],
             ["compare", "Compare", <Gauge key="compare-icon" className="h-3.5 w-3.5" />],

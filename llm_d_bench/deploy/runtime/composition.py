@@ -18,7 +18,7 @@ from llm_d_bench.deploy.providers.baseline_vllm import BaselineVllmAdapter
 from llm_d_bench.deploy.providers.configuration_manifest import ConfigurationManifestAdapter
 from llm_d_bench.deploy.providers.guide_adapter import GuideDefinition
 from llm_d_bench.deploy.providers.guide_catalog import GuideCatalog
-from llm_d_bench.deploy.providers.hardware_profile import overlay_variant
+from llm_d_bench.deploy.providers.hardware_profile import overlay_variant, guide_overlays, default_guide_variant
 from llm_d_bench.deploy.providers.helm_kustomize import HelmKustomizeGuideAdapter, HelmKustomizeGuideDescriptor
 from llm_d_bench.deploy.providers.kubernetes import KubernetesExecutionPolicy, KubernetesGuideAdapter
 from llm_d_bench.deploy.providers.optimized_baseline import (
@@ -866,7 +866,8 @@ def _build_optimized_baseline_provider(settings: RuntimeEnvironment) -> Optimize
     guide_root = settings.manifest_root / "llm-d"
     if not guide_root.is_dir():
         guide_root = settings.manifest_root
-    overlay_path = guide_root / "guides" / "optimized-baseline" / "modelserver" / overlay_variant(accelerator=settings.accelerator) / "vllm"
+    sources = guide_overlays(guide_root, "optimized-baseline", accelerator=settings.accelerator)
+    overlay_path = sources.get(".") or sources.get("base") or next(iter(sources.values()), guide_root / "unavailable-overlay")
     router_base_values_path = guide_root / "guides" / "recipes" / "router" / "base.values.yaml"
     router_values_path = guide_root / "guides" / "optimized-baseline" / "router" / "optimized-baseline.values.yaml"
     neutral_router_values_path = (
@@ -877,7 +878,6 @@ def _build_optimized_baseline_provider(settings: RuntimeEnvironment) -> Optimize
     )
     if not all(
         (
-            overlay_path.is_dir(),
             router_base_values_path.is_file(),
             router_values_path.is_file(),
             neutral_router_values_path.is_file(),
@@ -890,7 +890,7 @@ def _build_optimized_baseline_provider(settings: RuntimeEnvironment) -> Optimize
     definition = GuideDefinition(
         guide_id="optimized-baseline",
         source_ref="local-optimized-baseline",
-        content_hash=stable_hash(_tree_checksum(overlay_path)),
+        content_hash=stable_hash(_tree_checksum(overlay_path) if overlay_path.is_dir() else {}),
         maturity="supported-core",
         capabilities={
         "variant": f"{overlay_variant(accelerator=settings.accelerator)}-routed-guide",
@@ -940,6 +940,7 @@ def _build_optimized_baseline_provider(settings: RuntimeEnvironment) -> Optimize
         command_runner,
         policy=OptimizedBaselineGuidePolicy(
             namespace_prefix=settings.namespace_prefix,
+            accelerator=settings.accelerator,
             guide_root=guide_root,
             overlay_path=overlay_path,
             router_base_values_path=router_base_values_path,
@@ -972,7 +973,7 @@ def _build_baseline_vllm_provider(settings: RuntimeEnvironment) -> BaselineVllmA
         settings.kubeconfig,
     )
     return BaselineVllmAdapter(
-        runner, settings.namespace_prefix, settings.readiness_timeout_seconds, settings.docker_path
+        runner, settings.namespace_prefix, settings.readiness_timeout_seconds, settings.docker_path, accelerator=settings.accelerator
     )
 
 
@@ -995,6 +996,7 @@ def _build_pd_disaggregation_provider(settings: RuntimeEnvironment) -> PdDisaggr
         settings.readiness_timeout_seconds,
         settings.helm_path,
         settings.kubeconfig,
+        accelerator=settings.accelerator,
     )
 
 
@@ -1004,16 +1006,12 @@ def _build_tiered_prefix_cache_provider(settings: RuntimeEnvironment) -> HelmKus
     guide_root = settings.manifest_root / "llm-d"
     if not guide_root.is_dir():
         guide_root = settings.manifest_root
+    variants = guide_overlays(guide_root, "tiered-prefix-cache", accelerator=settings.accelerator)
     descriptor = HelmKustomizeGuideDescriptor(
         guide_id="tiered-prefix-cache",
         guide_root=guide_root,
-        variants={
-            "base": guide_root / f"guides/tiered-prefix-cache/modelserver/{overlay_variant(accelerator=settings.accelerator)}/vllm/base",
-            "native/cpu/base": guide_root / f"guides/tiered-prefix-cache/modelserver/{overlay_variant(accelerator=settings.accelerator)}/vllm/native/cpu/base",
-            "lmcache-connector/cpu/base": guide_root
-            / f"guides/tiered-prefix-cache/modelserver/{overlay_variant(accelerator=settings.accelerator)}/vllm/lmcache-connector/cpu/base",
-        },
-        default_variant="native/cpu/base",
+        variants=variants,
+        default_variant=default_guide_variant(variants),
         router_chart="oci://ghcr.io/llm-d/charts/llm-d-router-standalone",
         router_version=router_chart_version(),
         router_values=(

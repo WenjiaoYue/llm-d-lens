@@ -47,6 +47,8 @@ def sample(i, values, **labels):
             "node": "node-a",
             "pci_bdf": f"0000:0{i}:00.0",
             "namespace": "intel-xpumd",
+            "hw_gpu_task": "compute-all",
+            "hw_memory_location": "device",
             "pod": "xpumd-exporter",
             **labels,
         },
@@ -165,11 +167,10 @@ def test_xpum_queries_and_labels_come_from_intel_profile():
 
     telemetry = get_profile("intel-xpu").telemetry
     assert telemetry is not None
-    queries = xpu_metrics.xpum_queries()
+    queries = xpu_metrics.xpum_queries(get_profile("intel-xpu"))
     assert queries["gpu_utilization_percent"] == telemetry.device_metrics["utilization"]
     assert queries["gpu_framebuffer_used_bytes"] == telemetry.device_metrics["framebuffer_used"]
-    assert xpu_metrics.XPUM_LABELS["pci"] == telemetry.label_schema["pci"]
-    assert xpu_metrics.XPUM_LABELS["device"] == telemetry.label_schema["device"]
+    assert xpu_metrics.xpum_queries() == {}
 
 
 @pytest.mark.asyncio

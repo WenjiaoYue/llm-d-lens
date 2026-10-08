@@ -11,19 +11,10 @@ import yaml
 
 from .manifest_facts import _invocation_tokens, _option
 
-DEFAULT_RDMA_DEVICE_CLASS = "dranet-rdma"
-
-
-def _rdma_device_class() -> str:
-    """RDMA NIC device class, from the active deploy hardware profile."""
-    try:
-        from llm_d_bench.hardware.resolver import resolve_by_accelerator_key
-
-        profile = resolve_by_accelerator_key("xpu")
-        value = profile.dranet_device_class if profile else None
-    except Exception:  # pragma: no cover - discovery failure keeps the literal fallback
-        value = None
-    return value or DEFAULT_RDMA_DEVICE_CLASS
+def _rdma_device_class(content: dict) -> str | None:
+    from llm_d_bench.hardware.resolver import resolve_configuration_profile
+    profile = resolve_configuration_profile(content)
+    return profile.dranet_device_class if profile else None
 
 
 def _mapping(text: str) -> dict:
@@ -59,14 +50,11 @@ def validate_guide_settings(content: dict[str, Any], manifest: str, guide: str) 
             or (key == "rdmaNicCount" and int(value) != value)
         ):
             raise ValueError(f"Invalid Guide setting {key}")
-    variant = content.get("guideVariant", "")
     capacity = settings.get("cacheCpuGiB")
     nic_count = settings.get("rdmaNicCount")
-    if capacity is not None and (
-        guide != "tiered-prefix-cache" or variant not in {"native/cpu/base", "lmcache-connector/cpu/base"}
-    ):
+    if capacity is not None and guide != "tiered-prefix-cache":
         raise ValueError("CPU cache capacity requires a supported offload variant")
-    if nic_count is not None and (guide != "pd-disaggregation" or variant != "vllm-rdma"):
+    if nic_count is not None and not _rdma_device_class(content):
         raise ValueError("NIC count requires the P/D RDMA variant")
     documents = [doc for doc in yaml.safe_load_all(manifest) if isinstance(doc, dict)]
     servers = [
@@ -82,7 +70,7 @@ def validate_guide_settings(content: dict[str, Any], manifest: str, guide: str) 
         for container in servers:
             tokens = _invocation_tokens(container, "cache")
             connector = json.loads(_option(tokens, {"--kv-transfer-config"}, "cache") or "{}")
-            if variant == "native/cpu/base":
+            if connector.get("kv_connector") == "OffloadingConnector":
                 if connector.get("kv_connector") != "OffloadingConnector" or connector.get(
                     "kv_connector_extra_config", {}
                 ).get("cpu_bytes_to_use") != int(capacity * 1024**3):
@@ -101,7 +89,7 @@ def validate_guide_settings(content: dict[str, Any], manifest: str, guide: str) 
             for doc in documents
             if doc.get("kind") == "ResourceClaimTemplate"
             for request in doc.get("spec", {}).get("spec", {}).get("devices", {}).get("requests", [])
-        if request.get("exactly", {}).get("deviceClassName") == _rdma_device_class()
+        if request.get("exactly", {}).get("deviceClassName") == _rdma_device_class(content)
         ]
         if not requests or any(request["exactly"].get("count") != nic_count for request in requests):
             raise ValueError("NIC count does not match the rendered RDMA requests")

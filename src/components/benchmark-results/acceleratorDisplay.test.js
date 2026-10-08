@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import { setHardwareProfiles } from './acceleratorDisplay.js';
+setHardwareProfiles(['intel_xpu', 'nvidia'].map(name => JSON.parse(fs.readFileSync(new URL(`../../../llm_d_bench/hardware/profiles/${name}.json`, import.meta.url), 'utf8'))));
 // Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,15 +22,15 @@ test('reads the accelerator profile from common run shapes', () => {
 
 test('labels known accelerators and leaves unknown ones neutral', () => {
   assert.equal(acceleratorDisplayLabel('intel-xpu'), 'XPU');
-  assert.equal(acceleratorDisplayLabel('nvidia-cuda'), 'GPU');
-  assert.equal(acceleratorDisplayLabel({ model: 'B60 XPU' }), 'XPU');
+  assert.equal(acceleratorDisplayLabel('cuda'), 'GPU');
+  assert.equal(acceleratorDisplayLabel({ id: 'intel-xpu' }), 'XPU');
   assert.equal(acceleratorDisplayLabel(''), null);
 });
 
 test('utilization label falls back to the neutral wording', () => {
   assert.equal(utilizationLabel('intel-xpu'), 'XPU utilization');
   assert.equal(utilizationLabel('cuda'), 'GPU utilization');
-  assert.equal(utilizationLabel(null), 'GPU / XPU utilization');
+  assert.equal(utilizationLabel(null), 'Accelerator utilization');
 });
 
 test('picks the per-vendor runtime image from the cluster hardware', () => {

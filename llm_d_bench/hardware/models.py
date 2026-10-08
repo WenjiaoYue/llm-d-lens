@@ -156,6 +156,9 @@ class DeviceMetricSource:
     skip it entirely.
     """
 
+    output_unit: str = ""
+    aggregation: str = "avg"
+    tile_aggregation: str = "avg"
     metric: str = ""
     unit: str = ""
     scale: float = 1.0
@@ -168,6 +171,9 @@ class DeviceMetricSource:
         except (TypeError, ValueError):
             scale = 1.0
         return cls(
+            output_unit=str(data.get("output_unit") or data.get("unit") or ""),
+            aggregation=str(data.get("aggregation") or "avg"),
+            tile_aggregation=str(data.get("tile_aggregation") or "avg"),
             metric=str(data.get("metric") or ""),
             unit=str(data.get("unit") or ""),
             scale=scale,
@@ -176,6 +182,9 @@ class DeviceMetricSource:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "output_unit": self.output_unit,
+            "aggregation": self.aggregation,
+            "tile_aggregation": self.tile_aggregation,
             "metric": self.metric,
             "unit": self.unit,
             "scale": self.scale,
@@ -187,6 +196,9 @@ class DeviceMetricSource:
 class TelemetryContribution:
     """Metric sources and per-pod attribution for one hardware profile."""
 
+    modes: Mapping[str, Any] = field(default_factory=dict)
+    source_label: str = ""
+    allocation: Mapping[str, Any] = field(default_factory=dict)
     provider_id: str | None = None
     device_metrics: Mapping[str, str] = field(default_factory=dict)
     # Selector-injectable, unit-aware view of the same metrics for consumers
@@ -200,6 +212,9 @@ class TelemetryContribution:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> TelemetryContribution:
         return cls(
+            modes=dict(data.get("modes") or {}),
+            source_label=str(data.get("source_label") or ""),
+            allocation=dict(data.get("allocation") or {}),
             provider_id=data.get("provider_id"),
             device_metrics=_str_map(data.get("device_metrics")),
             device_metric_sources={
@@ -214,6 +229,9 @@ class TelemetryContribution:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "modes": dict(self.modes),
+            "source_label": self.source_label,
+            "allocation": dict(self.allocation),
             "provider_id": self.provider_id,
             "device_metrics": dict(self.device_metrics),
             "device_metric_sources": {
@@ -232,6 +250,11 @@ class DeploymentContribution:
 
     overlay_root: str
     arch: str
+    modes: Mapping[str, Any] = field(default_factory=dict)
+    managed_image_repositories: tuple[str, ...] = ()
+    runtime_class_matchers: tuple[str, ...] = ()
+    pci_attribute: str | None = None
+    pci_attribute_domain: str | None = None
     device_class: str = ""
     claim_request_name: str = ""
     node_selector: Mapping[str, str] = field(default_factory=dict)
@@ -246,6 +269,11 @@ class DeploymentContribution:
         return cls(
             overlay_root=str(data.get("overlay_root") or ""),
             arch=str(data.get("arch") or ""),
+            modes=dict(data.get("modes") or {}),
+            managed_image_repositories=tuple(data.get("managed_image_repositories") or ()),
+            runtime_class_matchers=tuple(data.get("runtime_class_matchers") or ()),
+            pci_attribute=data.get("pci_attribute"),
+            pci_attribute_domain=data.get("pci_attribute_domain"),
             device_class=str(data.get("device_class") or ""),
             claim_request_name=str(data.get("claim_request_name") or ""),
             node_selector=_str_map(data.get("node_selector")),
@@ -258,6 +286,11 @@ class DeploymentContribution:
         return {
             "overlay_root": self.overlay_root,
             "arch": self.arch,
+            "modes": dict(self.modes),
+            "managed_image_repositories": list(self.managed_image_repositories),
+            "runtime_class_matchers": list(self.runtime_class_matchers),
+            "pci_attribute": self.pci_attribute,
+            "pci_attribute_domain": self.pci_attribute_domain,
             "device_class": self.device_class,
             "claim_request_name": self.claim_request_name,
             "node_selector": dict(self.node_selector),
@@ -271,6 +304,8 @@ class DeploymentContribution:
 class PlanningContribution:
     """Configuration/planning mapping for one hardware profile."""
 
+    discovery: Mapping[str, Any] = field(default_factory=dict)
+    memory_models: tuple[Mapping[str, Any], ...] = ()
     aic_system_patterns: tuple[str, ...] = ()
     default_backend: str = "vllm"
     device_class_allow_pattern: str = ""
@@ -278,6 +313,8 @@ class PlanningContribution:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> PlanningContribution:
         return cls(
+            discovery=dict(data.get("discovery") or {}),
+            memory_models=tuple(data.get("memory_models") or ()),
             aic_system_patterns=_tuple_of_str(data.get("aic_system_patterns")),
             default_backend=str(data.get("default_backend") or "vllm"),
             device_class_allow_pattern=str(data.get("device_class_allow_pattern") or ""),
@@ -285,6 +322,8 @@ class PlanningContribution:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "discovery": dict(self.discovery),
+            "memory_models": list(self.memory_models),
             "aic_system_patterns": list(self.aic_system_patterns),
             "default_backend": self.default_backend,
             "device_class_allow_pattern": self.device_class_allow_pattern,
