@@ -12,6 +12,27 @@ record. These fields are diagnostics, not user-supplied selectors. Explicit
 harness `OOMKilled` errors receive host-memory guidance; plain exit 137 remains
 unclassified.
 
+
+## Concurrent backend instances
+
+Evaluation execution is protected by operating-system locks under
+`LENS_DATA_DIR/metadata/evaluations/locks`. Backends sharing evaluation records
+must share this directory on a filesystem supporting `flock`; sharing only the
+database with independent data directories is not supported by this guard.
+All participating backends must run the updated code. Separate development
+installations should use independent databases and data directories.
+
+Starting another backend does not mark a live owner's benchmark interrupted or
+launch the same workflow again. Locks remain held through asynchronous cleanup
+and are released automatically when the owning process exits. Automatic deployment
+cleanup is deferred while a benchmark still uses the deployment. A delayed duplicate
+executor cannot replay a completed workflow.
+
+Cancel, retry, and delete requests targeting work owned by another backend return
+HTTP `409` before changing records or cluster resources. Send the request to the
+backend executing that evaluation. Local cancellation retains ownership until its
+cleanup completes. The Python control callables enforce the same ownership checks.
+
 ## Backend API
 
 Evaluation routes live in `llm_d_bench/evaluate/router.py` with the `/api/v1/evaluate` prefix. Request models are defined in `llm_d_bench.evaluate.models`; named HTTP response models are defined in `llm_d_bench.evaluate.api_models`.

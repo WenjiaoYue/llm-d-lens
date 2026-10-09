@@ -73,6 +73,7 @@ from llm_d_bench.evaluate.models import (
     WorkloadMatrixPoint,
     validate_inline_workload,
 )
+from llm_d_bench.evaluate.ownership import evaluation_lock, owned_control, owned_execution
 from llm_d_bench.evaluate.request_evidence import apply_request_evidence, enable_request_reports
 from llm_d_bench.evaluate.timing import benchmark_timing
 from llm_d_bench.evaluate.workflow_state import TERMINAL_EVALUATION_STATUSES as _TERMINAL_EVALUATE_STATUSES
@@ -1491,7 +1492,11 @@ async def _wait_for_benchmark(run_id: str) -> dict:
         if benchmark is None:
             raise ValueError("benchmark run is no longer available")
         if benchmark["status"] in _TERMINAL_EVALUATE_STATUSES:
-            return benchmark
+            # Terminal metrics can be saved before the runner's async finally
+            # finishes. Do not release its deployment while it is still active.
+            with evaluation_lock("benchmark", run_id) as settled:
+                if settled:
+                    return benchmark
         await asyncio.sleep(3)
 
 
@@ -1735,18 +1740,20 @@ async def _execute_shared_pods_baseline_case(workflow: dict, case: dict) -> None
             and deployment_case_id
         ):
             try:
-                await deployment_run_manager.worker_for_run(deployment_run_id).clean_case(
-                    deployment_run_id,
-                    deployment_case_id,
-                )
+                with _deployment_cleanup_guard(guide_case["execution_id"]):
+                    await deployment_run_manager.worker_for_run(deployment_run_id).clean_case(
+                        deployment_run_id,
+                        deployment_case_id,
+                    )
             except Exception as cleanup_error:
                 guide_case["cleanup_error"] = str(cleanup_error)
                 _save(workflow)
 
 
+@owned_execution("workflow")
 async def _execute_evaluation(workflow_id: str) -> None:
     workflow = _get("workflow", workflow_id)
-    if workflow is None:
+    if workflow is None or workflow.get("status") in _TERMINAL_EVALUATE_STATUSES:
         return
     current_task = asyncio.current_task()
     registered_task = _workflow_tasks.get(workflow_id)
@@ -1873,9 +1880,10 @@ async def _execute_evaluation(workflow_id: str) -> None:
                     and ready_case is not None
                 ):
                     try:
-                        await deployment_run_manager.worker_for_run(deployment.id).clean_case(
-                            deployment.id, ready_case.id
-                        )
+                        with _deployment_cleanup_guard(ready_case.execution_id):
+                            await deployment_run_manager.worker_for_run(deployment.id).clean_case(
+                                deployment.id, ready_case.id
+                            )
                     except Exception as cleanup_error:
                         case["cleanup_error"] = str(cleanup_error)
                         _save(workflow)
@@ -2081,6 +2089,25 @@ def _delete(kind: str, run_id: str) -> None:
         _workflow_records.delete(record_id)
         return
     raise ValueError("evaluate record kind is invalid")
+
+
+@contextlib.contextmanager
+def _deployment_cleanup_guard(execution_id: str):
+    with evaluation_lock("deployment", execution_id) as acquired:
+        if not acquired:
+            raise ValueError("Deployment still has an active benchmark; cleanup deferred")
+        _ensure_benchmark_consumers_finished(execution_id)
+        yield
+
+
+def _ensure_benchmark_consumers_finished(execution_id: str) -> None:
+    for record in _records("benchmark"):
+        if record.get("deployment_execution_id") != execution_id:
+            continue
+        with evaluation_lock("benchmark", record["id"]) as idle:
+            current = _get("benchmark", record["id"])
+            if not idle or (current and current.get("status") not in _TERMINAL_EVALUATE_STATUSES):
+                raise ValueError(f"Deployment is still used by benchmark {record['id']}; cleanup deferred")
 
 
 def _deployment_usage_reason(execution_id: str) -> str | None:
@@ -3064,9 +3091,24 @@ async def _cluster_gateway_endpoint(cluster_id: str | None) -> str | None:
     return base.removesuffix("/v1") if base else None
 
 
+@owned_execution("benchmark")
 async def _execute(run_id: str) -> None:
     run = _get("benchmark", run_id)
-    if run is None:
+    if run is None or run.get("status") in _TERMINAL_EVALUATE_STATUSES:
+        return
+    # Shared consumers exclude automatic deployment deletion, including the
+    # interval between checking durable records and deleting cluster resources.
+    with evaluation_lock("deployment", run.get("deployment_execution_id"), shared=True) as acquired:
+        if not acquired:
+            run.update(status="failed", error="Deployment cleanup is in progress", finished_at=_now())
+            _save(run)
+            return
+        await _execute_owned(run_id)
+
+
+async def _execute_owned(run_id: str) -> None:
+    run = _get("benchmark", run_id)
+    if run is None or run.get("status") in _TERMINAL_EVALUATE_STATUSES:
         return
     run.update(status="running", started_at=_now(), phase="preparing", phase_started_at=_now())
     _save(run)
@@ -3803,9 +3845,10 @@ async def _execute(run_id: str) -> None:
         _tasks.pop(run_id, None)
 
 
+@owned_execution("workflow")
 async def _execute_workflow(workflow_id: str) -> None:
     workflow = _get("workflow", workflow_id)
-    if workflow is None:
+    if workflow is None or workflow.get("status") in _TERMINAL_EVALUATE_STATUSES:
         return
     _active_workflows[workflow_id] = workflow
     try:
@@ -4122,6 +4165,7 @@ async def create_evaluation(request: EvaluationCreateRequest, http_request: Requ
     response_model=EvaluationWorkflowResponse,
     response_model_exclude_unset=True,
 )
+@owned_control("workflow")
 async def retry_workflow_run(workflow_id: str) -> dict:
     workflow = _get("workflow", workflow_id)
     if workflow is None:
@@ -4255,6 +4299,7 @@ def _cancel_targets(workflow: dict, case_id: str | None) -> list[dict]:
         targets.extend(linked)
 
 
+@owned_control("workflow")
 async def _cancel_evaluation(workflow: dict, case_id: str | None = None) -> dict:
     async with _cancellation_locks.setdefault(workflow["id"], asyncio.Lock()):
         workflow = _active_workflows.get(workflow["id"]) or _get("workflow", workflow["id"]) or workflow
@@ -4384,6 +4429,7 @@ async def cancel_workflow_run(workflow_id: str) -> dict:
     operation_id="delete_evaluation_workflow",
     responses=evaluation_problem_responses(401, 403, 404, 409, 422),
 )
+@owned_control("workflow")
 async def delete_workflow_run(workflow_id: str, request: Request = None) -> None:
     workflow = _get("workflow", workflow_id)
     if workflow is None:
@@ -4433,46 +4479,66 @@ async def reconcile_evaluate_runs() -> None:
     """Reconcile persisted work whose in-memory task was lost on restart."""
     active_statuses = {"queued", "running", "cancelling", "deploying", "benchmarking"}
     benchmark_records = _records("benchmark")
+    parents = {
+        case.get("evaluation_run_id"): workflow["id"]
+        for workflow in _records("workflow")
+        for case in workflow.get("cases") or [workflow]
+        if case.get("evaluation_run_id")
+    }
     for record in benchmark_records:
-        if record.get("status") not in active_statuses:
-            continue
-        record.update(
-            status="cancelled" if record.get("status") == "cancelling" else "failed",
-            error="evaluation process was interrupted by a service restart",
-            process_logs_incomplete=True,
-            finished_at=_now(),
-        )
-        _save(record)
-    for workflow in _records("workflow"):
-        if workflow.get("status") == "cancelling":
-            # The persisted cancellation error remains visible and retryable.
-            with contextlib.suppress(HTTPException):
-                await _cancel_evaluation(workflow, workflow.get("cancellation_scope"))
-            continue
-        if "cases" in workflow:
-            if workflow.get("status") in {"queued", "running", "deploying", "benchmarking"}:
-                _workflow_tasks[workflow["id"]] = asyncio.create_task(_execute_evaluation(workflow["id"]))
-            continue
-        if workflow.get("status") not in {"deploying", "benchmarking"}:
-            continue
-        deployment = _store.get_run(workflow["deployment_run_id"])
-        if deployment is None:
-            workflow.update(
-                status="failed", error="deployment run was unavailable after service restart", finished_at=_now()
-            )
-            _save(workflow)
-            continue
-        if deployment.status.value == "queued":
-            deployment_run_manager.resume_run(deployment.id)
-        elif deployment.status.value == "running" and not any(case.execution_id for case in deployment.cases):
-            workflow.update(
-                status="failed",
-                error="deployment was interrupted before creating an execution",
+        parent_id = record.get("evaluation_workflow_id") or parents.get(record["id"])
+        with contextlib.ExitStack() as locks:
+            if parent_id and not locks.enter_context(evaluation_lock("workflow", parent_id)):
+                continue
+            if not locks.enter_context(evaluation_lock("benchmark", record["id"])):
+                continue
+            # The listing may predate another executor finishing. Re-read under ownership.
+            record = _get("benchmark", record["id"])
+            if record is None or record.get("status") not in active_statuses:
+                continue
+            record.update(
+                status="cancelled" if record.get("status") == "cancelling" else "failed",
+                error="evaluation process was interrupted by a service restart",
+                process_logs_incomplete=True,
                 finished_at=_now(),
             )
-            _save(workflow)
-            continue
-        _workflow_tasks[workflow["id"]] = asyncio.create_task(_execute_workflow(workflow["id"]))
+            _save(record)
+    for workflow in _records("workflow"):
+        with evaluation_lock("workflow", workflow["id"]) as acquired:
+            if not acquired:
+                continue
+            workflow = _get("workflow", workflow["id"])
+            if workflow is None:
+                continue
+            if workflow.get("status") == "cancelling":
+                # The persisted cancellation error remains visible and retryable.
+                with contextlib.suppress(HTTPException):
+                    await _cancel_evaluation(workflow, workflow.get("cancellation_scope"))
+                continue
+            if "cases" in workflow:
+                if workflow.get("status") in {"queued", "running", "deploying", "benchmarking"}:
+                    _workflow_tasks[workflow["id"]] = asyncio.create_task(_execute_evaluation(workflow["id"]))
+                continue
+            if workflow.get("status") not in {"deploying", "benchmarking"}:
+                continue
+            deployment = _store.get_run(workflow["deployment_run_id"])
+            if deployment is None:
+                workflow.update(
+                    status="failed", error="deployment run was unavailable after service restart", finished_at=_now()
+                )
+                _save(workflow)
+                continue
+            if deployment.status.value == "queued":
+                deployment_run_manager.resume_run(deployment.id)
+            elif deployment.status.value == "running" and not any(case.execution_id for case in deployment.cases):
+                workflow.update(
+                    status="failed",
+                    error="deployment was interrupted before creating an execution",
+                    finished_at=_now(),
+                )
+                _save(workflow)
+                continue
+            _workflow_tasks[workflow["id"]] = asyncio.create_task(_execute_workflow(workflow["id"]))
 
 
 @router.get(
@@ -4550,6 +4616,7 @@ def _delete_benchmark_history(run_id: str) -> None:
     operation_id="delete_evaluate_run",
     responses=evaluation_problem_responses(401, 403, 404, 409, 422),
 )
+@owned_control("benchmark")
 async def delete_benchmark_run(run_id: str, request: Request = None) -> None:
     try:
         run = _get("benchmark", run_id)
@@ -4837,6 +4904,7 @@ async def get_workflow_run_details(workflow_id: str, request: Request = None) ->
     response_model=EvaluationCancelResponse,
     response_model_exclude_unset=True,
 )
+@owned_control("benchmark")
 async def cancel_run(run_id: str) -> dict:
     task = _tasks.get(run_id)
     try:

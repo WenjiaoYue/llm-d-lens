@@ -1736,3 +1736,23 @@ Render live or recorded deployment monitoring while preserving saved topology an
 - Boundaries: Composes existing FlowMap, historicalFlows and ResourceExplorer. Recorded resources use the complete case window; missing traffic remains missing. Parent owns navigation to the Resources section.
 - Examples: [src/components/OptimizationEvaluationDetails.jsx](../src/components/OptimizationEvaluationDetails.jsx)
 - Tests: [src/components/benchmark-results/BenchmarkLiveFlow.test.jsx](../src/components/benchmark-results/BenchmarkLiveFlow.test.jsx), [src/components/benchmark-results/historicalFlow.test.js](../src/components/benchmark-results/historicalFlow.test.js)
+
+## evaluation-process-ownership
+
+Exclude duplicate evaluation executors and cross-process control mutations using kernel-managed locks shared by backend instances.
+
+- Entry point: [llm_d_bench/evaluate/ownership.py](../llm_d_bench/evaluate/ownership.py)
+- Symbols: `evaluation_lock`, `owned_execution`, `owned_control`
+- Boundaries: Evaluation lifecycle only. All instances sharing records must share LENS_DATA_DIR on a filesystem with flock semantics and run the updated code. Locks span asynchronous cleanup, survive local nested controls, and are never unlinked. Shared deployment consumers exclude automatic cleanup; independent data directories are not coordinated.
+- Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
+- Tests: [llm_d_bench/evaluate/test_ownership.py](../llm_d_bench/evaluate/test_ownership.py)
+
+## evaluation-startup-recovery
+
+Recover interrupted evaluation records without interrupting tasks owned by another backend sharing the data directory.
+
+- Entry point: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
+- Symbols: `reconcile_evaluate_runs`
+- Boundaries: Startup hook re-reads records under workflow and benchmark locks. Live owners are skipped; orphaned attempts retain interruption evidence and eligible workflows are scheduled through the same owned execution entry points. Requires shared flock-capable LENS_DATA_DIR across participating updated backends.
+- Examples: [llm_d_bench/api/main.py](../llm_d_bench/api/main.py)
+- Tests: [llm_d_bench/evaluate/test_ownership.py](../llm_d_bench/evaluate/test_ownership.py), [llm_d_bench/evaluate/test_cancellation.py](../llm_d_bench/evaluate/test_cancellation.py), [llm_d_bench/evaluate/test_artifact_storage.py](../llm_d_bench/evaluate/test_artifact_storage.py)
