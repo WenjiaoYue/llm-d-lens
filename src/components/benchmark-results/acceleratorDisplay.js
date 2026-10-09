@@ -1,4 +1,4 @@
-import { profileForKey, profileForHardware, imageRepository, managedImageProfile } from '../../features/hardware/profiles.js';
+import { aicSystemForHardware, profileForKey, profileForHardware, imageRepository, managedImageProfile } from '../../features/hardware/profiles.js';
 // Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,4 +50,7 @@ export function utilizationLabel(value) {
 export const runtimeImageRepository = imageRepository;
 export function isDefaultRuntimeImage(image) { return Boolean(managedImageProfile(registeredProfiles, image)); }
 export function acceleratorVariantForHardware(hardware) { return profileForHardware(registeredProfiles, hardware)?.upstream_variant || null; }
+export function aicSystemNameForHardware(hardware) {
+  return aicSystemForHardware(registeredProfiles, hardware);
+}
 export function runtimeImageForHardware(hardware) { return profileForHardware(registeredProfiles, hardware)?.deployment?.runtime_image || null; }

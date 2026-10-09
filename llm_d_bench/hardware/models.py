@@ -307,6 +307,8 @@ class PlanningContribution:
     discovery: Mapping[str, Any] = field(default_factory=dict)
     memory_models: tuple[Mapping[str, Any], ...] = ()
     aic_system_patterns: tuple[str, ...] = ()
+    aic_system_models: tuple[Mapping[str, str], ...] = ()
+    model_label_keys: tuple[str, ...] = ()
     default_backend: str = "vllm"
     device_class_allow_pattern: str = ""
 
@@ -316,6 +318,8 @@ class PlanningContribution:
             discovery=dict(data.get("discovery") or {}),
             memory_models=tuple(data.get("memory_models") or ()),
             aic_system_patterns=_tuple_of_str(data.get("aic_system_patterns")),
+            aic_system_models=tuple(data.get("aic_system_models") or ()),
+            model_label_keys=_tuple_of_str(data.get("model_label_keys")),
             default_backend=str(data.get("default_backend") or "vllm"),
             device_class_allow_pattern=str(data.get("device_class_allow_pattern") or ""),
         )
@@ -325,6 +329,8 @@ class PlanningContribution:
             "discovery": dict(self.discovery),
             "memory_models": list(self.memory_models),
             "aic_system_patterns": list(self.aic_system_patterns),
+            "aic_system_models": list(self.aic_system_models),
+            "model_label_keys": list(self.model_label_keys),
             "default_backend": self.default_backend,
             "device_class_allow_pattern": self.device_class_allow_pattern,
         }

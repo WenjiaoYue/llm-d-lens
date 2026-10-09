@@ -220,6 +220,7 @@ class AcceleratorBucket(StrictModel):
 
     id: str
     gpu_count: int = Field(default=0, alias="gpuCount")
+    models: list[str] = Field(default_factory=list)
 
 
 class ClusterHardwareSummary(StrictModel):

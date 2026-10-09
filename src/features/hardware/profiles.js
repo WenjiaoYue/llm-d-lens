@@ -9,6 +9,23 @@ export function profileForHardware(profiles, hardware) {
     return matches.length === 1 ? matches[0] : null;
 }
 
+export function aicSystemForHardware(profiles, hardware) {
+    const profile = profileForHardware(profiles, hardware);
+    if (!profile) return null;
+    const accelerators = hardware?.accelerators || [];
+    const identities = accelerators.flatMap(item => (
+        typeof item === 'string' ? [item] : [item?.model, item?.name, item?.id, ...(item?.models || [])]
+    )).filter(Boolean);
+    for (const mapping of profile.planning?.aic_system_models || []) {
+        try {
+            if (identities.some(identity => new RegExp(mapping.pattern, 'i').test(String(identity)))) return mapping.system;
+        } catch {
+            // Invalid plugin patterns are ignored like other optional profile matchers.
+        }
+    }
+    return null;
+}
+
 export function profileForResource(profiles, resource) {
     return profiles.find(profile => !(profile.monitor_resource_suffixes || []).some(suffix => resource.endsWith(suffix))
         && (profile.resource_prefixes || []).some(prefix => resource.startsWith(prefix))) || null;

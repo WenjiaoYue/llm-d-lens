@@ -31,7 +31,7 @@ import { ConfigurationValidationContext, focusConfigurationError } from './evalu
 import { validateConfigurationInputs, configurationServerErrors } from '../features/evaluation/configurationValidation';
 import { TopologyPreview, YamlPreview } from './evaluation/ConfigurationPreview';
 import { StorageVolumeSelect } from './common/StorageVolumeSelect';
-import { acceleratorVariantForHardware, DEFAULT_RUNTIME_IMAGES, isDefaultRuntimeImage } from './benchmark-results/acceleratorDisplay';
+import { acceleratorVariantForHardware, aicSystemNameForHardware, DEFAULT_RUNTIME_IMAGES, isDefaultRuntimeImage } from './benchmark-results/acceleratorDisplay';
 
 const PREFILL_KEY = 'prism_evaluate_prefill_workloads';
 const ARTIFACT_KEY = 'prism_evaluate_configuration_artifact';
@@ -250,7 +250,6 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
     const [uploadError, setUploadError] = useState('');
 
     // AIC state.
-    const [aicSystem] = useState('b60');
     const [aicBackend] = useState('vllm');
     const [aicLoading, setAicLoading] = useState(false);
     const [aicError, setAicError] = useState('');
@@ -1076,8 +1075,13 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
 
     const runAic = async (pdOnly = false) => {
         const availableGpus = budget;
+        const aicSystem = aicSystemNameForHardware(clusterHardware);
         if (!connectedCluster || clusterHardwareLoading) {
             setAicError('Wait for the selected cluster capacity check to finish.');
+            return;
+        }
+        if (!aicSystem) {
+            setAicError('AIConfigurator has no system mapping for the selected cluster hardware. Add it to the hardware profile.');
             return;
         }
         if (availableGpus < 1) {
@@ -1089,7 +1093,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         setAicCandidates(null);
         const workload = { model: model.trim(), isl: 1024, osl: 256 };
         const searchConfig = {
-            aicSystemName: aicSystem.trim(),
+            aicSystemName: aicSystem,
             aicBackendName: aicBackend,
             aicDatabaseMode: 'SILICON',
             totalGpus: availableGpus,
@@ -1118,7 +1122,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         const isPd = candidate.topologyMode === 'disagg' || Boolean(candidate.prefillTp || candidate.prefillReplicas);
         const guideId = isPd ? 'pd-disaggregation' : 'optimized-baseline';
         const guide = guides.find((item) => item.id === guideId && item.deploymentCapability);
-        const preferredAccelerator = hardwareProfiles.find(profile => (profile.planning?.aic_system_patterns || []).some(pattern => new RegExp(pattern, 'i').test(aicSystem)))?.upstream_variant || selection.accelerator;
+        const preferredAccelerator = acceleratorVariantForHardware(clusterHardware) || selection.accelerator;
         const accelerator = guide?.accelerators?.find((item) => item.id === preferredAccelerator) || guide?.accelerators?.[0];
         const modelServer = accelerator?.modelServers?.find((item) => item.id === aicBackend) || accelerator?.modelServers?.[0];
         if (!guide || !accelerator || !modelServer) {

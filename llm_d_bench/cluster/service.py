@@ -21,6 +21,7 @@ import yaml
 from llm_d_bench.cluster import registry, sessions
 from llm_d_bench.cluster.errors import ClusterOverviewError
 from llm_d_bench.cluster.settings import cluster_settings
+from llm_d_bench.hardware.registry import get_profile
 from llm_d_bench.monitoring.cluster_stack.discovery import discover_cluster_stack
 from llm_d_bench.monitoring.cluster_stack.errors import ClusterStackError
 from llm_d_bench.utils.kubernetes import PortForwardError, ensure_port_forward, run_kubectl, scoped_runner
@@ -1507,6 +1508,16 @@ def _node_summary(
     gpu_by_profile = _gpu_counts_by_profile(capacity)
     for profile_id, count in (resource_slice_profile_counts or {}).get(name, {}).items():
         gpu_by_profile[profile_id] = max(gpu_by_profile.get(profile_id, 0), count)
+    gpu_models_by_profile = {
+        profile_id: sorted(
+            {
+                str(labels[key]).strip()
+                for key in get_profile(profile_id).planning.model_label_keys
+                if labels.get(key)
+            }
+        )
+        for profile_id in gpu_by_profile
+    }
     return {
         "name": name,
         "role": role,
@@ -1524,6 +1535,7 @@ def _node_summary(
         "gpu": gpu_label or gpu_count > 0,
         "gpuCount": gpu_count,
         "gpuByProfile": gpu_by_profile,
+        "gpuModelsByProfile": gpu_models_by_profile,
         "cachedImages": sorted(
             {
                 name
@@ -1640,7 +1652,17 @@ def _hardware_summary(
         "gpuCount": gpu_count,
         "totalGpuCount": gpu_count,
         "accelerators": [
-            {"id": profile_id, "gpuCount": count}
+            {
+                "id": profile_id,
+                "gpuCount": count,
+                "models": sorted(
+                    {
+                        model
+                        for node in node_summaries
+                        for model in (node.get("gpuModelsByProfile") or {}).get(profile_id, [])
+                    }
+                ),
+            }
             for profile_id, count in sorted((gpu_by_profile or {}).items())
         ],
         "deviceMetrics": list(device_metrics or []),

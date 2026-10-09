@@ -118,6 +118,13 @@
   "evaluation_profile": "intel-xpu",
   "planning": {
     "aic_system_patterns": ["bmg|max_|xpu|b60|pvc"],
+    "aic_system_models": [
+      { "pattern": "\\bb60\\b", "system": "b60" }
+    ],
+    "model_label_keys": [
+      "intel.feature.node.kubernetes.io/gpu.product",
+      "intel.feature.node.kubernetes.io/gpu.family"
+    ],
     "default_backend": "vllm",
     "device_class_allow_pattern": "^gpu\\.intel\\.com$",
     "discovery": {

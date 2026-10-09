@@ -795,11 +795,32 @@ def test_component_status_exposes_per_profile_device_plugins():
 
 
 def test_hardware_summary_exposes_per_vendor_buckets():
-    nodes = [{"name": "node-a", "cpu": 16, "memoryBytes": 64 * 1024**3, "gpuCount": 4, "gpu": True}]
+    nodes = [{
+        "name": "node-a", "cpu": 16, "memoryBytes": 64 * 1024**3, "gpuCount": 4, "gpu": True,
+        "gpuModelsByProfile": {"intel-xpu": ["Intel Data Center GPU Flex B60"]},
+    }]
     hardware = service._hardware_summary(nodes, gpu_by_profile={"intel-xpu": 4})
     assert hardware["gpuCount"] == 4
     assert hardware["totalGpuCount"] == 4
-    assert hardware["accelerators"] == [{"id": "intel-xpu", "gpuCount": 4}]
+    assert hardware["accelerators"] == [
+        {"id": "intel-xpu", "gpuCount": 4, "models": ["Intel Data Center GPU Flex B60"]}
+    ]
+
+
+def test_node_summary_reads_accelerator_models_from_profile_labels():
+    node = {
+        "metadata": {
+            "name": "node-a",
+            "labels": {
+                "feature.node.kubernetes.io/pci-10de.present": "true",
+                "nvidia.com/gpu.product": "NVIDIA-A100-SXM4-80GB",
+            },
+        },
+        "spec": {},
+        "status": {"capacity": {"nvidia.com/gpu": "8"}, "conditions": []},
+    }
+    summary = service._node_summary(node)
+    assert summary["gpuModelsByProfile"] == {"nvidia": ["NVIDIA-A100-SXM4-80GB"]}
 
 
 def test_node_summary_counts_extended_resources_per_profile_and_excludes_monitor_marker():

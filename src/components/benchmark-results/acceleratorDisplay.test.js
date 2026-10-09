@@ -12,7 +12,7 @@ setHardwareProfiles(['intel_xpu', 'nvidia'].map(name => JSON.parse(fs.readFileSy
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { acceleratorValue, acceleratorDisplayLabel, utilizationLabel, acceleratorVariantForHardware, runtimeImageForHardware, DEFAULT_RUNTIME_IMAGES } from './acceleratorDisplay.js';
+import { acceleratorValue, acceleratorDisplayLabel, utilizationLabel, acceleratorVariantForHardware, aicSystemNameForHardware, runtimeImageForHardware, DEFAULT_RUNTIME_IMAGES } from './acceleratorDisplay.js';
 
 test('reads the accelerator profile from common run shapes', () => {
   assert.equal(acceleratorValue({ metrics: { accelerator_profile: 'intel-xpu' } }), 'intel-xpu');
@@ -34,8 +34,8 @@ test('utilization label falls back to the neutral wording', () => {
 });
 
 test('picks the per-vendor runtime image from the cluster hardware', () => {
-  const gpu = { accelerators: [{ id: 'nvidia' }] };
-  const xpu = { accelerators: [{ id: 'intel' }] };
+  const gpu = { accelerators: [{ id: 'nvidia', models: ['NVIDIA A100 80GB PCIe'] }] };
+  const xpu = { accelerators: [{ id: 'intel', models: ['Intel Data Center GPU Flex B60'] }] };
   assert.equal(acceleratorVariantForHardware(gpu), 'gpu');
   assert.equal(acceleratorVariantForHardware(xpu), 'xpu');
   assert.equal(runtimeImageForHardware(gpu), DEFAULT_RUNTIME_IMAGES.gpu);
@@ -44,4 +44,7 @@ test('picks the per-vendor runtime image from the cluster hardware', () => {
   assert.notEqual(runtimeImageForHardware(gpu), DEFAULT_RUNTIME_IMAGES.xpu);
   assert.equal(runtimeImageForHardware({ accelerators: [] }), null);
   assert.equal(runtimeImageForHardware(null), null);
+  assert.equal(aicSystemNameForHardware(gpu), 'a100_sxm');
+  assert.equal(aicSystemNameForHardware(xpu), 'b60');
+  assert.equal(aicSystemNameForHardware({ accelerators: [{ id: 'nvidia', model: 'Unknown GPU' }] }), null);
 });

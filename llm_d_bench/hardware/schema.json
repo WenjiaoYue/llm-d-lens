@@ -188,6 +188,19 @@
       "additionalProperties": false,
       "properties": {
         "aic_system_patterns": { "$ref": "#/$defs/string_list" },
+        "aic_system_models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pattern", "system"],
+            "properties": {
+              "pattern": { "type": "string" },
+              "system": { "type": "string" }
+            }
+          }
+        },
+        "model_label_keys": { "$ref": "#/$defs/string_list" },
         "default_backend": { "type": "string" },
         "device_class_allow_pattern": { "type": "string" },
         "discovery": { "type": "object" },
