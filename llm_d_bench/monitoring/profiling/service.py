@@ -15,7 +15,7 @@ import math
 import re
 import statistics
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -116,6 +116,23 @@ async def _query_range(
     if payload.get("status") != "success":
         return []
     return (payload.get("data") or {}).get("result") or []
+
+
+async def _prometheus_clock_offset(client: httpx.AsyncClient) -> float | None:
+    """Estimate the Prometheus clock offset using the request midpoint."""
+    before = time.time()
+    try:
+        response = await client.get("/api/v1/query", params={"query": "time()"})
+        response.raise_for_status()
+        after = time.time()
+        payload = response.json()
+        if payload.get("status") != "success" or payload["data"]["resultType"] != "scalar":
+            return None
+        offset = float(payload["data"]["result"][1]) - (before + after) / 2
+        return offset if math.isfinite(offset) else None
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+        logger.warning("Unable to measure Prometheus clock offset", exc_info=True)
+        return None
 
 
 async def query_prometheus(cluster_id: str | None, promql: str) -> list[dict]:
@@ -568,7 +585,7 @@ async def wait_for_deployment_metrics(
     cluster_id: str | None = None,
     timeout_seconds: float = 20.0,
 ) -> bool:
-    """Wait for a healthy deployment scrape; zero timeout performs one query.
+    """Wait for all serving pods and any EPP to be scraped; zero timeout checks once.
 
     Discovery/tunnel setup precedes the polling budget. Callers needing a hard
     end-to-end deadline must also bound this coroutine with asyncio.timeout.
@@ -578,13 +595,31 @@ async def wait_for_deployment_metrics(
     if local_port is None:
         return False
     deadline = time.monotonic() + timeout_seconds
-    async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{local_port}", timeout=5.0) as client:
+    async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{local_port}", timeout=5.0, trust_env=False) as client:
         while True:
-            if _scalar(await _query(client, f'sum(up{{namespace="{namespace}"}} == 1)')):
+            components = await _discover_components(namespace, cluster_id)
+            serving = set(components.get("prefill", []) + components.get("decode", []))
+            # A healthy exporter or EPP alone does not establish model-server readiness.
+            # Two gauge samples also establish that rate queries can span scrapes;
+            # request counters can be absent until the first request completes.
+            up, samples = await asyncio.gather(
+                _query(client, f'up{{namespace="{namespace}"}}'),
+                _query(client, f'count_over_time(vllm:num_requests_running{{namespace="{namespace}"}}[30s])'),
+            )
+            healthy = {entry.get("metric", {}).get("pod") for entry in up if _scalar([entry]) == 1}
+            measured = {entry.get("metric", {}).get("pod") for entry in samples
+                        if (_scalar([entry]) or 0) >= 2}
+            ready = bool(serving) and serving <= healthy & measured
+            if ready and components.get("epp"):
+                services = {entry.get("metric", {}).get("service") for entry in up
+                            if _scalar([entry]) == 1}
+                ready = all(service in services for service in components["epp"])
+            if ready:
                 return True
             if time.monotonic() >= deadline:
                 return False
             await asyncio.sleep(min(2.5, max(0.0, deadline - time.monotonic())))
+
 
 
 def _hardware_profiles() -> list:
@@ -883,7 +918,20 @@ async def collect_benchmark_observability(
     # metric leaves the key absent, so the panel hides it.
     device_total_queries = _device_queries(profiles, namespace)
     device_pod_queries = _device_queries(profiles, namespace, by="pod")
-    async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{local_port}", timeout=10.0) as client:
+    async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{local_port}", timeout=10.0, trust_env=False) as client:
+        clock_offset = await _prometheus_clock_offset(client)
+        offset = clock_offset if clock_offset is not None else 0.0
+        query_start = (started + timedelta(seconds=offset)).isoformat()
+        query_end = (finished + timedelta(seconds=offset)).isoformat()
+
+        async def query_window(query: str) -> list[dict]:
+            result = await _query_range(client, query, query_start, query_end, step_seconds)
+            # Keep saved charts and stage slicing on the backend's original timeline.
+            return [
+                {**item, "values": [[float(ts) - offset, value] for ts, value in item.get("values", [])]}
+                for item in result
+            ]
+
         (
             results,
             per_pod_results,
@@ -894,25 +942,25 @@ async def collect_benchmark_observability(
                 device_total_results,
                 device_pod_results,
         ) = await asyncio.gather(
-            asyncio.gather(*(_query_range(client, query, start, end, step_seconds) for query in queries.values())),
+            asyncio.gather(*(query_window(query) for query in queries.values())),
             asyncio.gather(
-                *(_query_range(client, query, start, end, step_seconds) for query in per_pod_queries.values())
+                *(query_window(query) for query in per_pod_queries.values())
             ),
             asyncio.gather(
-                *(_query_range(client, query, start, end, step_seconds) for query in router_queries.values())
+                *(query_window(query) for query in router_queries.values())
             ),
             asyncio.gather(
-                *(_query_range(client, query, start, end, step_seconds) for query in per_endpoint_queries.values())
+                *(query_window(query) for query in per_endpoint_queries.values())
             ),
-            _query_range(client, f"vllm:cache_config_info{matcher}", start, end, step_seconds),
-            asyncio.gather(*(_query_range(client, query, start, end, step_seconds) for query in dra_queries.values()))
+            query_window(f"vllm:cache_config_info{matcher}"),
+            asyncio.gather(*(query_window(query) for query in dra_queries.values()))
             if xpu_allocations
             else asyncio.sleep(0, result=[]),
             asyncio.gather(
-                *(_query_range(client, query, start, end, step_seconds) for query in device_total_queries.values())
+                *(query_window(query) for query in device_total_queries.values())
             ),
             asyncio.gather(
-                *(_query_range(client, query, start, end, step_seconds) for query in device_pod_queries.values())
+                *(query_window(query) for query in device_pod_queries.values())
             ),
         )
 
@@ -1305,8 +1353,20 @@ async def collect_benchmark_observability(
         }
         for key, (value, unit, source) in evidence_specs.items()
     }
+    flow_available = any(
+        key in source
+        for source in (summary, router_summary, *per_pod)
+        for key in ("request_rate_rps", "input_token_rate_tps", "output_token_rate_tps")
+    )
     return {
         "status": "available" if series else "empty",
+        "clock_alignment": {
+            "status": "measured" if clock_offset is not None else "unavailable",
+            "offset_seconds": clock_offset,
+            "query_window": {"start": query_start, "end": query_end},
+        },
+        "flow_status": "available" if flow_available else "unavailable",
+        "flow_reason": None if flow_available else "No inference request or token samples were recorded during the benchmark window. Resource samples do not establish serving traffic monitoring.",
         "reason": None if series else "Prometheus returned no samples for the benchmark window",
         "source": "prometheus",
         "guide_type": getattr(_context, "guide", None),

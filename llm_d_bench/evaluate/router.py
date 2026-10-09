@@ -109,7 +109,7 @@ _active_workflows: dict[str, dict] = {}
 #: Run-only model access tokens (never persisted) keyed by benchmark run id.
 _run_api_keys: dict[str, str] = {}
 _benchmark_install_lock = asyncio.Lock()
-_MONITORING_PREPARE_TIMEOUT = 30.0
+_MONITORING_PREPARE_TIMEOUT = 600.0
 _OBSERVABILITY_COLLECT_TIMEOUT = 120.0
 _BENCHMARK_REPOSITORY = "https://github.com/llm-d/llm-d-benchmark.git"
 _BENCHMARK_REVISION = stack().llm_d_benchmark
@@ -1432,13 +1432,13 @@ def _benchmark_response(run: dict) -> dict:
 
 
 async def _prepare_benchmark_monitoring(run: dict) -> None:
-    """Reuse existing scrapes first; setup is optional and bounded for every entry point."""
+    """Require serving scrapes before starting traffic, including borrowed endpoints."""
+    timeout = float(run.get("wait_timeout_seconds") or _MONITORING_PREPARE_TIMEOUT)
     run["monitoring"] = {"status": "preparing", "enabled": False}
     _save(run)
     try:
-        async with asyncio.timeout(_MONITORING_PREPARE_TIMEOUT):
+        async with asyncio.timeout(timeout):
             execution_id = run["deployment_execution_id"]
-            # A healthy target needs no monitor/RBAC mutation, regardless of owner.
             if await wait_for_deployment_metrics(execution_id, timeout_seconds=0):
                 run["monitoring"].update(
                     status="ready", enabled=True, source="existing", message="Using existing Prometheus targets"
@@ -1446,29 +1446,36 @@ async def _prepare_benchmark_monitoring(run: dict) -> None:
             else:
                 status = await deployment_monitoring.enable(execution_id)
                 run["monitoring"].update(
-                    enabled=True,
                     resources={
                         "servicemonitors": status.get("servicemonitors", []),
                         "podmonitors": status.get("podmonitors", []),
                     },
+                    message="Waiting for Prometheus to load deployment targets and collect serving samples",
                 )
-                ready = await wait_for_deployment_metrics(execution_id)
-                run["monitoring"].update(
-                    status="ready" if ready else "warming",
-                    message="Prometheus target is ready"
-                    if ready
-                    else "Prometheus targets are warming; benchmark will proceed",
-                )
-    except TimeoutError:
-        run["monitoring"].update(
-            status="unavailable",
-            message=(
-                f"Monitoring preparation exceeded {_MONITORING_PREPARE_TIMEOUT:g}s; benchmark will proceed and "
-                "query recorded metrics afterwards"
-            ),
+                _save(run)
+                pending = asyncio.create_task(wait_for_deployment_metrics(execution_id, timeout_seconds=timeout))
+                try:
+                    while not pending.done():
+                        run["heartbeat_at"] = _now()
+                        _save(run)
+                        await asyncio.wait({pending}, timeout=5.0)
+                    if not await pending:
+                        raise TimeoutError
+                finally:
+                    pending.cancel()
+                    await asyncio.gather(pending, return_exceptions=True)
+                run["monitoring"].update(status="ready", enabled=True, message="Serving metrics are ready")
+    except TimeoutError as error:
+        message = (
+            f"Monitoring preparation exceeded {timeout:g}s. Benchmark traffic was not started. "
+            "Check Prometheus configuration reloads, serving targets and Monitor selectors, then retry."
         )
+        run["monitoring"].update(status="unavailable", message=message)
+        raise RuntimeError(message) from error
     except Exception as error:
-        run["monitoring"].update(status="unavailable", message=str(error))
+        message = f"Monitoring preparation failed; benchmark traffic was not started: {error}"
+        run["monitoring"].update(status="unavailable", message=message)
+        raise RuntimeError(message) from error
     finally:
         _save(run)
 
@@ -3731,9 +3738,10 @@ async def _execute(run_id: str) -> None:
                 )
                 run["monitoring"] = {
                     **run.get("monitoring", {}),
-                    "status": observability["status"],
+                    "preparation": dict(run.get("monitoring", {})),
+                    "status": "partial" if observability["status"] == "available" and observability.get("flow_status") == "unavailable" else observability["status"],
                     "window": observability["window"],
-                    "message": observability.get("reason"),
+                    "message": observability.get("flow_reason") or observability.get("reason"),
                 }
             except Exception as monitoring_error:
                 run["monitoring"] = {
@@ -3841,8 +3849,8 @@ async def _execute_workflow(workflow_id: str) -> None:
         "cluster's shared Gateway using its published name and api_key, the same path real clients use -- "
         "404 if missing, 409 if no member is currently healthy/authorized). "
         "Requires a ready execution and its active cluster session (404 if missing; 409 if not ready or the session "
-        "is invalid). Reuses healthy Prometheus targets, otherwise attempts monitor/RBAC setup with a 30-second total "
-        "preparation deadline; missing monitoring does not fail the benchmark. Reads existing KV instrumentation "
+        "is invalid). Requires healthy serving scrapes before traffic, reusing existing targets or enabling monitors. "
+        "Preparation uses wait_timeout_seconds (600 seconds when unset); failure stops the run before traffic. Reads existing KV instrumentation "
         "when supported; never installs probes or redeploys the model. Persists deployment facts and completion-time "
         "resources without taking lifecycle ownership of an existing deployment. Returns the queued run with HTTP 202."
     ),

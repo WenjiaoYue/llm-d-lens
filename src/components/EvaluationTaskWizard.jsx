@@ -1,10 +1,12 @@
+import { usePolling } from '../hooks/usePolling.js';
+import { createLatestResourceRequest } from '../utils/resourceLoader.js';
 import { useHardwareProfiles } from '../hooks/useHardwareProfiles.js';
 import { resolveEvaluationTarget } from '../features/evaluation/client';
 import { editedEvaluationConfiguration } from '../features/evaluation/configuration';
 import OptimizationSelectionSummary from './evaluation/OptimizationSelectionSummary.jsx';
 import { selectedOptimizationPlan } from '../features/evaluation/experimentDesign.js';
 import { confirmDelete } from "./ui/confirmDelete";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     AlertTriangle, ArrowLeft, Boxes, Check, ChevronDown, ChevronLeft,
     ChevronRight, Code2, Cpu, Ellipsis, ExternalLink, GitCompareArrows, Layers3, Pencil, Play, Plus, RefreshCw, Server, Settings2, SlidersHorizontal, Trash2,
@@ -171,6 +173,44 @@ export default function EvaluationTaskWizard({ onNavigate }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
 
+    const [hardwareRequest] = useState(createLatestResourceRequest);
+    const refreshClusterHardware = useCallback(async ({ quiet = false } = {}) => {
+        if (!selectedClusterId) return null;
+        if (!quiet) setClusterHardwareLoading(true);
+        let hardware = null;
+        let failure;
+        await hardwareRequest.run(() => loadClusterOverview(selectedClusterId), {
+            onSuccess: (overview) => {
+                hardware = overview?.kubernetes?.hardware || null;
+                setClusterHardware(hardware);
+                const workers = (overview?.kubernetes?.nodes || []).filter((node) => node.ready && !node.schedulingDisabled);
+                const sharedImages = workers.length
+                    ? [...workers.slice(1).reduce(
+                        (images, node) => new Set([...images].filter((image) => (node.cachedImages || []).includes(image))),
+                        new Set(workers[0].cachedImages || []),
+                    )].sort()
+                    : [];
+                setCachedRuntimeImages(sharedImages);
+            },
+            onError: (error) => { failure = error; },
+            onSettled: () => setClusterHardwareLoading(false),
+        }, { skipIfPending: quiet });
+        if (failure) throw failure;
+        return hardware;
+    }, [selectedClusterId, hardwareRequest]);
+
+    useEffect(() => {
+        setClusterHardware(null);
+        setCachedRuntimeImages([]);
+        setClusterHardwareLoading(Boolean(selectedClusterId));
+        refreshClusterHardware().catch(() => null);
+        return () => hardwareRequest.cancel();
+    }, [selectedClusterId, refreshClusterHardware, hardwareRequest]);
+
+    usePolling(() => refreshClusterHardware({ quiet: true }).catch(() => null), {
+        enabled: Boolean(selectedClusterId),
+    });
+
     // A benchmark-only user can never switch to the deploy-a-configuration flow.
     useEffect(() => {
         if (benchmarkOnly && targetMode !== "existing") setTargetMode("existing");
@@ -285,24 +325,6 @@ export default function EvaluationTaskWizard({ onNavigate }) {
             .catch((nextError) => active && setError(nextError.message || "Unable to activate cluster"))
             .finally(() => active && setClusterLoading(false));
 
-        // Fill hardware, shared cached images and the runtime-image default in the
-        // background; a slow or failed overview must not block the cluster field.
-        setClusterHardwareLoading(true);
-        loadClusterOverview(selectedClusterId)
-            .then((overview) => {
-                if (!active) return;
-                setClusterHardware(overview?.kubernetes?.hardware || null);
-                const workers = (overview?.kubernetes?.nodes || []).filter((node) => node.ready && !node.schedulingDisabled);
-                const sharedImages = workers.length
-                    ? [...workers.slice(1).reduce(
-                        (images, node) => new Set([...images].filter((image) => (node.cachedImages || []).includes(image))),
-                        new Set(workers[0].cachedImages || []),
-                    )].sort()
-                    : [];
-                setCachedRuntimeImages(sharedImages);
-            })
-            .catch(() => active && setClusterHardware(null))
-            .finally(() => active && setClusterHardwareLoading(false));
         return () => { active = false; };
     }, [selectedClusterId]);
 
@@ -371,7 +393,7 @@ export default function EvaluationTaskWizard({ onNavigate }) {
         : cachedModelsLoading ? { state: 'loading' }
         : modelCacheMismatch ? { state: 'model-mismatch', message: `${trimmedSharedModel} was not found in this Model Cache storage.` }
         : { state: 'ready' };
-    const sharedContext = { cluster: clusterLoading ? {} : cluster, clusterHardware, cachedRuntimeImages, model: sharedModel, modelSource, modelPath: modelSource === 'auto-cache' ? storageVolumes.find((item) => item.id === storageVolumeId)?.localDisk?.hostPath || '' : modelPath, storageVolumeId, modelServer: sharedRuntime, deploymentName, imageMode, image: runtimeImage, buildSourceUrl, storageVolume: storageVolumes.find((item) => item.id === storageVolumeId), cacheValidation, replicas: returningIntent?.workloads?.[0]?.replicas, tensorParallelSize: returningIntent?.workloads?.[0]?.tensor_parallel_size };
+    const sharedContext = { cluster: clusterLoading ? {} : cluster, clusterHardware, refreshClusterHardware, cachedRuntimeImages, model: sharedModel, modelSource, modelPath: modelSource === 'auto-cache' ? storageVolumes.find((item) => item.id === storageVolumeId)?.localDisk?.hostPath || '' : modelPath, storageVolumeId, modelServer: sharedRuntime, deploymentName, imageMode, image: runtimeImage, buildSourceUrl, storageVolume: storageVolumes.find((item) => item.id === storageVolumeId), cacheValidation, replicas: returningIntent?.workloads?.[0]?.replicas, tensorParallelSize: returningIntent?.workloads?.[0]?.tensor_parallel_size };
     const compatibleSavedArtifacts = artifacts.filter((item) => matchesEvaluationSetup(item, sharedContext));
     const modelOptions = [...new Set([...MODELS.map((item) => item.repository), ...cachedModelIds])].filter(Boolean).sort();
     const recommendedBenchmark = benchmarkFor(provider);
@@ -455,6 +477,7 @@ export default function EvaluationTaskWizard({ onNavigate }) {
             clearEvaluationIntent();
             onNavigate("optimization-deployments");
         } catch (nextError) {
+            await refreshClusterHardware().catch(() => null);
             setError(nextError.message || "Deployment could not be created");
             window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
         } finally {
@@ -711,6 +734,7 @@ export default function EvaluationTaskWizard({ onNavigate }) {
             window.dispatchEvent(new CustomEvent("prism:evaluation-created", { detail: { workflow: createdWorkflow } }));
             onNavigate("optimization-evaluate");
         } catch (nextError) {
+            await refreshClusterHardware().catch(() => null);
             setError(nextError.message || "Evaluation could not be created");
             window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
         } finally {

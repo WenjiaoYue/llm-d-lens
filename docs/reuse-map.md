@@ -994,7 +994,7 @@ Shared periodic page-data refresh hook with quiet refreshes, unmount cleanup, hi
 - Entry point: [src/hooks/usePolling.js](../src/hooks/usePolling.js)
 - Symbols: `usePolling`
 - Boundaries: Use this for server-state freshness instead of a full page reload or an ad-hoc setInterval. Default interval is 5s; gate with enabled when there is nothing to watch (e.g. only while a download is in flight). Callbacks should refresh quietly — keep existing rows and reuse the page's load({ quiet: true }) instead of a full-page loading state — and must not disturb filters, form input, selected rows or open dialogs. Specialized loops with cancellation/streaming semantics (port-forward, logs, clocks) may keep their own timer but must still pause when hidden and clean up on unmount.
-- Examples: [src/components/Administration/UsersPage.jsx](../src/components/Administration/UsersPage.jsx), [src/components/ModelMarketPage.jsx](../src/components/ModelMarketPage.jsx), [src/components/AIProviders/AIProvidersPage.jsx](../src/components/AIProviders/AIProvidersPage.jsx), [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx), [src/components/EvaluationDashboard.jsx](../src/components/EvaluationDashboard.jsx), [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx)
+- Examples: [src/components/Administration/UsersPage.jsx](../src/components/Administration/UsersPage.jsx), [src/components/ModelMarketPage.jsx](../src/components/ModelMarketPage.jsx), [src/components/AIProviders/AIProvidersPage.jsx](../src/components/AIProviders/AIProvidersPage.jsx), [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx), [src/components/EvaluationDashboard.jsx](../src/components/EvaluationDashboard.jsx), [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx), [src/components/EvaluationTaskWizard.jsx](../src/components/EvaluationTaskWizard.jsx)
 - Tests: No dedicated unit test: this repo has no jsdom/testing-library setup, so the timer, visibility-pause and overlap guards are covered indirectly by the pages that use usePolling plus the type/build checks.
 
 ## agentic-deployment-workspace
@@ -1696,3 +1696,43 @@ Observe only the current benchmark invocation and preserve its Pod container exi
 - Boundaries: Evaluation supplies a fresh harness.podLabel per CLI invocation, shared by upstream rendering, cleanup and waits. Watch and polling use the same selector and reject mismatched events. Exit 137 alone does not establish OOM. Legacy callers without a label retain the upstream default.
 - Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
 - Tests: [llm_d_bench/evaluate/test_harness_watch.py](../llm_d_bench/evaluate/test_harness_watch.py), [llm_d_bench/evaluate/test_matrix.py](../llm_d_bench/evaluate/test_matrix.py)
+
+## evaluation-serving-monitoring-readiness
+
+Wait for discovered serving pods and EPP monitoring before benchmark traffic.
+
+- Entry point: [llm_d_bench/monitoring/profiling/service.py](../llm_d_bench/monitoring/profiling/service.py)
+- Symbols: `wait_for_deployment_metrics`
+- Boundaries: Scoped Prometheus reads; all serving pods need healthy targets and two inference gauge samples. Zero timeout checks once; cancellation propagates. Hardware telemetry remains profile-driven. Evaluate owns the total timeout and pre-traffic failure.
+- Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
+- Tests: [llm_d_bench/evaluate/test_benchmark_parity.py](../llm_d_bench/evaluate/test_benchmark_parity.py)
+
+## evaluation-recorded-flow
+
+Adapt saved case monitoring into recorded flow and explicit traffic availability.
+
+- Entry point: [src/components/benchmark-results/historicalFlow.js](../src/components/benchmark-results/historicalFlow.js)
+- Symbols: `historicalFlow`, `historicalFlows`
+- Boundaries: Never infer traffic from CPU, memory or device data. Preserve real zero values, case windows and serving roles; resource-only evidence carries an explanation.
+- Examples: [src/components/benchmark-results/BenchmarkLiveFlow.jsx](../src/components/benchmark-results/BenchmarkLiveFlow.jsx)
+- Tests: [src/components/benchmark-results/historicalFlow.test.js](../src/components/benchmark-results/historicalFlow.test.js), [src/components/benchmark-results/BenchmarkLiveFlow.test.jsx](../src/components/benchmark-results/BenchmarkLiveFlow.test.jsx)
+
+## evaluation-window-observability
+
+Collect persisted benchmark-window resource, serving and routing telemetry with separate traffic availability.
+
+- Entry point: [llm_d_bench/monitoring/profiling/service.py](../llm_d_bench/monitoring/profiling/service.py)
+- Symbols: `collect_benchmark_observability`
+- Boundaries: Hardware queries derive from profiles. Aggregate status reports any saved samples; flow_status and flow_reason explicitly distinguish resource-only evidence. Evaluate retains preparation state and marks resource-only collection partial. No reconstruction of missing historical traffic.
+- Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
+- Tests: [llm_d_bench/monitoring/profiling/test_benchmark_observability.py](../llm_d_bench/monitoring/profiling/test_benchmark_observability.py), [llm_d_bench/monitoring/profiling/test_benchmark_xpu.py](../llm_d_bench/monitoring/profiling/test_benchmark_xpu.py)
+
+## evaluation-recorded-monitoring-panel
+
+Render live or recorded deployment monitoring while preserving saved topology and resource measurements when traffic samples are missing.
+
+- Entry point: [src/components/benchmark-results/BenchmarkLiveFlow.jsx](../src/components/benchmark-results/BenchmarkLiveFlow.jsx)
+- Symbols: `BenchmarkLiveFlow`
+- Boundaries: Composes existing FlowMap, historicalFlows and ResourceExplorer. Recorded resources use the complete case window; missing traffic remains missing. Parent owns navigation to the Resources section.
+- Examples: [src/components/OptimizationEvaluationDetails.jsx](../src/components/OptimizationEvaluationDetails.jsx)
+- Tests: [src/components/benchmark-results/BenchmarkLiveFlow.test.jsx](../src/components/benchmark-results/BenchmarkLiveFlow.test.jsx), [src/components/benchmark-results/historicalFlow.test.js](../src/components/benchmark-results/historicalFlow.test.js)

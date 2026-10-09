@@ -408,7 +408,7 @@ export default function OptimizationEvaluationDetails({ onNavigate }) {
                 {visibleCases.length > casePageSize && <div className="flex items-center justify-between border-t border-slate-800/60 pt-3"><span className="text-[10px] text-slate-500">Showing {(casePage - 1) * casePageSize + 1}–{Math.min(casePage * casePageSize, visibleCases.length)} of {visibleCases.length}</span><div className="flex items-center gap-1"><button disabled={casePage === 1} onClick={() => setCasePage((page) => page - 1)} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-800 px-2.5 text-[10px] text-slate-300 disabled:opacity-30"><ChevronLeft className="h-3.5 w-3.5" />Previous</button><span className="min-w-16 text-center text-[10px] text-slate-400">{casePage} / {casePageCount}</span><button disabled={casePage === casePageCount} onClick={() => setCasePage((page) => page + 1)} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-800 px-2.5 text-[10px] text-slate-300 disabled:opacity-30">Next<ChevronRight className="h-3.5 w-3.5" /></button></div></div>}
 
             </section>}
-            {activeSection === "live" && <BenchmarkLiveFlow cases={cases} details={details} />}
+            {activeSection === "live" && <BenchmarkLiveFlow cases={cases} details={details} onShowResources={() => setActiveSection("resources")} />}
         </>}
     </section>;
 }

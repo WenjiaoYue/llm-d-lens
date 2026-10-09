@@ -13,6 +13,13 @@ result does not mean accelerators have already been released. Cleanup failures
 are recorded separately and do not change successful benchmark results. Deleting
 the evaluation waits for any in-flight cleanup before removing its history.
 
+The creation wizard refreshes the selected cluster's **Available** accelerator
+count every five seconds while the tab is visible, and when you return to the tab.
+Counts reflect Kubernetes allocations, so a newly queued task may not reduce the
+count until deployment allocates its devices. You do not need to leave and reopen
+the wizard. Background refreshes preserve your configuration inputs and retain the
+last successful count if a request temporarily fails.
+
 ## Hardware configuration across evaluation stages
 
 Evaluation deployment and generated baselines resolve the same hardware profile as
@@ -201,3 +208,26 @@ requests/s for 60 seconds each; Tiered prefix cache uses 1 and 1.5 requests/s
 for 60 seconds each; P/D uses concurrency 1 / 16 requests and 8 / 32 requests.
 Add stages explicitly for a larger sweep. Existing saved configurations retain
 their stages; create a new configuration to use these defaults.
+
+### Monitoring readiness and missing recorded flow
+
+Before traffic starts, Evaluation waits for every discovered serving Pod to have
+healthy Prometheus scrapes and at least two inference gauge samples. A discovered
+EPP service must also have a healthy target. Creating a Monitor does not mean
+Prometheus has loaded it. The preparation deadline uses the resolved benchmark
+**Timeout mode / Manual limit** budget, separately from each traffic invocation.
+A missing budget on a legacy run uses 600 seconds. The phase remains
+`preparing-monitoring` with heartbeat updates until ready. A timeout or setup
+error fails the run before traffic; check Monitor selection, Prometheus reloads
+and targets, then retry. This applies equally to existing endpoints and workflows.
+
+Recorded monitoring keeps the saved topology, resource charts and Pod resource
+ranking visible even when request/token samples are missing. Missing traffic is
+explained inline; it never hides CPU, device memory or network measurements, and
+resource measurements are never converted into invented traffic values.
+
+Benchmark collection measures the Prometheus clock offset before querying the
+saved window. Queries use the Prometheus timeline; returned chart timestamps are
+mapped back to the evaluation timeline. This prevents a clock difference between
+the Lens host and the cluster from selecting a window before benchmark traffic.
+Previously saved results are not automatically rewritten.

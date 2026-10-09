@@ -123,6 +123,21 @@ it uses the same pure function as `create_run`.
 
 ### Start a benchmark run
 
+Both REST `create_evaluate_run` and Python `create_run(EvaluateRunRequest(...))`
+require serving monitoring readiness before starting traffic. Preparation uses
+the resolved `wait_timeout_seconds` budget (600 seconds for legacy records with
+no budget); this is separate from each benchmark invocation's execution limit.
+Every discovered serving Pod needs `up=1` and two inference gauge samples, and a
+discovered EPP service needs a healthy target. Setup errors or timeout fail the
+queued run before traffic. Poll run details for `phase=preparing-monitoring`,
+`heartbeat_at` and `monitoring.message`; HTTP submission still returns 202.
+
+Recorded `metrics.observability.status` retains its aggregate sample-availability
+meaning. `flow_status` and `flow_reason` separately describe request/token sample
+availability. `monitoring.status=partial` means resources were saved but traffic
+samples are absent; `monitoring.preparation` retains the preflight evidence.
+For example: `{"status":"available","flow_status":"unavailable","flow_reason":"No inference request or token samples were recorded during the benchmark window. Resource samples do not establish serving traffic monitoring."}`.
+
 Start a benchmark run against a ready deployment execution or a published Model Service.
 
 `EvaluateRunRequest.accelerator_profile` accepts registered IDs and aliases, including
@@ -1264,3 +1279,28 @@ for each recommended workload and the default P/D long-input scenario. Python
 consumers obtain the same fresh values with
 `llm_d_bench.deploy.capabilities.provider_capability(provider_id)`; saved
 benchmark specifications and explicitly selected throughput presets are unchanged.
+
+### Benchmark monitoring clock alignment
+
+`metrics.observability.clock_alignment` records `status` (`measured` or
+`unavailable`), `offset_seconds` (Prometheus minus Lens time, or null), and
+`query_window` (`start`, `end`) used for the Prometheus range queries. The original
+`window` and persisted series timestamps stay on the Lens timeline, including
+rate-stage slicing. If clock measurement fails, collection retains the original
+window and reports alignment as unavailable.
+
+The existing Python callable
+`llm_d_bench.monitoring.profiling.service.collect_benchmark_observability(execution_id, start, end, cluster_id=None)`
+performs this alignment without changing its signature. For example:
+
+```python
+from llm_d_bench.monitoring.profiling.service import collect_benchmark_observability
+
+observability = await collect_benchmark_observability(
+    execution_id="deployment-id",
+    start="2026-10-09T09:50:00Z",
+    end="2026-10-09T09:55:00Z",
+    cluster_id="cluster-id",
+)
+print(observability.get("clock_alignment"))
+```

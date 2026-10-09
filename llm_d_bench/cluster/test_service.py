@@ -808,6 +808,8 @@ def test_hardware_summary_exposes_per_vendor_buckets():
 
 
 def test_node_summary_reads_accelerator_models_from_profile_labels():
+    from llm_d_bench.cluster.models import NodeSummary
+
     node = {
         "metadata": {
             "name": "node-a",
@@ -821,6 +823,9 @@ def test_node_summary_reads_accelerator_models_from_profile_labels():
     }
     summary = service._node_summary(node)
     assert summary["gpuModelsByProfile"] == {"nvidia": ["NVIDIA-A100-SXM4-80GB"]}
+    assert NodeSummary.model_validate(summary).gpu_models_by_profile == {
+        "nvidia": ["NVIDIA-A100-SXM4-80GB"]
+    }
 
 
 def test_node_summary_counts_extended_resources_per_profile_and_excludes_monitor_marker():

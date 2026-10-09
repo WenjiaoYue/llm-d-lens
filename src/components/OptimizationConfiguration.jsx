@@ -807,6 +807,20 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         return messages.filter(message => !mapped.some(error => error.message === message));
     };
 
+    const refreshHardwareSnapshot = async () => {
+        if (sharedContext?.refreshClusterHardware) return sharedContext.refreshClusterHardware();
+        if (!selectedClusterId) return clusterHardware;
+        setClusterHardwareLoading(true);
+        try {
+            const overview = await loadClusterOverview(selectedClusterId);
+            const hardware = overview?.kubernetes?.hardware || null;
+            setClusterHardware(hardware);
+            return hardware;
+        } finally {
+            setClusterHardwareLoading(false);
+        }
+    };
+
     const generate = async (requestedBasis = resourceBasis) => {
         setResourceBasis(requestedBasis);
         if (requestedBasis !== resourceBasis) {
@@ -819,8 +833,16 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
             window.requestAnimationFrame(() => focusConfigurationError(editorRef.current, configurationInputErrors));
             return;
         }
+        let currentHardware;
+        try {
+            currentHardware = await refreshHardwareSnapshot();
+        } catch (error) {
+            setPlanResult(null);
+            setPlanError(error.message || 'Could not refresh cluster capacity before generating YAML.');
+            return;
+        }
         const requiredCards = Math.max(1, ...topologyPreviewVariants.map(row => row.gpuCount));
-        const selectedBudget = recommendationBudget(clusterHardware, requestedBasis);
+        const selectedBudget = recommendationBudget(currentHardware, requestedBasis);
         if (selectedBudget < requiredCards) {
             setPlanResult(null);
             setPlanError(`Insufficient resources: this configuration requires ${requiredCards} cards; the selected budget is ${selectedBudget}. Reduce replicas / TP or select a sufficient budget.`);
@@ -836,7 +858,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
             }
             if (configurationInputErrors.length) throw new Error(configurationInputErrors.map(error => error.message).join(' '));
             const current = await requireSelectedCluster();
-            const result = await planInSession(withRecommendationBudget(planningRequest(current, topologyPreviewVariants[0].replicaCount, topologyPreviewVariants[0].tpCount, topologyPreviewVariants[0].prefillReplicaCount, topologyPreviewVariants[0].prefillTpCount), clusterHardware, requestedBasis));
+            const result = await planInSession(withRecommendationBudget(planningRequest(current, topologyPreviewVariants[0].replicaCount, topologyPreviewVariants[0].tpCount, topologyPreviewVariants[0].prefillReplicaCount, topologyPreviewVariants[0].prefillTpCount), currentHardware, requestedBasis));
             setPlanResult(result.validation?.errors?.length ? null : result);
             const globalErrors = showServerErrors(result.validation?.errors || []);
             if (globalErrors.length) setPlanError(globalErrors.join(' '));

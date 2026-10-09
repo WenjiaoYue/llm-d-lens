@@ -1769,7 +1769,8 @@
         "src/components/AIProviders/AIProvidersPage.jsx",
         "src/components/DeploymentManagement/DeploymentManagementPage.jsx",
         "src/components/EvaluationDashboard.jsx",
-        "src/components/ModelCache/ModelCachePage.jsx"
+        "src/components/ModelCache/ModelCachePage.jsx",
+        "src/components/EvaluationTaskWizard.jsx"
       ],
       "tests": [],
       "testNote": "No dedicated unit test: this repo has no jsdom/testing-library setup, so the timer, visibility-pause and overlap guards are covered indirectly by the pages that use usePolling plus the type/build checks."
@@ -3011,6 +3012,70 @@
       "tests": [
         "llm_d_bench/evaluate/test_harness_watch.py",
         "llm_d_bench/evaluate/test_matrix.py"
+      ]
+    },
+    {
+      "id": "evaluation-serving-monitoring-readiness",
+      "path": "llm_d_bench/monitoring/profiling/service.py",
+      "symbols": [
+        "wait_for_deployment_metrics"
+      ],
+      "purpose": "Wait for discovered serving pods and EPP monitoring before benchmark traffic.",
+      "boundaries": "Scoped Prometheus reads; all serving pods need healthy targets and two inference gauge samples. Zero timeout checks once; cancellation propagates. Hardware telemetry remains profile-driven. Evaluate owns the total timeout and pre-traffic failure.",
+      "examples": [
+        "llm_d_bench/evaluate/router.py"
+      ],
+      "tests": [
+        "llm_d_bench/evaluate/test_benchmark_parity.py"
+      ]
+    },
+    {
+      "id": "evaluation-recorded-flow",
+      "path": "src/components/benchmark-results/historicalFlow.js",
+      "symbols": [
+        "historicalFlow",
+        "historicalFlows"
+      ],
+      "purpose": "Adapt saved case monitoring into recorded flow and explicit traffic availability.",
+      "boundaries": "Never infer traffic from CPU, memory or device data. Preserve real zero values, case windows and serving roles; resource-only evidence carries an explanation.",
+      "examples": [
+        "src/components/benchmark-results/BenchmarkLiveFlow.jsx"
+      ],
+      "tests": [
+        "src/components/benchmark-results/historicalFlow.test.js",
+        "src/components/benchmark-results/BenchmarkLiveFlow.test.jsx"
+      ]
+    },
+    {
+      "id": "evaluation-window-observability",
+      "path": "llm_d_bench/monitoring/profiling/service.py",
+      "symbols": [
+        "collect_benchmark_observability"
+      ],
+      "purpose": "Collect persisted benchmark-window resource, serving and routing telemetry with separate traffic availability.",
+      "boundaries": "Hardware queries derive from profiles. Aggregate status reports any saved samples; flow_status and flow_reason explicitly distinguish resource-only evidence. Evaluate retains preparation state and marks resource-only collection partial. No reconstruction of missing historical traffic.",
+      "examples": [
+        "llm_d_bench/evaluate/router.py"
+      ],
+      "tests": [
+        "llm_d_bench/monitoring/profiling/test_benchmark_observability.py",
+        "llm_d_bench/monitoring/profiling/test_benchmark_xpu.py"
+      ]
+    },
+    {
+      "id": "evaluation-recorded-monitoring-panel",
+      "path": "src/components/benchmark-results/BenchmarkLiveFlow.jsx",
+      "symbols": [
+        "BenchmarkLiveFlow"
+      ],
+      "purpose": "Render live or recorded deployment monitoring while preserving saved topology and resource measurements when traffic samples are missing.",
+      "boundaries": "Composes existing FlowMap, historicalFlows and ResourceExplorer. Recorded resources use the complete case window; missing traffic remains missing. Parent owns navigation to the Resources section.",
+      "examples": [
+        "src/components/OptimizationEvaluationDetails.jsx"
+      ],
+      "tests": [
+        "src/components/benchmark-results/BenchmarkLiveFlow.test.jsx",
+        "src/components/benchmark-results/historicalFlow.test.js"
       ]
     }
   ]
