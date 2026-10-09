@@ -103,8 +103,7 @@ class DriverContribution:
         return cls(
             installer=str(data.get("installer") or ""),
             modes={
-                str(name): AccessModeDriver.from_dict(payload)
-                for name, payload in (data.get("modes") or {}).items()
+                str(name): AccessModeDriver.from_dict(payload) for name, payload in (data.get("modes") or {}).items()
             },
             nfd_manifest_refs=_tuple_of_str(data.get("nfd_manifest_refs")),
         )
@@ -216,9 +215,7 @@ class TelemetryContribution:
         return {
             "provider_id": self.provider_id,
             "device_metrics": dict(self.device_metrics),
-            "device_metric_sources": {
-                name: source.to_dict() for name, source in self.device_metric_sources.items()
-            },
+            "device_metric_sources": {name: source.to_dict() for name, source in self.device_metric_sources.items()},
             "label_schema": dict(self.label_schema),
             "allocation_join": self.allocation_join,
             "pod_metrics": dict(self.pod_metrics),

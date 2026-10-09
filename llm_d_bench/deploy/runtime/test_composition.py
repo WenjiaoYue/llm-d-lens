@@ -151,7 +151,9 @@ def test_concurrent_runs_with_different_accelerators_do_not_share_overlay_state(
     gpu_adapter_again = _build_precise_prefix_cache_routing_provider(gpu_runtime)
 
     guide_root = gpu_runtime.manifest_root
-    assert gpu_adapter._modelserver_source == guide_root / "guides/precise-prefix-cache-routing/modelserver/gpu/vllm/base"
+    assert (
+        gpu_adapter._modelserver_source == guide_root / "guides/precise-prefix-cache-routing/modelserver/gpu/vllm/base"
+    )
     assert xpu_adapter._modelserver_source == guide_root / "guides/precise-prefix-cache-routing/modelserver/xpu/vllm"
     assert gpu_adapter_again._modelserver_source == gpu_adapter._modelserver_source
 
