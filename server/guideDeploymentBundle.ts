@@ -1,5 +1,5 @@
 import { hardwareProfileSnapshot } from './hardwareProfiles.ts';
-import { managedImageProfile } from '../src/features/hardware/profiles.js';
+import { managedImageProfile, profileForKey } from '../src/features/hardware/profiles.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import yaml from 'js-yaml';
@@ -13,6 +13,15 @@ type RecordValue = Record<string, any>;
 const stackProfile = yaml.load(fs.readFileSync(new URL('../llm_d_bench/versions/llm_d_stack.yaml', import.meta.url), 'utf8')) as RecordValue;
 export const ROUTER_CHART_VERSION = String(stackProfile.llm_d_router);
 export const ROUTER_DISAGG_SIDECAR_IMAGE = `ghcr.io/llm-d/llm-d-router-disagg-sidecar:${ROUTER_CHART_VERSION}`;
+
+/* Some Guides (e.g. tiered-prefix-cache) publish router values per topology
+ * (a single-host overlay plus a multi-host LeaderWorkerSet one for multi-chip
+ * accelerators). The topology is owned by the hardware profile registry,
+ * resolved the same way as the model-server image, so the renderer never
+ * hardcodes a single path for the whole guide. */
+function routerTopologyForAccelerator(accelerator?: string): string {
+    return profileForKey(hardwareProfileSnapshot(), accelerator)?.deployment?.router_topology || 'single-host';
+}
 
 export function pinModelServerImage(image: string, profiles = hardwareProfileSnapshot()): string {
     return managedImageProfile(profiles, image)?.deployment?.runtime_image || image;
@@ -38,8 +47,26 @@ function merge(base: RecordValue, overlay: RecordValue): RecordValue {
     return base;
 }
 
-export async function buildGuideDeploymentBundle({ guide, source, model, blockSize, routerValues = '', readSource, renderSource }: {
-    guide: string; source: RecordValue; model: string; blockSize?: number; routerValues?: string;
+/* Guides may publish their router values flat (`router/<file>`) or, on llm-d
+ * versions/topologies that split per-topology, under a topology directory
+ * (`router/<topology>/<file>`). Try the topology path first and fall back to
+ * the flat one, so neither an older pinned llm-d ref nor a guide that never
+ * adopted the split breaks, and a new split never needs a code change. */
+async function readRouterValues(
+    guide: string, routerPath: string, accelerator: string | undefined,
+    // eslint-disable-next-line no-unused-vars
+    readSource: (path: string) => Promise<string>,
+): Promise<string> {
+    const topology = routerTopologyForAccelerator(accelerator);
+    try {
+        return await readSource(`guides/${guide}/router/${topology}/${routerPath}`);
+    } catch {
+        return readSource(`guides/${guide}/router/${routerPath}`);
+    }
+}
+
+export async function buildGuideDeploymentBundle({ guide, source, model, blockSize, routerValues = '', accelerator, readSource, renderSource }: {
+    guide: string; source: RecordValue; model: string; blockSize?: number; routerValues?: string; accelerator?: string;
     // eslint-disable-next-line no-unused-vars
     readSource: (path: string) => Promise<string>; renderSource: (path: string) => Promise<string>;
 }) {
@@ -47,7 +74,7 @@ export async function buildGuideDeploymentBundle({ guide, source, model, blockSi
     if (!routerPath) throw new Error('This Guide does not have a supported deployment bundle.');
     const [baseText, guideText] = await Promise.all([
         readSource('guides/recipes/router/base.values.yaml'),
-        readSource(`guides/${guide}/router/${routerPath}`),
+        readRouterValues(guide, routerPath, accelerator, readSource),
     ]);
     const values = merge(valuesYaml(baseText), valuesYaml(guideText));
     if (routerValues.trim()) merge(values, valuesYaml(routerValues));

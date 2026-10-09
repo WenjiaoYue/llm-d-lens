@@ -62,6 +62,7 @@ def benchmark_timing(spec: BenchmarkSpec) -> dict:
             "per invocation; excludes deployment, runtime installation and final analysis. "
             "Assumes aggregate input/output rates of 2000/200 tokens per second and per-request rates of "
             "1000/20, with a fourfold faster lower bound. Cache reuse and hardware may change actual time."
-            if phases else "Timing unavailable for this workload; automatic timeout uses a 2-hour fallback."
+            if phases
+            else "Timing unavailable for this workload; automatic timeout uses a 2-hour fallback."
         ),
     }

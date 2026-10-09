@@ -34,7 +34,9 @@ def _cli():
     try:
         from aiconfigurator.cli import cli_default, cli_exp, cli_support
     except ImportError as error:
-        raise AICError("AIConfigurator is unavailable; install the project dependencies with python -m pip install -e .") from error
+        raise AICError(
+            "AIConfigurator is unavailable; install the project dependencies with python -m pip install -e ."
+        ) from error
     return cli_default, cli_exp, cli_support
 
 

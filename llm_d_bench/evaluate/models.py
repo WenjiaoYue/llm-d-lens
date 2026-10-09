@@ -104,7 +104,9 @@ class BenchmarkSpec(BaseModel):
     )
     parallelism: int = Field(default=1, ge=1, le=32)
     wait_timeout_seconds: int | None = Field(
-        default=None, ge=1, le=14400,
+        default=None,
+        ge=1,
+        le=14400,
         description="Per-invocation execution limit in seconds. Null selects a workload-based automatic budget.",
     )
     harness_memory_gib: int = Field(
@@ -114,9 +116,7 @@ class BenchmarkSpec(BaseModel):
         strict=True,
         description="Host memory request and limit in GiB per benchmark worker; independent of model GPU memory.",
     )
-    accelerator_profile: str | None = Field(
-        default=None, max_length=253, pattern=r"^[a-z0-9]([-.a-z0-9]*[a-z0-9])?$"
-    )
+    accelerator_profile: str | None = Field(default=None, max_length=253, pattern=r"^[a-z0-9]([-.a-z0-9]*[a-z0-9])?$")
     storage_class_name: str | None = Field(default=None, max_length=253, pattern=r"^[a-z0-9]([-.a-z0-9]*[a-z0-9])?$")
     matrix: list[WorkloadMatrixPoint] = Field(default_factory=list, max_length=50)
     concurrency_stages: list[ConcurrencyStage] = Field(default_factory=list, max_length=20)
@@ -286,7 +286,9 @@ class EvaluateRunRequest(BenchmarkSpec):
     deployment_execution_id: str | None = Field(
         default=None,
         min_length=1,
-        description="A specific deployment execution to benchmark directly. Mutually exclusive with model_service_group_id.",
+        description=(
+            "A specific deployment execution to benchmark directly. Mutually exclusive with model_service_group_id."
+        ),
     )
     model_service_group_id: str | None = Field(
         default=None,
@@ -307,6 +309,7 @@ class EvaluateRunRequest(BenchmarkSpec):
         if self.model_service_group_id and not self.api_key:
             raise ValueError("model_service_group_id requires api_key (a model access token)")
         return self
+
     specification_file: str = Field(
         default="guides/optimized-baseline",
         min_length=1,

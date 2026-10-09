@@ -14,6 +14,7 @@ router = importlib.import_module("llm_d_bench.evaluate.router")
 
 def test_xpumd_metrics_use_compute_engine_utilization():
     from llm_d_bench.hardware.registry import get_profile
+
     metrics = router._parse_xpumd_metrics(
         "\n".join(
             [
@@ -21,7 +22,8 @@ def test_xpumd_metrics_use_compute_engine_utilization():
                 'hw_gpu_utilization_ratio{pci_bdf="0000:01:00.0",hw_gpu_task="compute-all"} 1',
                 'hw_gpu_utilization_ratio{pci_bdf="0000:01:00.0",hw_gpu_task="copy-all"} 0',
             ]
-        ), get_profile("intel-xpu")
+        ),
+        get_profile("intel-xpu"),
     )
 
     assert metrics["average_utilization_ratio"] == 1
@@ -487,26 +489,40 @@ async def test_workflow_completes_before_final_deployment_cleanup(monkeypatch, c
     import copy
 
     workflow = {
-        "kind": "workflow", "id": "completion-test", "status": "queued",
+        "kind": "workflow",
+        "id": "completion-test",
+        "status": "queued",
         "cases": [
-            {"id": f"case-{index}", "kind": "guide", "status": "queued",
-             "deployment_run_id": f"deployment-{index}"}
+            {"id": f"case-{index}", "kind": "guide", "status": "queued", "deployment_run_id": f"deployment-{index}"}
             for index in range(case_count)
         ],
     }
     saved = []
     if shared_pods:
-        workflow["cases"].append({
-            "id": "shared-baseline", "kind": "baseline", "status": "queued",
-            "baseline_type": "kubernetes-service", "dependent_guide_case_id": f"case-{case_count - 1}",
-        })
+        workflow["cases"].append(
+            {
+                "id": "shared-baseline",
+                "kind": "baseline",
+                "status": "queued",
+                "baseline_type": "kubernetes-service",
+                "dependent_guide_case_id": f"case-{case_count - 1}",
+            }
+        )
     cleanup_started = asyncio.Event()
     release_cleanup = asyncio.Event()
     cleaned = []
-    ready_case = SimpleNamespace(id="ready-case", status=SimpleNamespace(value="ready"),
-                                 execution_id="execution", attempt=1, provider_ref="optimized-baseline")
-    execution = SimpleNamespace(status=router.DeploymentStatus.READY, namespace="test",
-                                endpoint=SimpleNamespace(url="http://routed", baseline_url="http://direct"))
+    ready_case = SimpleNamespace(
+        id="ready-case",
+        status=SimpleNamespace(value="ready"),
+        execution_id="execution",
+        attempt=1,
+        provider_ref="optimized-baseline",
+    )
+    execution = SimpleNamespace(
+        status=router.DeploymentStatus.READY,
+        namespace="test",
+        endpoint=SimpleNamespace(url="http://routed", baseline_url="http://direct"),
+    )
     monkeypatch.setattr(router, "_get", lambda *_: workflow)
     monkeypatch.setattr(router, "_save", lambda value: saved.append(copy.deepcopy(value)))
     monkeypatch.setattr(router, "_ordered_evaluation_cases", lambda cases: cases)
@@ -514,10 +530,14 @@ async def test_workflow_completes_before_final_deployment_cleanup(monkeypatch, c
     monkeypatch.setattr(router, "case_benchmark_request", lambda *_, **__: None)
     monkeypatch.setattr(router, "_comparison_report", lambda *_: {"ready": True})
     monkeypatch.setattr(router, "_has_pending_suite_scenario", lambda *_: False)
-    monkeypatch.setattr(router, "_store", SimpleNamespace(
-        get_run=lambda run_id: SimpleNamespace(id=run_id, cases=[ready_case]),
-        get_execution=lambda *_: execution,
-    ))
+    monkeypatch.setattr(
+        router,
+        "_store",
+        SimpleNamespace(
+            get_run=lambda run_id: SimpleNamespace(id=run_id, cases=[ready_case]),
+            get_execution=lambda *_: execution,
+        ),
+    )
 
     async def benchmark(_workflow, case, *_args, **_kwargs):
         case.update(status="succeeded", finished_at=router._now())

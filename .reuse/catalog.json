@@ -36,9 +36,10 @@
         "pin_runtime_image",
         "set_accelerator_request",
         "guide_overlays",
-        "default_guide_variant"
+        "default_guide_variant",
+        "router_topology"
       ],
-      "purpose": "Resolve per-deployment hardware settings and discover source Kustomization entry points through the hardware registry.",
+      "purpose": "Resolve per-deployment hardware settings and discover source Kustomization entry points through the hardware registry. Resolve profile-owned router topology for per-topology guide values, defaulting to single-host when unset.",
       "boundaries": "Deployment rendering only. Unknown hardware stays neutral. Profiles own managed images and resource identities; selected upstream source owns guide variants. Never mutate NIC requests as accelerator requests.",
       "examples": [
         "llm_d_bench/deploy/providers/baseline_vllm.py",

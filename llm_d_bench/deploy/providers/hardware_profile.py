@@ -14,7 +14,7 @@ from pathlib import Path
 
 from llm_d_bench.hardware.models import HardwareProfile
 from llm_d_bench.hardware.registry import all_profiles
-from llm_d_bench.hardware.resolver import resolve_by_accelerator_key, deployment_mode
+from llm_d_bench.hardware.resolver import deployment_mode, resolve_by_accelerator_key
 
 DEFAULT_DEVICE_CLASS = ""
 DEFAULT_CLAIM_REQUEST_NAME = ""
@@ -44,6 +44,21 @@ def overlay_variant(fallback: str = "", *, accelerator: str | None = None) -> st
     return profile.upstream_variant if profile else fallback
 
 
+DEFAULT_ROUTER_TOPOLOGY = "single-host"
+
+
+def router_topology(fallback: str = DEFAULT_ROUTER_TOPOLOGY, *, accelerator: str | None = None) -> str:
+    """Topology directory some guides publish per-topology router values under.
+
+    Reads ``deployment.router_topology`` from the active hardware profile
+    instead of hardcoding a single path, so a future multi-host profile (e.g.
+    a multi-chip TPU LeaderWorkerSet) only needs to set this field, never a
+    code change in the guide's path-building logic.
+    """
+    profile = active_profile(accelerator)
+    return (profile.deployment.router_topology if profile else "") or fallback
+
+
 def accelerator_supported(key: str | None) -> bool:
     """True when a registered hardware profile supports this accelerator key."""
     return bool(key and resolve_by_accelerator_key(str(key)))
@@ -61,7 +76,9 @@ def requires_dra_claim(*, accelerator: str | None = None) -> bool:
     return request_model(accelerator=accelerator) == "dra"
 
 
-def resource_name(fallback: str | None = None, *, accelerator: str | None = None, access_mode: str | None = None) -> str | None:
+def resource_name(
+    fallback: str | None = None, *, accelerator: str | None = None, access_mode: str | None = None
+) -> str | None:
     """Return the selected mode's resource key when it has one unambiguous choice."""
     profile = active_profile(accelerator)
     if profile is None:
@@ -93,22 +110,34 @@ def pin_runtime_image(image: str, *, accelerator: str | None = None) -> str:
     owning profile. Custom images pass through unchanged.
     """
     repository = _image_repository(image)
-    owners = [p for p in all_profiles() if repository in {*p.deployment.managed_image_repositories, _image_repository(p.deployment.runtime_image or "")}]
+    owners = [
+        p
+        for p in all_profiles()
+        if repository in {*p.deployment.managed_image_repositories, _image_repository(p.deployment.runtime_image or "")}
+    ]
     profile = active_profile(accelerator) if accelerator else (owners[0] if owners else None)
     return profile.deployment.runtime_image if owners and profile and profile.deployment.runtime_image else image
 
 
-def guide_overlays(root: Path, guide: str, *, accelerator: str | None = None, model_server: str = "vllm") -> dict[str, Path]:
+def guide_overlays(
+    root: Path, guide: str, *, accelerator: str | None = None, model_server: str = "vllm"
+) -> dict[str, Path]:
     """Discover actual Kustomization entry points under the profile's source root."""
     profile = active_profile(accelerator)
     if profile is None:
         return {}
-    base = root / profile.deployment.overlay_root.format(guide=guide, variant=profile.upstream_variant, model_server=model_server)
-    paths = {p.parent for name in ("kustomization.yaml", "kustomization.yml", "Kustomization") for p in base.rglob(name)}
+    base = root / profile.deployment.overlay_root.format(
+        guide=guide, variant=profile.upstream_variant, model_server=model_server
+    )
+    paths = {
+        p.parent for name in ("kustomization.yaml", "kustomization.yml", "Kustomization") for p in base.rglob(name)
+    }
     return {str(p.relative_to(base)): p for p in sorted(paths) if p.resolve().is_relative_to(root.resolve())}
 
 
-def set_accelerator_request(container: dict, claim: dict | None, count: int, *, accelerator: str | None = None, access_mode: str | None = None) -> None:
+def set_accelerator_request(
+    container: dict, claim: dict | None, count: int, *, accelerator: str | None = None, access_mode: str | None = None
+) -> None:
     """Set a tensor-parallel accelerator count on a rendered pod.
 
     Update matching accelerator requests in a DRA ResourceClaimTemplate, or the
@@ -120,7 +149,11 @@ def set_accelerator_request(container: dict, claim: dict | None, count: int, *, 
         raise ValueError("Deployment hardware profile is unresolved")
     if claim is not None:
         requests = claim["spec"]["spec"]["devices"]["requests"]
-        matched = [r.setdefault("exactly", {}) for r in requests if r.get("exactly", {}).get("deviceClassName") in profile.device_classes]
+        matched = [
+            r.setdefault("exactly", {})
+            for r in requests
+            if r.get("exactly", {}).get("deviceClassName") in profile.device_classes
+        ]
         if not matched:
             raise ValueError("No accelerator request matches the deployment hardware")
         for request in matched:

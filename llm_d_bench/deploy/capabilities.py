@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 
-
 def shared_prefix_routing_workload(*, full: bool = False) -> dict:
     """Fresh routing-comparison workload; provider goals and baselines stay local."""
     return {
-        "num_groups": 150 if full else 4, "num_prompts_per_group": 5,
+        "num_groups": 150 if full else 4,
+        "num_prompts_per_group": 5,
         "system_prompt_len": 6000 if full else 512,
-        "question_len": 1200 if full else 128, "output_len": 1000 if full else 64,
-        "enable_multi_turn_chat": False, "interval": 0,
-        "stages": [
-            {"rate": rate, "duration": 60 if full else 20}
-            for rate in ((3, 10) if full else (0.4, 0.8))
-        ],
+        "question_len": 1200 if full else 128,
+        "output_len": 1000 if full else 64,
+        "enable_multi_turn_chat": False,
+        "interval": 0,
+        "stages": [{"rate": rate, "duration": 60 if full else 20} for rate in ((3, 10) if full else (0.4, 0.8))],
     }
+
 
 # This flag declares whether a provider exposes a second endpoint on the same warmed pods
 # for a routing-bypassing Kubernetes Service comparison. Evaluate consumes this registry;
@@ -36,10 +36,13 @@ _PROVIDER_CAPABILITIES = {
                     "label": "Lightweight routing check",
                     "recommended": True,
                     "description": "Small shared-prefix workload for initial validation, not a capacity measurement.",
-                    "scenarios": [{
-                        "id": "quick-prefix", "name": "Lightweight shared-prefix check",
-                        "benchmark": {"shared_prefix": shared_prefix_routing_workload()},
-                    }],
+                    "scenarios": [
+                        {
+                            "id": "quick-prefix",
+                            "name": "Lightweight shared-prefix check",
+                            "benchmark": {"shared_prefix": shared_prefix_routing_workload()},
+                        }
+                    ],
                 },
                 {
                     "id": "full-evaluation",
@@ -210,10 +213,13 @@ _PROVIDER_CAPABILITIES = {
                     "label": "Lightweight routing check",
                     "recommended": True,
                     "description": "Small shared-prefix workload for initial validation, not a capacity measurement.",
-                    "scenarios": [{
-                        "id": "quick-prefix", "name": "Lightweight shared-prefix check",
-                        "benchmark": {"shared_prefix": shared_prefix_routing_workload()},
-                    }],
+                    "scenarios": [
+                        {
+                            "id": "quick-prefix",
+                            "name": "Lightweight shared-prefix check",
+                            "benchmark": {"shared_prefix": shared_prefix_routing_workload()},
+                        }
+                    ],
                 },
                 {
                     "id": "full-evaluation",
@@ -283,6 +289,7 @@ def _supported_accelerators() -> list[str]:
 def _hardware_variants(metadata: dict) -> dict:
     """Guide entry points are discovered from the selected source checkout."""
     from copy import deepcopy
+
     result = deepcopy(metadata)
     result["variants"] = []
     result.pop("variant_labels", None)

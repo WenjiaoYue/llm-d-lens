@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from llm_d_bench.deploy.providers.hardware_profile import default_guide_variant, active_profile
-
 import asyncio
 import json
 import os
@@ -23,8 +21,8 @@ from llm_d_bench.deploy.providers.deployment_bundle import (
 from llm_d_bench.deploy.providers.gpu_selection import gpu_device_selectors
 from llm_d_bench.deploy.providers.guide_adapter import GuideDefinition, GuideDeploymentArtifact, ValidationResult
 from llm_d_bench.deploy.providers.hardware_profile import (
-    device_class,
-    overlay_variant,
+    active_profile,
+    default_guide_variant,
     guide_overlays,
     requires_dra_claim,
     set_accelerator_request,
@@ -78,11 +76,15 @@ class PdDisaggregationAdapter:
         sources = guide_overlays(guide_root, "pd-disaggregation", accelerator=accelerator)
         profile = active_profile(accelerator)
         if profile:
-            base = guide_root / profile.deployment.overlay_root.format(guide="pd-disaggregation", variant=profile.upstream_variant, model_server="vllm")
+            base = guide_root / profile.deployment.overlay_root.format(
+                guide="pd-disaggregation", variant=profile.upstream_variant, model_server="vllm"
+            )
             if base.parent.is_dir():
                 for sibling in base.parent.iterdir():
                     if sibling.is_dir() and sibling.name.startswith("vllm-"):
-                        for variant, path in guide_overlays(guide_root, "pd-disaggregation", accelerator=accelerator, model_server=sibling.name).items():
+                        for variant, path in guide_overlays(
+                            guide_root, "pd-disaggregation", accelerator=accelerator, model_server=sibling.name
+                        ).items():
                             sources[sibling.name if variant == "." else f"{sibling.name}/{variant}"] = path
         if "." in sources:
             sources["vllm"] = sources["."]
@@ -177,7 +179,13 @@ class PdDisaggregationAdapter:
             role = "prefill" if "prefill" in claim["metadata"]["name"] else "decode"
             requests = claim["spec"]["spec"]["devices"]["requests"]
             gpu_request = next(
-                (item for item in requests if item.get("exactly", {}).get("deviceClassName") in active_profile(self._accelerator).device_classes), None
+                (
+                    item
+                    for item in requests
+                    if item.get("exactly", {}).get("deviceClassName")
+                    in active_profile(self._accelerator).device_classes
+                ),
+                None,
             )
             if gpu_request is None:
                 continue
@@ -200,7 +208,9 @@ class PdDisaggregationAdapter:
                     None,
                 )
                 if role is not None:
-                    set_accelerator_request(container, None, parameters[role]["tensor_parallel_size"], accelerator=self._accelerator)
+                    set_accelerator_request(
+                        container, None, parameters[role]["tensor_parallel_size"], accelerator=self._accelerator
+                    )
         manifest = directory / "manifest.yaml"
         manifest.write_text(yaml.safe_dump_all(documents, sort_keys=False), encoding="utf-8")
         return GuideDeploymentArtifact(

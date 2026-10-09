@@ -30,7 +30,6 @@ def cluster_deployment_source(session, requested: dict | None = None) -> dict:
     return source
 
 
-
 _ACCELERATOR_KEYS = ("hardware_profile", "accelerator", "accelerator_variant", "upstream_variant")
 
 
@@ -67,6 +66,7 @@ def _deploy_accelerator(run) -> str | None:
             return recorded
         if isinstance(content, dict):
             from llm_d_bench.hardware.resolver import resolve_configuration_profile
+
             profile = resolve_configuration_profile(content)
             if profile:
                 return profile.id

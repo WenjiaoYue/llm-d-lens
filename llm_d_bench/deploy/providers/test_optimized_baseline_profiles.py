@@ -317,7 +317,9 @@ spec:
 def _write_model_overlay(overlay: Path) -> None:
     (overlay / "patch-vllm.yaml").write_text(_MODEL_PATCH, encoding="utf-8")
     (overlay / "resource-claim-template.yaml").write_text(_MODEL_CLAIM, encoding="utf-8")
-    (overlay / "kustomization.yaml").write_text("resources:\n  - patch-vllm.yaml\n  - resource-claim-template.yaml\n", encoding="utf-8")
+    (overlay / "kustomization.yaml").write_text(
+        "resources:\n  - patch-vllm.yaml\n  - resource-claim-template.yaml\n", encoding="utf-8"
+    )
 
 
 def _deployment_parameters() -> dict[str, int | None]:
@@ -347,7 +349,11 @@ def _runtime(**overrides) -> dict:
 def _rendered_container(adapter, overlay: Path, runtime: dict) -> tuple[dict, dict[str, str | None]]:
     _write_model_overlay(overlay)
     path = adapter._render_overlay(_deployment_parameters(), "Qwen/Qwen3-0.6B", runtime)
-    patch = next(doc for doc in yaml.safe_load_all((path / "manifest.yaml").read_text(encoding="utf-8")) if doc.get("kind") == "Deployment")
+    patch = next(
+        doc
+        for doc in yaml.safe_load_all((path / "manifest.yaml").read_text(encoding="utf-8"))
+        if doc.get("kind") == "Deployment"
+    )
     container = patch["spec"]["template"]["spec"]["containers"][0]
     entries = container.get("env") or []
     return container, {item["name"]: item.get("value") for item in entries}

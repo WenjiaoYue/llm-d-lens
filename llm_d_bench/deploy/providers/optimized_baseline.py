@@ -6,10 +6,8 @@ import asyncio
 import re
 import shutil
 import subprocess
-from dataclasses import replace
-from llm_d_bench.deploy.providers.hardware_profile import active_profile, set_accelerator_request
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -31,6 +29,7 @@ from llm_d_bench.deploy.providers.guide_adapter import (
     GuideDeploymentArtifact,
     ValidationResult,
 )
+from llm_d_bench.deploy.providers.hardware_profile import active_profile, set_accelerator_request
 from llm_d_bench.deploy.providers.model_cache_environment import model_cache_environment
 from llm_d_bench.deploy.providers.storage_mount import resolve_mount
 from llm_d_bench.deploy.providers.target_node import configured_target_node
@@ -578,8 +577,15 @@ class OptimizedBaselineGuideAdapter(GuideAdapter):
         rendered_overlay.parent.mkdir(parents=True, exist_ok=True)
         rendered_overlay.mkdir(parents=True, exist_ok=True)
         result = subprocess.run(
-            [str(getattr(self._command_runner, "_kubectl_path", "kubectl")), "kustomize", str(self._policy.overlay_path)],
-            capture_output=True, text=True, timeout=60, check=True,
+            [
+                str(getattr(self._command_runner, "_kubectl_path", "kubectl")),
+                "kustomize",
+                str(self._policy.overlay_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
         )
         documents = [item for item in yaml.safe_load_all(result.stdout) if isinstance(item, dict)]
         profile = active_profile(self._policy.accelerator)
@@ -598,12 +604,20 @@ class OptimizedBaselineGuideAdapter(GuideAdapter):
             workload["spec"]["replicas"] = deployment["replicas"]
             container["image"] = image
             args = container.setdefault("args", [])
-            options = {"tensor-parallel-size": deployment["tensor_parallel_size"], "max-model-len": deployment["max_model_len"], "max-num-seqs": deployment["max_num_seqs"]}
+            options = {
+                "tensor-parallel-size": deployment["tensor_parallel_size"],
+                "max-model-len": deployment["max_model_len"],
+                "max-num-seqs": deployment["max_num_seqs"],
+            }
             shell = bool(args and "vllm serve" in args[0])
             if shell:
-                from llm_d_bench.deploy.providers.helm_kustomize import HelmKustomizeGuideAdapter
                 import shlex
-                command = re.sub(r"(vllm serve\s+)([^\s]+)", lambda match: match[1] + shlex.quote(served_model), args[0], count=1)
+
+                from llm_d_bench.deploy.providers.helm_kustomize import HelmKustomizeGuideAdapter
+
+                command = re.sub(
+                    r"(vllm serve\s+)([^\s]+)", lambda match: match[1] + shlex.quote(served_model), args[0], count=1
+                )
                 for key, value in options.items():
                     if value is not None:
                         command = HelmKustomizeGuideAdapter._set_shell_argument(command, key, value)
@@ -620,11 +634,22 @@ class OptimizedBaselineGuideAdapter(GuideAdapter):
                         continue
                     for index in range(len(args) - 1, -1, -1):
                         if args[index] == "--" + key:
-                            del args[index:index + 2]
+                            del args[index : index + 2]
                         elif args[index].startswith("--" + key + "="):
                             del args[index]
                     args.append(f"--{key}={value}")
-            claim = next((claims.get(item.get("resourceClaimTemplateName")) for item in pod.get("resourceClaims", []) if claims.get(item.get("resourceClaimTemplateName")) and any(request.get("exactly", {}).get("deviceClassName") in profile.device_classes for request in claims[item["resourceClaimTemplateName"]]["spec"]["spec"]["devices"]["requests"])), None)
+            claim = next(
+                (
+                    claims.get(item.get("resourceClaimTemplateName"))
+                    for item in pod.get("resourceClaims", [])
+                    if claims.get(item.get("resourceClaimTemplateName"))
+                    and any(
+                        request.get("exactly", {}).get("deviceClassName") in profile.device_classes
+                        for request in claims[item["resourceClaimTemplateName"]]["spec"]["spec"]["devices"]["requests"]
+                    )
+                ),
+                None,
+            )
             set_accelerator_request(container, claim, deployment["accelerator_count"], accelerator=profile.id)
             selectors = gpu_device_selectors(accelerator=profile.id)
             if selectors and claim:
@@ -634,23 +659,40 @@ class OptimizedBaselineGuideAdapter(GuideAdapter):
             pod.setdefault("nodeSelector", {}).update(profile.deployment.node_selector)
             if configured_target_node():
                 pod["nodeSelector"]["kubernetes.io/hostname"] = configured_target_node()
-            environment = {**(runtime.get("environment") or {}), **model_cache_environment(active_model_source, cache_mounted=cache_mounted)}
+            environment = {
+                **(runtime.get("environment") or {}),
+                **model_cache_environment(active_model_source, cache_mounted=cache_mounted),
+            }
             for name, value in environment.items():
                 entries = container.setdefault("env", [])
                 entries[:] = [item for item in entries if item.get("name") != name]
                 entries.append({"name": name, "value": str(value)})
             if resolved_mount or runtime["mount_host_path"]:
-                volume = resolved_mount["volume_source"] if resolved_mount else {"hostPath": {"path": runtime["mount_host_path"], "type": "DirectoryOrCreate"}}
+                volume = (
+                    resolved_mount["volume_source"]
+                    if resolved_mount
+                    else {"hostPath": {"path": runtime["mount_host_path"], "type": "DirectoryOrCreate"}}
+                )
                 mount_path = resolved_mount["mount_path"] if resolved_mount else "/model-cache"
                 pod.setdefault("volumes", []).append({"name": "model-cache", **volume})
-                container.setdefault("volumeMounts", []).append({"name": "model-cache", "mountPath": mount_path, "readOnly": resolved_mount["read_only"] if resolved_mount else active_model_source == "shared-path"})
+                container.setdefault("volumeMounts", []).append(
+                    {
+                        "name": "model-cache",
+                        "mountPath": mount_path,
+                        "readOnly": resolved_mount["read_only"]
+                        if resolved_mount
+                        else active_model_source == "shared-path",
+                    }
+                )
         if not workload_names:
             raise ValueError("Selected overlay has no model-server Deployment")
         self._policy = replace(self._policy, model_deployment_name=workload_names[0])
         guide = getattr(self._command_runner, "_guide", None)
         if guide is not None:
             self._command_runner._guide = replace(guide, readiness_deployment_name=workload_names[0])
-        (rendered_overlay / "manifest.yaml").write_text(yaml.safe_dump_all(documents, sort_keys=False), encoding="utf-8")
+        (rendered_overlay / "manifest.yaml").write_text(
+            yaml.safe_dump_all(documents, sort_keys=False), encoding="utf-8"
+        )
         (rendered_overlay / "kustomization.yaml").write_text("resources:\n  - manifest.yaml\n", encoding="utf-8")
         return rendered_overlay.resolve()
 
@@ -739,11 +781,10 @@ class OptimizedBaselineGuideAdapter(GuideAdapter):
         mode = source.get("mode")
         if mode == "suggested-yaml":
             file_path = source.get("filePath")
-            expected_path = (
-                self._policy.overlay_path / "patch-vllm.yaml"
-            ).resolve()
+            expected_path = (self._policy.overlay_path / "patch-vllm.yaml").resolve()
             if (
-                file_path != "llm-d/" + str((self._policy.overlay_path / "patch-vllm.yaml").relative_to(self._policy.guide_root))
+                file_path
+                != "llm-d/" + str((self._policy.overlay_path / "patch-vllm.yaml").relative_to(self._policy.guide_root))
                 or not expected_path.is_file()
             ):
                 raise ValueError("suggested deployment YAML is not available from the registered Guide")

@@ -63,7 +63,6 @@ from llm_d_bench.evaluate.comparison import (
 )
 from llm_d_bench.evaluate.execution import case_benchmark_request, execute_case_benchmark
 from llm_d_bench.evaluate.harness_watch import watch_harness
-from llm_d_bench.evaluate.timing import benchmark_timing
 from llm_d_bench.evaluate.models import (
     BenchmarkSpec,
     ConcurrencyStage,
@@ -75,10 +74,15 @@ from llm_d_bench.evaluate.models import (
     validate_inline_workload,
 )
 from llm_d_bench.evaluate.request_evidence import apply_request_evidence, enable_request_reports
+from llm_d_bench.evaluate.timing import benchmark_timing
 from llm_d_bench.evaluate.workflow_state import TERMINAL_EVALUATION_STATUSES as _TERMINAL_EVALUATE_STATUSES
-from llm_d_bench.hardware.resolver import resolve_by_accelerator_key, resolve_by_device_class, resolve_configuration_profile, resolve_by_resource, resolve_by_node_label
+from llm_d_bench.hardware.resolver import (
+    resolve_by_accelerator_key,
+    resolve_by_node_label,
+    resolve_by_resource,
+    resolve_configuration_profile,
+)
 from llm_d_bench.hardware.telemetry import parse_device_metrics
-from llm_d_bench.hardware.registry import all_profiles
 from llm_d_bench.model_service.resolution import resolve_model_service_target
 from llm_d_bench.monitoring.deployment import service as deployment_monitoring
 from llm_d_bench.monitoring.kv_trace.collector import KVTraceCollector
@@ -245,6 +249,7 @@ def _baseline_configuration(
     if profile:
         baseline_content["hardware_profile"] = profile.id
         from llm_d_bench.hardware.resolver import configuration_resource_request
+
         baseline_content["hardware_request"] = configuration_resource_request(source_content, profile)
     provider_ref = "baseline-vllm"
     if baseline_type in {"router-neutral", "router-round-robin", "load-only", "affinity-only", "optimized-baseline"}:
@@ -1654,9 +1659,7 @@ async def _run_case_benchmark(workflow, case, execution_id, *, use_baseline_endp
         enrich=_enrich_benchmark_result,
         now=_now,
     )
-    if workflow.get("status") == "running" and all(
-        item["status"] == "succeeded" for item in workflow["cases"]
-    ):
+    if workflow.get("status") == "running" and all(item["status"] == "succeeded" for item in workflow["cases"]):
         workflow.update(
             status="succeeded",
             report=_comparison_report(workflow),
@@ -2487,7 +2490,9 @@ def _parse_xpumd_metrics(payload: str | None, profile=None) -> dict | None:
     return parse_device_metrics(payload, profile)
 
 
-async def _kubernetes_resource_snapshot(session_id: str | None, namespace: str | None, hardware_profile: str | None = None) -> dict | None:
+async def _kubernetes_resource_snapshot(
+    session_id: str | None, namespace: str | None, hardware_profile: str | None = None
+) -> dict | None:
     """Return configured allocation/capacity, not runtime utilization."""
     if not session_id:
         return None
@@ -2499,7 +2504,7 @@ async def _kubernetes_resource_snapshot(session_id: str | None, namespace: str |
     nodes = await _kubectl_json(["get", "nodes"], environment)
     profiles = {}
     for node in (nodes or {}).get("items", []):
-        for key in (node.get("status", {}).get("allocatable") or {}):
+        for key in node.get("status", {}).get("allocatable") or {}:
             profile = resolve_by_resource(key)
             if profile:
                 profiles[profile.id] = profile
@@ -2529,7 +2534,9 @@ async def _kubernetes_resource_snapshot(session_id: str | None, namespace: str |
             requested_gpus += sum(
                 int(value)
                 for key, value in {**requests, **limits}.items()
-                if (profile := resolve_by_resource(key)) and not any(key.endswith(suffix) for suffix in profile.monitor_resource_suffixes) and str(value).isdigit()
+                if (profile := resolve_by_resource(key))
+                and not any(key.endswith(suffix) for suffix in profile.monitor_resource_suffixes)
+                and str(value).isdigit()
             )
             containers.append({"name": container.get("name"), "requests": requests, "limits": limits})
         pod_allocations.append(
@@ -2545,7 +2552,10 @@ async def _kubernetes_resource_snapshot(session_id: str | None, namespace: str |
     for node in (nodes or {}).get("items", []):
         allocatable = node.get("status", {}).get("allocatable") or {}
         gpu_resources = {
-            key: value for key, value in allocatable.items() if (profile := resolve_by_resource(key)) and not any(key.endswith(suffix) for suffix in profile.monitor_resource_suffixes)
+            key: value
+            for key, value in allocatable.items()
+            if (profile := resolve_by_resource(key))
+            and not any(key.endswith(suffix) for suffix in profile.monitor_resource_suffixes)
         }
         allocatable_gpus += sum(int(value) for value in gpu_resources.values() if str(value).isdigit())
         node_capacity.append(
@@ -3193,9 +3203,22 @@ async def _execute(run_id: str) -> None:
                 command.extend(["--set", f"accelerator.profile={accelerator_profile}"])
                 if selected_hardware and selected_hardware.telemetry:
                     defaults_path = benchmark_root / "config/templates/values/defaults.yaml"
-                    defaults = yaml.safe_load(defaults_path.read_text(encoding="utf-8")) if defaults_path.is_file() else {}
+                    defaults = (
+                        yaml.safe_load(defaults_path.read_text(encoding="utf-8")) if defaults_path.is_file() else {}
+                    )
                     metrics = list((defaults or {}).get("monitoring", {}).get("timeSeriesMetrics") or [])
-                    metrics = list(dict.fromkeys([*metrics, *(source.metric for source in selected_hardware.telemetry.device_metric_sources.values() if source.metric)]))
+                    metrics = list(
+                        dict.fromkeys(
+                            [
+                                *metrics,
+                                *(
+                                    source.metric
+                                    for source in selected_hardware.telemetry.device_metric_sources.values()
+                                    if source.metric
+                                ),
+                            ]
+                        )
+                    )
                     command.extend(["--set", "monitoring.timeSeriesMetrics=" + json.dumps(metrics)])
             command.extend(["--set", f"storage.workloadPvc.storageClassName={storage_class}"])
             for resource_override in _harness_resource_overrides(run, benchmark_root):
@@ -3370,9 +3393,7 @@ async def _execute(run_id: str) -> None:
             spec = SharedPrefixWorkloadSpec(**run["shared_prefix"])
             workload_path = output / "workload.yaml"
             workload_path.write_text(
-                _shared_prefix_workload_yaml(
-                    spec, model_name, endpoint_url, run.get("sla_targets"), api_key=api_key
-                ),
+                _shared_prefix_workload_yaml(spec, model_name, endpoint_url, run.get("sla_targets"), api_key=api_key),
                 encoding="utf-8",
             )
             command = _base_command(output) + ["--workload-file-path", str(workload_path)]
@@ -3739,7 +3760,9 @@ async def _execute(run_id: str) -> None:
                 run["monitoring"] = {
                     **run.get("monitoring", {}),
                     "preparation": dict(run.get("monitoring", {})),
-                    "status": "partial" if observability["status"] == "available" and observability.get("flow_status") == "unavailable" else observability["status"],
+                    "status": "partial"
+                    if observability["status"] == "available" and observability.get("flow_status") == "unavailable"
+                    else observability["status"],
                     "window": observability["window"],
                     "message": observability.get("flow_reason") or observability.get("reason"),
                 }
@@ -3850,7 +3873,8 @@ async def _execute_workflow(workflow_id: str) -> None:
         "404 if missing, 409 if no member is currently healthy/authorized). "
         "Requires a ready execution and its active cluster session (404 if missing; 409 if not ready or the session "
         "is invalid). Requires healthy serving scrapes before traffic, reusing existing targets or enabling monitors. "
-        "Preparation uses wait_timeout_seconds (600 seconds when unset); failure stops the run before traffic. Reads existing KV instrumentation "
+        "Preparation uses wait_timeout_seconds (600 seconds when unset); failure stops the run before traffic. "
+        "Reads existing KV instrumentation "
         "when supported; never installs probes or redeploys the model. Persists deployment facts and completion-time "
         "resources without taking lifecycle ownership of an existing deployment. Returns the queued run with HTTP 202."
     ),

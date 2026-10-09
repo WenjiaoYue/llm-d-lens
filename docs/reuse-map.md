@@ -16,10 +16,10 @@ Enforce public HTTPS destinations for external AI providers and pin outbound req
 
 ## deploy-hardware-profile
 
-Resolve per-deployment hardware settings and discover source Kustomization entry points through the hardware registry.
+Resolve per-deployment hardware settings and discover source Kustomization entry points through the hardware registry. Resolve profile-owned router topology for per-topology guide values, defaulting to single-host when unset.
 
 - Entry point: [llm_d_bench/deploy/providers/hardware_profile.py](../llm_d_bench/deploy/providers/hardware_profile.py)
-- Symbols: `active_profile`, `device_class`, `claim_request_name`, `overlay_variant`, `accelerator_supported`, `request_model`, `requires_dra_claim`, `resource_name`, `runtime_image`, `pin_runtime_image`, `set_accelerator_request`, `guide_overlays`, `default_guide_variant`
+- Symbols: `active_profile`, `device_class`, `claim_request_name`, `overlay_variant`, `accelerator_supported`, `request_model`, `requires_dra_claim`, `resource_name`, `runtime_image`, `pin_runtime_image`, `set_accelerator_request`, `guide_overlays`, `default_guide_variant`, `router_topology`
 - Boundaries: Deployment rendering only. Unknown hardware stays neutral. Profiles own managed images and resource identities; selected upstream source owns guide variants. Never mutate NIC requests as accelerator requests.
 - Examples: [llm_d_bench/deploy/providers/baseline_vllm.py](../llm_d_bench/deploy/providers/baseline_vllm.py), [llm_d_bench/deploy/providers/pd_disaggregation.py](../llm_d_bench/deploy/providers/pd_disaggregation.py), [llm_d_bench/deploy/providers/gpu_selection.py](../llm_d_bench/deploy/providers/gpu_selection.py), [llm_d_bench/deploy/runtime/composition.py](../llm_d_bench/deploy/runtime/composition.py)
 - Tests: [llm_d_bench/deploy/providers/test_hardware_profile.py](../llm_d_bench/deploy/providers/test_hardware_profile.py), [llm_d_bench/hardware/test_deployment_telemetry_contract.py](../llm_d_bench/hardware/test_deployment_telemetry_contract.py)

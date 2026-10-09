@@ -75,9 +75,14 @@ async def test_monitoring_cancellation_is_not_swallowed(monkeypatch, ownership):
 @pytest.mark.parametrize("ownership", OWNERS)
 async def test_runner_never_starts_traffic_when_monitoring_setup_fails(monkeypatch, tmp_path, ownership):
     run = {
-        "id": "parity", "deployment_execution_id": "execution", "deployment_ownership": ownership,
-        "specification_file": "guides/optimized-baseline", "harness": "inference-perf",
-        "workload": "sanity_random.yaml", "parallelism": 1, "wait_timeout_seconds": 60,
+        "id": "parity",
+        "deployment_execution_id": "execution",
+        "deployment_ownership": ownership,
+        "specification_file": "guides/optimized-baseline",
+        "harness": "inference-perf",
+        "workload": "sanity_random.yaml",
+        "parallelism": 1,
+        "wait_timeout_seconds": 60,
     }
     calls = _patch_execute_dependencies(monkeypatch, tmp_path, run, [_FakeProcess(0)])
     monkeypatch.setattr(router, "wait_for_deployment_metrics", AsyncMock(return_value=False))
@@ -180,23 +185,32 @@ async def test_standalone_hydrates_read_only_context_without_recapturing_history
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("up_pods,sample_pods,epp_up,expected", [
-    (["exporter"], [], True, False),
-    (["decode"], ["decode"], True, False),
-    (["decode", "prefill"], ["decode", "prefill"], False, False),
-    (["decode", "prefill"], ["decode", "prefill"], True, True),
-])
+@pytest.mark.parametrize(
+    "up_pods,sample_pods,epp_up,expected",
+    [
+        (["exporter"], [], True, False),
+        (["decode"], ["decode"], True, False),
+        (["decode", "prefill"], ["decode", "prefill"], False, False),
+        (["decode", "prefill"], ["decode", "prefill"], True, True),
+    ],
+)
 async def test_readiness_requires_every_serving_pod_and_epp(monkeypatch, up_pods, sample_pods, epp_up, expected):
     monkeypatch.setattr(profiling, "_deployment_target", lambda *_: (None, "model-ns", "cluster"))
     monkeypatch.setattr(profiling, "_prometheus_local_port", AsyncMock(return_value=12345))
-    monkeypatch.setattr(profiling, "_discover_components", AsyncMock(return_value={
-        "prefill": ["prefill"], "decode": ["decode"], "epp": ["router"]}))
+    monkeypatch.setattr(
+        profiling,
+        "_discover_components",
+        AsyncMock(return_value={"prefill": ["prefill"], "decode": ["decode"], "epp": ["router"]}),
+    )
+
     async def query(_client, expression):
         if expression.startswith("up{"):
-            return ([{"metric": {"pod": p}, "value": [0, "1"]} for p in up_pods]
-                    + ([{"metric": {"service": "router"}, "value": [0, "1"]}] if epp_up else []))
+            return [{"metric": {"pod": p}, "value": [0, "1"]} for p in up_pods] + (
+                [{"metric": {"service": "router"}, "value": [0, "1"]}] if epp_up else []
+            )
         assert expression == 'count_over_time(vllm:num_requests_running{namespace="model-ns"}[30s])'
         return [{"metric": {"pod": p}, "value": [0, "2"]} for p in sample_pods]
+
     monkeypatch.setattr(profiling, "_query", query)
     assert await profiling.wait_for_deployment_metrics("execution", timeout_seconds=0) is expected
 
@@ -206,6 +220,7 @@ async def test_delayed_targets_block_preparation_until_ready(monkeypatch):
     release = asyncio.Event()
     entered = asyncio.Event()
     calls = 0
+
     async def ready(*args, **kwargs):
         nonlocal calls
         calls += 1
@@ -214,6 +229,7 @@ async def test_delayed_targets_block_preparation_until_ready(monkeypatch):
         entered.set()
         await release.wait()
         return True
+
     monkeypatch.setattr(router, "_save", lambda _: None)
     monkeypatch.setattr(router, "wait_for_deployment_metrics", ready)
     monkeypatch.setattr(router.deployment_monitoring, "enable", AsyncMock(return_value={}))
@@ -253,6 +269,7 @@ async def test_cancelling_monitoring_wait_cancels_child_poll(monkeypatch):
     entered = asyncio.Event()
     cancelled = asyncio.Event()
     calls = 0
+
     async def ready(*args, **kwargs):
         nonlocal calls
         calls += 1
@@ -263,6 +280,7 @@ async def test_cancelling_monitoring_wait_cancels_child_poll(monkeypatch):
             await asyncio.Event().wait()
         finally:
             cancelled.set()
+
     monkeypatch.setattr(router, "_save", lambda _: None)
     monkeypatch.setattr(router, "wait_for_deployment_metrics", ready)
     monkeypatch.setattr(router.deployment_monitoring, "enable", AsyncMock(return_value={}))

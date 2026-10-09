@@ -11,8 +11,10 @@ import yaml
 
 from .manifest_facts import _invocation_tokens, _option
 
+
 def _rdma_device_class(content: dict) -> str | None:
     from llm_d_bench.hardware.resolver import resolve_configuration_profile
+
     profile = resolve_configuration_profile(content)
     return profile.dranet_device_class if profile else None
 
@@ -89,7 +91,7 @@ def validate_guide_settings(content: dict[str, Any], manifest: str, guide: str) 
             for doc in documents
             if doc.get("kind") == "ResourceClaimTemplate"
             for request in doc.get("spec", {}).get("spec", {}).get("devices", {}).get("requests", [])
-        if request.get("exactly", {}).get("deviceClassName") == _rdma_device_class(content)
+            if request.get("exactly", {}).get("deviceClassName") == _rdma_device_class(content)
         ]
         if not requests or any(request["exactly"].get("count") != nic_count for request in requests):
             raise ValueError("NIC count does not match the rendered RDMA requests")

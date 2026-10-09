@@ -168,7 +168,6 @@ async def test_readiness_uses_contract_deployment_names():
 
 
 def test_guide_sources_follow_the_active_accelerator(monkeypatch, tmp_path):
-    import llm_d_bench.deploy.providers.pd_disaggregation as pd
 
     for relative in ("gpu/vllm/base", "xpu/vllm", "xpu/vllm-rdma"):
         overlay = tmp_path / "guides/pd-disaggregation/modelserver" / relative

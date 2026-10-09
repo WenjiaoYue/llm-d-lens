@@ -95,9 +95,12 @@ from llm_d_bench.aic.service import check_support_sync, search_sync
 
 print({name: version(name) for name in ("aiconfigurator", "aiconfigurator-core")})
 request = AICRequest(
-    model_name="Qwen/Qwen3-0.6B", aic_system_name="b60",
-    aic_backend_name="vllm", gpu_count=4,
-    mean_input_tokens=1024, mean_output_tokens=256,
+    model_name="Qwen/Qwen3-0.6B",
+    aic_system_name="b60",
+    aic_backend_name="vllm",
+    gpu_count=4,
+    mean_input_tokens=1024,
+    mean_output_tokens=256,
 )
 assert check_support_sync(request).disagg_supported
 assert any(item["mode"] == "disagg" for item in search_sync(request).configs)

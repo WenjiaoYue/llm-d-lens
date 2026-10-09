@@ -17,7 +17,8 @@ router = importlib.import_module("llm_d_bench.evaluate.router")
 
 def pd_configuration(prefill_replicas=2, prefill_tp=1, decode_replicas=2, decode_tp=1):
     content = {
-        "hardware_profile": "intel-xpu",        "model": {"name": "Qwen/Qwen3-0.6B"},
+        "hardware_profile": "intel-xpu",
+        "model": {"name": "Qwen/Qwen3-0.6B"},
         "prefill": {"replicaCount": prefill_replicas, "tensorParallelSize": prefill_tp},
         "decode": {"replicaCount": decode_replicas, "tensorParallelSize": decode_tp},
         "runtime": {"image": "example/vllm:test"},

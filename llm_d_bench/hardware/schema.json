@@ -180,7 +180,8 @@
               "resource_names": { "$ref": "#/$defs/string_list" }
             }
           }
-        }
+        },
+        "router_topology": { "enum": ["single-host", "multi-host", null] }
       }
     },
     "planning": {

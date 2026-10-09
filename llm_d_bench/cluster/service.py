@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from llm_d_bench.monitoring.prometheus import query_vector as _prometheus_query
-
 import asyncio
 import contextlib
 import json
@@ -24,6 +22,7 @@ from llm_d_bench.cluster.settings import cluster_settings
 from llm_d_bench.hardware.registry import get_profile
 from llm_d_bench.monitoring.cluster_stack.discovery import discover_cluster_stack
 from llm_d_bench.monitoring.cluster_stack.errors import ClusterStackError
+from llm_d_bench.monitoring.prometheus import query_vector as _prometheus_query
 from llm_d_bench.utils.kubernetes import PortForwardError, ensure_port_forward, run_kubectl, scoped_runner
 from llm_d_bench.utils.shell import CommandResult
 from llm_d_bench.versions import stack as stack_profile
@@ -183,8 +182,7 @@ def _matches_hardware_matchers(item: Any, matchers: Any) -> bool:
         return False
 
     return any(
-        matcher and all(condition(key, str(value)) for key, value in matcher.items())
-        for matcher in matchers or ()
+        matcher and all(condition(key, str(value)) for key, value in matcher.items()) for matcher in matchers or ()
     )
 
 
@@ -338,8 +336,6 @@ def _prometheus_sample_value(sample: dict[str, Any]) -> float | None:
         return None
 
 
-
-
 def _node_from_prometheus_labels(metric: dict[str, Any], pci_to_node: dict[str, str]) -> str:
     labels = metric.get("metric") or {}
     for key in ("node", "kubernetes_node", "hostname", "host"):
@@ -440,11 +436,13 @@ async def _prometheus_hardware_metrics(
     ordered_queries: list[tuple[str, str]] = []
     for canonical, expressions in _device_metric_queries().items():
         ordered_queries.extend((canonical, expression) for expression in expressions)
-    ordered_queries.extend([
-        ("nodeCpuUsagePercent", '100 * (1 - avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[2m])))'),
-        ("nodeMemoryUsagePercent", "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))"),
-        ("nodeInfo", "node_uname_info"),
-    ])
+    ordered_queries.extend(
+        [
+            ("nodeCpuUsagePercent", '100 * (1 - avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[2m])))'),
+            ("nodeMemoryUsagePercent", "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))"),
+            ("nodeInfo", "node_uname_info"),
+        ]
+    )
     async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{local_port}", timeout=5.0) as client:
         results = await asyncio.gather(*(_prometheus_query(client, expression) for _, expression in ordered_queries))
     merged: dict[str, list[dict[str, Any]]] = {}
@@ -525,11 +523,7 @@ async def _prometheus_hardware_metrics(
             if node:
                 node_gpu.setdefault(node, []).append(utilization)
         if node_gpu:
-            metrics["nodeGpu"] = {
-                node: sum(values) / len(values)
-                for node, values in node_gpu.items()
-                if values
-            }
+            metrics["nodeGpu"] = {node: sum(values) / len(values) for node, values in node_gpu.items() if values}
     return metrics
 
 
@@ -1466,10 +1460,9 @@ def _active_gpu_device_keys(resource_claims: list[dict[str, Any]]) -> set[tuple[
     for claim in resource_claims:
         results = (((claim.get("status") or {}).get("allocation") or {}).get("devices") or {}).get("results") or []
         for result in results:
-            if (
-                any(device_class in str(result.get("driver") or "").lower() for device_class in _gpu_device_classes())
-                and not result.get("adminAccess", False)
-            ):
+            if any(
+                device_class in str(result.get("driver") or "").lower() for device_class in _gpu_device_classes()
+            ) and not result.get("adminAccess", False):
                 pool = str(result.get("pool") or "").strip()
                 device = str(result.get("device") or "").strip()
                 if pool and device:
@@ -1510,11 +1503,7 @@ def _node_summary(
         gpu_by_profile[profile_id] = max(gpu_by_profile.get(profile_id, 0), count)
     gpu_models_by_profile = {
         profile_id: sorted(
-            {
-                str(labels[key]).strip()
-                for key in get_profile(profile_id).planning.model_label_keys
-                if labels.get(key)
-            }
+            {str(labels[key]).strip() for key in get_profile(profile_id).planning.model_label_keys if labels.get(key)}
         )
         for profile_id in gpu_by_profile
     }
@@ -1742,9 +1731,7 @@ async def build_overview(cluster: registry.Cluster) -> dict[str, Any]:
         resource_slice_profile_counts = _resource_slice_gpu_counts_by_profile(resource_slices)
     node_summaries = [
         summary
-        for summary in (
-            _node_summary(node, resource_slice_counts, resource_slice_profile_counts) for node in nodes
-        )
+        for summary in (_node_summary(node, resource_slice_counts, resource_slice_profile_counts) for node in nodes)
         if summary.get("role") == "worker"
     ]
     worker_node_names = {node["name"] for node in node_summaries}

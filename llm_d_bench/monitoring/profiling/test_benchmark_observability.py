@@ -239,9 +239,14 @@ async def test_prometheus_clock_offset_uses_round_trip_midpoint(monkeypatch):
 
     readings = iter([1000.0, 1002.0])
     from types import SimpleNamespace
+
     monkeypatch.setattr(service, "time", SimpleNamespace(time=lambda: next(readings)))
+
     def respond(request):
         assert request.url.params["query"] == "time()"
-        return httpx.Response(200, json={"status": "success", "data": {"resultType": "scalar", "result": [1385, "1385"]}})
+        return httpx.Response(
+            200, json={"status": "success", "data": {"resultType": "scalar", "result": [1385, "1385"]}}
+        )
+
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://prometheus") as client:
         assert await _prometheus_clock_offset(client) == 384

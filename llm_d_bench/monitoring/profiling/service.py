@@ -7,8 +7,6 @@ and token flow between hops, plus per-component queue depth.
 
 from __future__ import annotations
 
-from llm_d_bench.monitoring.prometheus import query_vector as _query
-
 import asyncio
 import logging
 import math
@@ -19,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
+from llm_d_bench.hardware.telemetry import DEVICE_RESULT_KEYS, scoped_device_query
 from llm_d_bench.monitoring.cluster_stack.service import (
     _PROMETHEUS_PORT,
     _find_service,
@@ -30,19 +29,20 @@ from llm_d_bench.monitoring.deployment.service import (
     _deployment_target,
     _discover_epp_service,
 )
+from llm_d_bench.monitoring.prometheus import query_vector as _query
 from llm_d_bench.utils.kubernetes import (
     PortForwardError,
     ensure_port_forward,
     list_resources,
 )
-from llm_d_bench.hardware.telemetry import combined_device_query, DEVICE_RESULT_KEYS, scoped_device_query
+
 from .models import (
     FlowMapComponent,
     FlowMapEdge,
     FlowMapInstance,
     FlowMapResponse,
 )
-from .xpu_metrics import xpum_queries, aggregate_xpum, device_allocations
+from .xpu_metrics import aggregate_xpum, device_allocations, xpum_queries
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +92,6 @@ async def _prometheus_local_port(cluster_id: str | None) -> int | None:
     except PortForwardError:
         logger.warning("Unable to open Prometheus tunnel for flow map", exc_info=True)
         return None
-
-
 
 
 async def _query_range(
@@ -607,19 +605,16 @@ async def wait_for_deployment_metrics(
                 _query(client, f'count_over_time(vllm:num_requests_running{{namespace="{namespace}"}}[30s])'),
             )
             healthy = {entry.get("metric", {}).get("pod") for entry in up if _scalar([entry]) == 1}
-            measured = {entry.get("metric", {}).get("pod") for entry in samples
-                        if (_scalar([entry]) or 0) >= 2}
+            measured = {entry.get("metric", {}).get("pod") for entry in samples if (_scalar([entry]) or 0) >= 2}
             ready = bool(serving) and serving <= healthy & measured
             if ready and components.get("epp"):
-                services = {entry.get("metric", {}).get("service") for entry in up
-                            if _scalar([entry]) == 1}
+                services = {entry.get("metric", {}).get("service") for entry in up if _scalar([entry]) == 1}
                 ready = all(service in services for service in components["epp"])
             if ready:
                 return True
             if time.monotonic() >= deadline:
                 return False
             await asyncio.sleep(min(2.5, max(0.0, deadline - time.monotonic())))
-
 
 
 def _hardware_profiles() -> list:
@@ -669,7 +664,9 @@ def _device_queries(profiles: list, namespace: str, *, by: str | None = None) ->
             if not namespace_label or (by and not pod_label):
                 continue
             key = DEVICE_RESULT_KEYS.get(semantic, semantic)
-            query = scoped_device_query(source, aggregation=source.aggregation, match={namespace_label: namespace}, by=pod_label if by else None)
+            query = scoped_device_query(
+                source, aggregation=source.aggregation, match={namespace_label: namespace}, by=pod_label if by else None
+            )
             if by and pod_label != "pod":
                 query = f'label_replace({query}, "pod", "$1", "{pod_label}", "(.*)")'
             queries[key] = f"({queries[key]}) or ({query})" if key in queries else query
@@ -711,12 +708,16 @@ async def collect_benchmark_observability(
     try:
         pods = await list_resources("pods", namespace=namespace, cluster_id=cluster_id)
         inventory = await asyncio.gather(
-            asyncio.wait_for(list_resources("resourceclaims.resource.k8s.io", namespace=namespace, cluster_id=cluster_id), timeout=15.0),
+            asyncio.wait_for(
+                list_resources("resourceclaims.resource.k8s.io", namespace=namespace, cluster_id=cluster_id),
+                timeout=15.0,
+            ),
             asyncio.wait_for(list_resources("resourceslices.resource.k8s.io", cluster_id=cluster_id), timeout=15.0),
             return_exceptions=True,
         )
         claims, slices = [value if isinstance(value, list) else [] for value in inventory]
         from llm_d_bench.hardware.telemetry import workload_telemetry_profiles
+
         profiles = workload_telemetry_profiles(_hardware_profiles(), pods, claims)
         for profile in profiles:
             if not profile.telemetry or profile.telemetry.allocation_join not in {"dra", "pod-status", "none"}:
@@ -781,20 +782,12 @@ async def collect_benchmark_observability(
         "kv_restore_time_seconds_per_second": (
             f'sum(rate(vllm:kv_offload_total_time{{namespace="{namespace}", transfer_type=~".*_to_GPU"}}[30s]))'
         ),
-        "nixl_transfer_rate_rps": f'sum(rate(vllm:nixl_xfer_time_seconds_count{matcher}[30s]))',
-        "nixl_failed_transfer_rate_rps": f'sum(rate(vllm:nixl_num_failed_transfers{matcher}[30s]))',
-        "nixl_failed_notification_rate_rps": f'sum(rate(vllm:nixl_num_failed_notifications{matcher}[30s]))',
-        "nixl_expired_request_rate_rps": f'sum(rate(vllm:nixl_num_kv_expired_reqs{matcher}[30s]))',
-        "nixl_transfer_bytes_per_second": f'sum(rate(vllm:nixl_bytes_transferred_sum{matcher}[30s]))',
-        "nixl_transfer_latency_p50_ms": f'histogram_quantile(0.50, sum(rate(vllm:nixl_xfer_time_seconds_bucket{matcher}[30s])) by (le)) * 1000',
-        "nixl_transfer_latency_p95_ms": f'histogram_quantile(0.95, sum(rate(vllm:nixl_xfer_time_seconds_bucket{matcher}[30s])) by (le)) * 1000',
-        "nixl_transfer_latency_p99_ms": f'histogram_quantile(0.99, sum(rate(vllm:nixl_xfer_time_seconds_bucket{matcher}[30s])) by (le)) * 1000',
-        "kv_offload_bytes_per_second": f'sum(rate(vllm:kv_offload_total_bytes{{namespace="{namespace}", transfer_type=~"GPU_to_.*"}}[30s]))',
-        "kv_restore_bytes_per_second": f'sum(rate(vllm:kv_offload_total_bytes{{namespace="{namespace}", transfer_type=~".*_to_GPU"}}[30s]))',
-        "kv_offload_time_seconds_per_second": f'sum(rate(vllm:kv_offload_total_time{{namespace="{namespace}", transfer_type=~"GPU_to_.*"}}[30s]))',
-        "kv_restore_time_seconds_per_second": f'sum(rate(vllm:kv_offload_total_time{{namespace="{namespace}", transfer_type=~".*_to_GPU"}}[30s]))',
-        "network_receive_bytes_per_second": f'sum(rate(container_network_receive_bytes_total{{namespace="{namespace}", pod!=""}}[30s]))',
-        "network_transmit_bytes_per_second": f'sum(rate(container_network_transmit_bytes_total{{namespace="{namespace}", pod!=""}}[30s]))',
+        "network_receive_bytes_per_second": (
+            f'sum(rate(container_network_receive_bytes_total{{namespace="{namespace}", pod!=""}}[30s]))'
+        ),
+        "network_transmit_bytes_per_second": (
+            f'sum(rate(container_network_transmit_bytes_total{{namespace="{namespace}", pod!=""}}[30s]))'
+        ),
     }
     # Engine-side token accounting (vLLM v1). Missing exporter series stay
     # unavailable; router cached-token estimates must never substitute here.
@@ -939,29 +932,19 @@ async def collect_benchmark_observability(
             per_endpoint_results,
             cache_config_results,
             xpu_results,
-                device_total_results,
-                device_pod_results,
+            device_total_results,
+            device_pod_results,
         ) = await asyncio.gather(
             asyncio.gather(*(query_window(query) for query in queries.values())),
-            asyncio.gather(
-                *(query_window(query) for query in per_pod_queries.values())
-            ),
-            asyncio.gather(
-                *(query_window(query) for query in router_queries.values())
-            ),
-            asyncio.gather(
-                *(query_window(query) for query in per_endpoint_queries.values())
-            ),
+            asyncio.gather(*(query_window(query) for query in per_pod_queries.values())),
+            asyncio.gather(*(query_window(query) for query in router_queries.values())),
+            asyncio.gather(*(query_window(query) for query in per_endpoint_queries.values())),
             query_window(f"vllm:cache_config_info{matcher}"),
             asyncio.gather(*(query_window(query) for query in dra_queries.values()))
             if xpu_allocations
             else asyncio.sleep(0, result=[]),
-            asyncio.gather(
-                *(query_window(query) for query in device_total_queries.values())
-            ),
-            asyncio.gather(
-                *(query_window(query) for query in device_pod_queries.values())
-            ),
+            asyncio.gather(*(query_window(query) for query in device_total_queries.values())),
+            asyncio.gather(*(query_window(query) for query in device_pod_queries.values())),
         )
 
     device_points = {
@@ -969,10 +952,12 @@ async def collect_benchmark_observability(
     }
     device_pod_vectors = {
         key: _range_series(result, ("pod", "instance"))
-        for key, result in zip(device_pod_queries, device_pod_results)
+        for key, result in zip(device_pod_queries, device_pod_results, strict=True)
     }
-    source_labels = ", ".join(profile.telemetry.source_label or profile.id for profile in _direct_profiles(profiles) if profile.telemetry)
-    device_sources = {key: source_labels for key in device_points}
+    source_labels = ", ".join(
+        profile.telemetry.source_label or profile.id for profile in _direct_profiles(profiles) if profile.telemetry
+    )
+    device_sources = dict.fromkeys(device_points, source_labels)
     for (profile_id, key), samples in zip(dra_queries, xpu_results, strict=False):
         profile, allocations = allocation_profiles[profile_id]
         total, per_pod_result = aggregate_xpum(samples, allocations, key, profile)
@@ -1027,10 +1012,7 @@ async def collect_benchmark_observability(
             for key, result in zip(per_pod_queries, per_pod_results, strict=False)
         },
         **{key: ("available" if points else "unavailable") for key, points in device_points.items()},
-        **{
-            f"per_pod.{key}": ("available" if vector else "unavailable")
-            for key, vector in device_pod_vectors.items()
-        },
+        **{f"per_pod.{key}": ("available" if vector else "unavailable") for key, vector in device_pod_vectors.items()},
         **{
             f"router.{key}": ("available" if result else "unavailable")
             for key, result in zip(router_queries, router_results, strict=False)
@@ -1366,7 +1348,12 @@ async def collect_benchmark_observability(
             "query_window": {"start": query_start, "end": query_end},
         },
         "flow_status": "available" if flow_available else "unavailable",
-        "flow_reason": None if flow_available else "No inference request or token samples were recorded during the benchmark window. Resource samples do not establish serving traffic monitoring.",
+        "flow_reason": None
+        if flow_available
+        else (
+            "No inference request or token samples were recorded during the benchmark window. "
+            "Resource samples do not establish serving traffic monitoring."
+        ),
         "reason": None if series else "Prometheus returned no samples for the benchmark window",
         "source": "prometheus",
         "guide_type": getattr(_context, "guide", None),
@@ -1405,12 +1392,28 @@ async def collect_benchmark_observability(
             "fs_cache_utilization": "filesystem_backend_does_not_export_capacity_utilization_gauge",
         },
         "device_telemetry": {
-            "scope": "allocated-device" if xpu_allocations else "exporter-pod-labels" if _direct_profiles(profiles) else "unavailable",
-            "profiles": [{"id": profile.id, "allocation_join": profile.telemetry.allocation_join,
-                          "status": "available" if profile.id in allocation_profiles or profile in _direct_profiles(profiles) else "unavailable",
-                          "reason": None if profile.id in allocation_profiles or profile in _direct_profiles(profiles)
-                          else "No exclusive device identity is available for this workload and access mode; plugin telemetry requires kubelet allocatedResourcesStatus with a profile-recognized PCI resourceID."}
-                         for profile in profiles],
+            "scope": "allocated-device"
+            if xpu_allocations
+            else "exporter-pod-labels"
+            if _direct_profiles(profiles)
+            else "unavailable",
+            "profiles": [
+                {
+                    "id": profile.id,
+                    "allocation_join": profile.telemetry.allocation_join,
+                    "status": "available"
+                    if profile.id in allocation_profiles or profile in _direct_profiles(profiles)
+                    else "unavailable",
+                    "reason": None
+                    if profile.id in allocation_profiles or profile in _direct_profiles(profiles)
+                    else (
+                        "No exclusive device identity is available for this workload and access mode; "
+                        "plugin telemetry requires kubelet allocatedResourcesStatus "
+                        "with a profile-recognized PCI resourceID."
+                    ),
+                }
+                for profile in profiles
+            ],
             "devices": [
                 {"node": node, "pci_bdf": pci, **allocation}
                 for (node, pci), allocation in sorted(xpu_allocations.items())
@@ -1421,9 +1424,7 @@ async def collect_benchmark_observability(
                     "reason": (
                         "Missing device samples or identity labels"
                         if xpu_allocations
-                        else (
-                            "Device telemetry requires the profile-declared allocation or Pod labels"
-                        )
+                        else ("Device telemetry requires the profile-declared allocation or Pod labels")
                     )
                 }
                 if any(key not in summary for key in {key for _, key in dra_queries})

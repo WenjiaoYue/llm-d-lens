@@ -9,10 +9,10 @@ letting the driver pick any of the node's available GPUs.
 
 from __future__ import annotations
 
+import json
 import os
 
 from .hardware_profile import active_profile
-import json
 
 _ALLOWLIST_ENV_VAR = "PRISM_GPU_PCI_ALLOWLIST"
 
@@ -35,5 +35,8 @@ def gpu_device_selectors(*, accelerator: str | None = None) -> list[dict[str, di
     if not deployment.pci_attribute or not deployment.pci_attribute_domain:
         raise ValueError("Hardware profile has no PCI selector attributes")
     values = ", ".join(f'"{address}"' for address in addresses)
-    expression = f'device.attributes[{json.dumps(deployment.pci_attribute_domain)}][{json.dumps(deployment.pci_attribute)}] in [{values}]'
+    expression = (
+        f"device.attributes[{json.dumps(deployment.pci_attribute_domain)}]"
+        f"[{json.dumps(deployment.pci_attribute)}] in [{values}]"
+    )
     return [{"cel": {"expression": expression}}]

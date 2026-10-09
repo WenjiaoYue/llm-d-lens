@@ -14,7 +14,12 @@ import yaml
 from llm_d_bench.common.hashing import stable_hash
 from llm_d_bench.deploy.providers.gpu_selection import gpu_device_selectors
 from llm_d_bench.deploy.providers.guide_adapter import GuideDefinition, GuideDeploymentArtifact, ValidationResult
-from llm_d_bench.deploy.providers.hardware_profile import claim_request_name, device_class, active_profile, set_accelerator_request
+from llm_d_bench.deploy.providers.hardware_profile import (
+    active_profile,
+    claim_request_name,
+    device_class,
+    set_accelerator_request,
+)
 from llm_d_bench.deploy.providers.model_cache_environment import model_cache_environment
 from llm_d_bench.deploy.providers.storage_mount import resolve_mount
 from llm_d_bench.utils.paths import prism_temp_root
@@ -22,7 +27,12 @@ from llm_d_bench.utils.paths import prism_temp_root
 
 class BaselineVllmAdapter:
     def __init__(
-        self, command_runner, namespace_prefix: str, readiness_timeout_seconds: int, docker_path: Path | None, accelerator: str | None = None
+        self,
+        command_runner,
+        namespace_prefix: str,
+        readiness_timeout_seconds: int,
+        docker_path: Path | None,
+        accelerator: str | None = None,
     ) -> None:
         self._accelerator = accelerator
         self._runner = command_runner
@@ -351,7 +361,11 @@ class BaselineVllmAdapter:
             elif item.get("kind") == "environment":
                 environment.append({"name": item["name"], "value": item["value"]})
         from llm_d_bench.hardware.resolver import configuration_resource_request
-        binding = configuration_resource_request({"hardware_request": parameters.get("hardware_request") or {"request_model": profile.request_model}}, profile)
+
+        binding = configuration_resource_request(
+            {"hardware_request": parameters.get("hardware_request") or {"request_model": profile.request_model}},
+            profile,
+        )
         access_mode = binding.get("access_mode")
         claim_name = f"{claim_request_name(accelerator=accelerator, access_mode=access_mode)}-claim"
         pod_spec: dict[str, Any] = {
@@ -408,7 +422,10 @@ class BaselineVllmAdapter:
         labels = {"app": "vllm", "llm-d.ai/role": "decode", "prism.ai/evaluation-kind": "baseline"}
         gpu_request: dict[str, Any] = {
             "name": claim_request_name(accelerator=accelerator, access_mode=access_mode),
-            "exactly": {"deviceClassName": device_class(accelerator=accelerator, access_mode=access_mode), "count": parameters["tensor_parallel_size"]},
+            "exactly": {
+                "deviceClassName": device_class(accelerator=accelerator, access_mode=access_mode),
+                "count": parameters["tensor_parallel_size"],
+            },
         }
         selectors = gpu_device_selectors(accelerator=accelerator)
         if selectors:
@@ -446,5 +463,7 @@ class BaselineVllmAdapter:
             container["resources"].pop("claims", None)
             if binding.get("resource_name"):
                 container["resources"].setdefault("limits", {})[binding["resource_name"]] = "0"
-            set_accelerator_request(container, None, parameters["tensor_parallel_size"], accelerator=accelerator, access_mode=access_mode)
+            set_accelerator_request(
+                container, None, parameters["tensor_parallel_size"], accelerator=accelerator, access_mode=access_mode
+            )
         return documents

@@ -11,14 +11,22 @@ from llm_d_bench.evaluate import harness_watch as watch
 class HarnessWatchTests(unittest.IsolatedAsyncioTestCase):
     async def test_other_runs_are_ignored_and_current_exit_is_preserved(self):
         def pod(name, label, reason):
-            return {"metadata": {"name": name, "labels": {"app": label}},
-                    "status": {"phase": "Failed", "containerStatuses": [
-                        {"name": "harness", "state": {"terminated": {"exitCode": 137, "reason": reason}}}]}}
+            return {
+                "metadata": {"name": name, "labels": {"app": label}},
+                "status": {
+                    "phase": "Failed",
+                    "containerStatuses": [
+                        {"name": "harness", "state": {"terminated": {"exitCode": 137, "reason": reason}}}
+                    ],
+                },
+            }
 
         async def read(env, *args):
             if "get" in args:
                 self.assertIn("app=lens-harness-current", args)
-                return json.dumps({"items": [pod("old", "other", "Error"), pod("current", "lens-harness-current", "OOMKilled")]})
+                return json.dumps(
+                    {"items": [pod("old", "other", "Error"), pod("current", "lens-harness-current", "OOMKilled")]}
+                )
             self.assertIn("current", args)
             self.assertNotIn("old", args)
             return "Stage 1 started"
@@ -29,7 +37,9 @@ class HarnessWatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(list(run["harness_pods"]), ["current"])
         router = importlib.import_module("llm_d_bench.evaluate.router")
         self.assertIn("host memory budget", router._benchmark_failure_message("harness: OOMKilled (exit 137)", run))
-        self.assertEqual(router._benchmark_failure_message("harness: Error (exit 137)", run), "harness: Error (exit 137)")
+        self.assertEqual(
+            router._benchmark_failure_message("harness: Error (exit 137)", run), "harness: Error (exit 137)"
+        )
 
     async def test_old_network_error_is_not_hidden_by_time_window(self):
         async def read(env, *args):
@@ -57,7 +67,10 @@ class HarnessWatchTests(unittest.IsolatedAsyncioTestCase):
                                 "status": {
                                     "phase": "Failed",
                                     "containerStatuses": [
-                                        {"name": "harness", "state": {"terminated": {"exitCode": 137, "reason": "Error"}}}
+                                        {
+                                            "name": "harness",
+                                            "state": {"terminated": {"exitCode": 137, "reason": "Error"}},
+                                        }
                                     ],
                                 },
                             }
@@ -107,9 +120,7 @@ class HarnessWatchTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch, "_POLL_SECONDS", 0.02),
             self.assertRaisesRegex(RuntimeError, r"harness: Error \(exit 1\)"),
         ):
-            await asyncio.wait_for(
-                watch._poll_harness({}, "ns", {}, lambda _: None, lambda: "now"), 1
-            )
+            await asyncio.wait_for(watch._poll_harness({}, "ns", {}, lambda _: None, lambda: "now"), 1)
 
     def test_container_failure_detected_even_with_running_pod(self):
         self.assertIn(

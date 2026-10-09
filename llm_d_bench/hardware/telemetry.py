@@ -102,51 +102,94 @@ def parse_device_metrics(payload: str | None, profile: HardwareProfile | None) -
     telemetry = profile.telemetry
     devices: dict = {}
     labels_schema = telemetry.label_schema
-    pattern = re.compile(r'^([\w:]+)(?:\{(.*)\})?\s+([-+\deE.]+)(?:\s+\S+)?$')
+    pattern = re.compile(r"^([\w:]+)(?:\{(.*)\})?\s+([-+\deE.]+)(?:\s+\S+)?$")
     for line in payload.splitlines():
         sample = pattern.match(line.strip())
         if not sample:
             continue
-        labels = {key: json.loads('"' + value + '"') for key, value in re.findall(r'(\w+)="((?:\\.|[^"\\])*)"', sample[2] or '')}
+        labels = {
+            key: json.loads('"' + value + '"')
+            for key, value in re.findall(r'(\w+)="((?:\\.|[^"\\])*)"', sample[2] or "")
+        }
         value = float(sample[3])
         if not math.isfinite(value):
             continue
-        identity = next((labels.get(labels_schema.get(key, '')) for key in ('pci', 'uuid', 'fallback_device', 'device') if labels.get(labels_schema.get(key, ''))), None)
+        identity = next(
+            (
+                labels.get(labels_schema.get(key, ""))
+                for key in ("pci", "uuid", "fallback_device", "device")
+                if labels.get(labels_schema.get(key, ""))
+            ),
+            None,
+        )
         if identity is None:
             continue
-        node = labels.get(labels_schema.get('node', ''), '')
+        node = labels.get(labels_schema.get("node", ""), "")
         for semantic, source in telemetry.device_metric_sources.items():
             if source.metric != sample[1] or any(labels.get(key) != expected for key, expected in source.match.items()):
                 continue
-            device = devices.setdefault((node, identity), {'id': identity, 'node': node, 'name': labels.get(labels_schema.get('name', '')), 'metrics': {}})
-            tile = labels.get(labels_schema.get('device', ''), '')
-            device['metrics'].setdefault(semantic, {})[tile] = value * source.scale
+            device = devices.setdefault(
+                (node, identity),
+                {"id": identity, "node": node, "name": labels.get(labels_schema.get("name", "")), "metrics": {}},
+            )
+            tile = labels.get(labels_schema.get("device", ""), "")
+            device["metrics"].setdefault(semantic, {})[tile] = value * source.scale
     results = []
-    fields = {'framebuffer_used': 'memory_used_bytes', 'vram': 'memory_total_bytes', 'power': 'power_watts', 'temperature': 'temperature_celsius'}
+    fields = {
+        "framebuffer_used": "memory_used_bytes",
+        "vram": "memory_total_bytes",
+        "power": "power_watts",
+        "temperature": "temperature_celsius",
+    }
     for device in devices.values():
-        for semantic, tiles in device.pop('metrics').items():
+        for semantic, tiles in device.pop("metrics").items():
             source = telemetry.device_metric_sources[semantic]
-            values = [tiles['']] if '' in tiles else list(tiles.values())
-            value = sum(values) if source.tile_aggregation == 'sum' else max(values) if source.tile_aggregation == 'max' else sum(values) / len(values)
-            if semantic in {'utilization', 'memory_utilization', 'memory_bandwidth_utilization'}:
-                device[semantic + '_ratio'] = value / 100 if source.output_unit == 'percent' else value
+            values = [tiles[""]] if "" in tiles else list(tiles.values())
+            value = (
+                sum(values)
+                if source.tile_aggregation == "sum"
+                else max(values)
+                if source.tile_aggregation == "max"
+                else sum(values) / len(values)
+            )
+            if semantic in {"utilization", "memory_utilization", "memory_bandwidth_utilization"}:
+                device[semantic + "_ratio"] = value / 100 if source.output_unit == "percent" else value
             else:
                 device[fields.get(semantic, semantic)] = value
         results.append(device)
     if not results:
         return None
-    utilization = [item['utilization_ratio'] for item in results if 'utilization_ratio' in item]
-    return {'source': telemetry.provider_id, 'hardware_profile': profile.id, 'captured_at': datetime.now(UTC).isoformat(), 'scope': 'cluster-device', 'device_count': len(results), 'devices': results, 'average_utilization_ratio': sum(utilization) / len(utilization) if utilization else None, 'maximum_utilization_ratio': max(utilization) if utilization else None}
+    utilization = [item["utilization_ratio"] for item in results if "utilization_ratio" in item]
+    return {
+        "source": telemetry.provider_id,
+        "hardware_profile": profile.id,
+        "captured_at": datetime.now(UTC).isoformat(),
+        "scope": "cluster-device",
+        "device_count": len(results),
+        "devices": results,
+        "average_utilization_ratio": sum(utilization) / len(utilization) if utilization else None,
+        "maximum_utilization_ratio": max(utilization) if utilization else None,
+    }
 
 
 def workload_telemetry_profiles(profiles, pods, claims):
     """Select telemetry attribution from actual workload resource access modes."""
     from dataclasses import replace
+
     from .resolver import deployment_mode
 
-    drivers = {result.get("driver") for claim in claims for result in claim.get("status", {}).get("allocation", {}).get("devices", {}).get("results", [])}
-    resources = {key for pod in pods for container in pod.get("spec", {}).get("containers", [])
-                 for group in ("requests", "limits") for key in container.get("resources", {}).get(group, {})}
+    drivers = {
+        result.get("driver")
+        for claim in claims
+        for result in claim.get("status", {}).get("allocation", {}).get("devices", {}).get("results", [])
+    }
+    resources = {
+        key
+        for pod in pods
+        for container in pod.get("spec", {}).get("containers", [])
+        for group in ("requests", "limits")
+        for key in container.get("resources", {}).get(group, {})
+    }
     selected = []
     for profile in profiles:
         if not profile.telemetry:
@@ -154,7 +197,14 @@ def workload_telemetry_profiles(profiles, pods, claims):
         requests = set()
         if drivers.intersection(profile.device_classes):
             requests.add("dra")
-        if any(resource in resources for mode in profile.deployment.modes.values() for resource in mode.get("resource_names", [])) or profile.deployment.resource_name in resources:
+        if (
+            any(
+                resource in resources
+                for mode in profile.deployment.modes.values()
+                for resource in mode.get("resource_names", [])
+            )
+            or profile.deployment.resource_name in resources
+        ):
             requests.add("extended-resource")
         if len(requests) > 1:
             # Do not mix exporter labels with allocated-device attribution.
@@ -162,5 +212,13 @@ def workload_telemetry_profiles(profiles, pods, claims):
         elif requests:
             mode = deployment_mode(profile, request_model=next(iter(requests)))
             settings = profile.telemetry.modes.get(mode.get("access_mode"), {})
-            selected.append(replace(profile, telemetry=replace(profile.telemetry, allocation_join=settings.get("allocation_join", profile.telemetry.allocation_join))))
+            selected.append(
+                replace(
+                    profile,
+                    telemetry=replace(
+                        profile.telemetry,
+                        allocation_join=settings.get("allocation_join", profile.telemetry.allocation_join),
+                    ),
+                )
+            )
     return selected

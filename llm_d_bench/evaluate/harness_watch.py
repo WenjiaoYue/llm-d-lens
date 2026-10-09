@@ -106,8 +106,10 @@ async def _poll_harness(run, namespace, environment, save, now, live=None):
             run.setdefault("harness_pods", {})[name] = {
                 "uid": pod.get("metadata", {}).get("uid"),
                 "phase": pod.get("status", {}).get("phase"),
-                "containers": [{"name": container.get("name"), "state": container.get("state", {})}
-                               for container in pod.get("status", {}).get("containerStatuses", [])],
+                "containers": [
+                    {"name": container.get("name"), "state": container.get("state", {})}
+                    for container in pod.get("status", {}).get("containerStatuses", [])
+                ],
             }
             failure = failure or pod_failure(pod)
             # Even off a cached watch event, fetch logs for a failing pod so the
@@ -193,7 +195,9 @@ async def watch_harness(run, namespace, environment, save, now):
     if not sdk_enabled():
         return await _poll_harness(run, namespace, environment, save, now)
     live = {"pods": {}, "changed": asyncio.Event(), "warning": None}
-    worker = asyncio.create_task(_watch_pods(namespace, environment, live, run.get("harness_pod_label", "llmdbench-harness-launcher")))
+    worker = asyncio.create_task(
+        _watch_pods(namespace, environment, live, run.get("harness_pod_label", "llmdbench-harness-launcher"))
+    )
     try:
         await _poll_harness(run, namespace, environment, save, now, live)
     finally:

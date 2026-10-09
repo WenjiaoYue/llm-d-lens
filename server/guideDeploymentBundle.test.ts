@@ -31,3 +31,51 @@ test('precise bundle pins auxiliary inputs and aligns tokenizer and index with m
 test('invalid router settings cannot be published as valid bundles', async () => {
     await assert.rejects(buildGuideDeploymentBundle({ guide: 'optimized-baseline', source: { commit: 'a'.repeat(40) }, model: 'New/Model', routerValues: '[1,2]', readSource: async () => 'router: {}', renderSource: async () => '' }), /mapping/);
 });
+
+test('router values are read from the single-host topology directory first, falling back to the flat legacy path', async () => {
+    const requested: string[] = [];
+    const bundle = await buildGuideDeploymentBundle({
+        guide: 'tiered-prefix-cache', source: { commit: 'a'.repeat(40) }, model: 'New/Model',
+        readSource: async (path) => {
+            requested.push(path);
+            if (path.includes('/single-host/')) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+            return 'router: {}';
+        },
+        renderSource: async () => '',
+    });
+    assert.ok(requested.includes('guides/tiered-prefix-cache/router/single-host/tiered-prefix-cache-cpu.values.yaml'));
+    assert.ok(requested.includes('guides/tiered-prefix-cache/router/tiered-prefix-cache-cpu.values.yaml'));
+    assert.match(bundle.helm.values[0].checksum, /^sha256:[a-f0-9]{64}$/);
+});
+
+test('router values are read straight from the topology directory when it is present', async () => {
+    const requested: string[] = [];
+    await buildGuideDeploymentBundle({
+        guide: 'tiered-prefix-cache', source: { commit: 'a'.repeat(40) }, model: 'New/Model',
+        readSource: async (path) => { requested.push(path); return 'router: {}'; },
+        renderSource: async () => '',
+    });
+    assert.deepEqual(requested, [
+        'guides/recipes/router/base.values.yaml',
+        'guides/tiered-prefix-cache/router/single-host/tiered-prefix-cache-cpu.values.yaml',
+    ]);
+});
+
+test('router topology comes from the live registry, including plugin profiles', async () => {
+    const { hardwareProfileSnapshot } = await import('./hardwareProfiles.ts');
+    const profiles = hardwareProfileSnapshot();
+    const plugin = { id: 'test-plugin', accelerator_keys: ['test-accelerator'], deployment: { router_topology: 'multi-host' } };
+    profiles.push(plugin);
+    try {
+        const requested: string[] = [];
+        await buildGuideDeploymentBundle({
+            guide: 'tiered-prefix-cache', source: { commit: 'a'.repeat(40) }, model: 'New/Model', accelerator: 'test-accelerator',
+            readSource: async (path) => { requested.push(path); return 'router: {}'; },
+            renderSource: async () => '',
+        });
+        assert.ok(requested.includes('guides/tiered-prefix-cache/router/multi-host/tiered-prefix-cache-cpu.values.yaml'));
+        assert.ok(!requested.some(path => path.includes('/single-host/')));
+    } finally {
+        profiles.splice(profiles.indexOf(plugin), 1);
+    }
+});

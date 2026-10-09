@@ -16,8 +16,11 @@ def xpum_queries(profile=None) -> dict[str, str]:
     """Compatibility name for unaggregated, profile-selected device queries."""
     if not profile or not profile.telemetry:
         return {}
-    return {DEVICE_RESULT_KEYS.get(key, key): source.metric + _selector(source.match)
-            for key, source in profile.telemetry.device_metric_sources.items() if source.metric}
+    return {
+        DEVICE_RESULT_KEYS.get(key, key): source.metric + _selector(source.match)
+        for key, source in profile.telemetry.device_metric_sources.items()
+        if source.metric
+    }
 
 
 def _timestamp(value):
@@ -76,7 +79,11 @@ def device_allocations(pods, claims, slices, namespace, profile=None):
             identity = devices.get((result.get("pool"), result.get("device")))
             # Intel DRA encodes PCI BDF in its device ID. A driver refresh can
             # temporarily remove ResourceSlices while allocated claims survive.
-            if identity is None and settings.get("device_id_pattern") and result.get("pool") == pod.get("spec", {}).get("nodeName"):
+            if (
+                identity is None
+                and settings.get("device_id_pattern")
+                and result.get("pool") == pod.get("spec", {}).get("nodeName")
+            ):
                 pci_id = re.fullmatch(
                     settings["device_id_pattern"],
                     str(result.get("device") or "").lower(),
@@ -100,14 +107,28 @@ def aggregate_xpum(samples, allocations, metric, profile=None):
     if not profile or not profile.telemetry:
         return [], []
     telemetry = profile.telemetry
-    source = next((source for key, source in telemetry.device_metric_sources.items() if DEVICE_RESULT_KEYS.get(key, key) == metric), None)
+    source = next(
+        (
+            source
+            for key, source in telemetry.device_metric_sources.items()
+            if DEVICE_RESULT_KEYS.get(key, key) == metric
+        ),
+        None,
+    )
     if source is None:
         return [], []
     labels_schema = telemetry.label_schema
     cells = defaultdict(dict)
     for sample in samples:
         labels = sample.get("metric") or {}
-        node = next((labels.get(key) for key in telemetry.allocation.get("node_labels", [labels_schema.get("node", "")]) if labels.get(key)), None)
+        node = next(
+            (
+                labels.get(key)
+                for key in telemetry.allocation.get("node_labels", [labels_schema.get("node", "")])
+                if labels.get(key)
+            ),
+            None,
+        )
         identity = (node, str(labels.get(labels_schema.get("pci", "")) or "").lower())
         allocation = allocations.get(identity)
         if not allocation or any(labels.get(key) != value for key, value in source.match.items()):
@@ -126,7 +147,15 @@ def aggregate_xpum(samples, allocations, metric, profile=None):
     deployment = defaultdict(list)
     pods = defaultdict(lambda: defaultdict(list))
     for (identity, timestamp), tiles in cells.items():
-        value = tiles[""] if "" in tiles else sum(tiles.values()) if source.tile_aggregation == "sum" else max(tiles.values()) if source.tile_aggregation == "max" else sum(tiles.values()) / len(tiles)
+        value = (
+            tiles[""]
+            if "" in tiles
+            else sum(tiles.values())
+            if source.tile_aggregation == "sum"
+            else max(tiles.values())
+            if source.tile_aggregation == "max"
+            else sum(tiles.values()) / len(tiles)
+        )
         value *= source.scale
         deployment[timestamp].append(value)
         pods[allocations[identity]["pod"]][timestamp].append(value)
@@ -135,7 +164,14 @@ def aggregate_xpum(samples, allocations, metric, profile=None):
         return {
             "metric": labels,
             "values": [
-                [timestamp, sum(values) if source.aggregation == "sum" else max(values) if source.aggregation == "max" else sum(values) / len(values)]
+                [
+                    timestamp,
+                    sum(values)
+                    if source.aggregation == "sum"
+                    else max(values)
+                    if source.aggregation == "max"
+                    else sum(values) / len(values),
+                ]
                 for timestamp, values in sorted(points.items())
             ],
         }
@@ -165,5 +201,12 @@ def plugin_device_allocations(pods, namespace, profile):
                     match = re.fullmatch(pattern, str(device.get("resourceID", "")).lower())
                     if not match or not match.groupdict().get("pci"):
                         continue
-                    owners[(spec["nodeName"], match.group("pci"))].append({"pod": metadata["name"], "since": max(_timestamp(status.get("startTime")), _timestamp(metadata.get("creationTimestamp")))})
+                    owners[(spec["nodeName"], match.group("pci"))].append(
+                        {
+                            "pod": metadata["name"],
+                            "since": max(
+                                _timestamp(status.get("startTime")), _timestamp(metadata.get("creationTimestamp"))
+                            ),
+                        }
+                    )
     return {identity: values[0] for identity, values in owners.items() if len({value["pod"] for value in values}) == 1}

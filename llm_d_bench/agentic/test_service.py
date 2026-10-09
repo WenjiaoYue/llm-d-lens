@@ -1,7 +1,6 @@
 """Tests for Agentic Deploy's delegation to existing Prism services."""
 
 import asyncio
-from dataclasses import replace
 import json
 from dataclasses import replace
 from types import SimpleNamespace
@@ -605,6 +604,7 @@ def test_create_scores_successful_ai_generated_candidates_without_resource_polic
     )
     monkeypatch.setattr("llm_d_bench.agentic.planner.DeterministicPlanner.score", score_spy)
     monkeypatch.setattr("llm_d_bench.ai_providers.client.httpx.AsyncClient", lambda **_kwargs: Client())
+
     async def validate_provider(_url):
         pass
 
@@ -790,9 +790,12 @@ def test_relaxed_candidate_keeps_unknown_performance_when_estimate_fails(monkeyp
             "Qwen/Qwen3-8B",
             [candidate],
             facts,
-            [{"tool": "search_candidates", "arguments": {
-                "workload": {}, "searchConfig": {"aicSystemName": "h100_sxm"}
-            }}],
+            [
+                {
+                    "tool": "search_candidates",
+                    "arguments": {"workload": {}, "searchConfig": {"aicSystemName": "h100_sxm"}},
+                }
+            ],
         )
     )
 
@@ -854,11 +857,17 @@ def test_create_falls_back_only_when_all_ai_generated_candidates_are_invalid(mon
     )
 
 
-@pytest.mark.parametrize(("error_message", "reason", "detail"), [
-    ('MCP tool "search_candidates" failed: unavailable', "mcp_unavailable", None),
-    ("AI candidate generation returned too many tool calls in round 1: 4 (limit 3)",
-     "invalid_response", "AI candidate generation returned too many tool calls in round 1: 4 (limit 3)"),
-])
+@pytest.mark.parametrize(
+    ("error_message", "reason", "detail"),
+    [
+        ('MCP tool "search_candidates" failed: unavailable', "mcp_unavailable", None),
+        (
+            "AI candidate generation returned too many tool calls in round 1: 4 (limit 3)",
+            "invalid_response",
+            "AI candidate generation returned too many tool calls in round 1: 4 (limit 3)",
+        ),
+    ],
+)
 def test_create_falls_back_when_ai_generator_mcp_is_unavailable(monkeypatch, tmp_path, error_message, reason, detail):
     service = AgenticDeploymentService()
     monkeypatch.setattr(
@@ -1288,5 +1297,7 @@ def test_approve_rejects_a_candidate_when_preflight_capacity_validation_fails(mo
     monkeypatch.setattr("llm_d_bench.agentic.service.resolve_planning_facts", resolve)
     run = asyncio.run(service.create(_request()))
 
-    with pytest.raises(ValueError, match="(fails pre-flight capacity validation|satisfies current resource constraints)"):
+    with pytest.raises(
+        ValueError, match="(fails pre-flight capacity validation|satisfies current resource constraints)"
+    ):
         asyncio.run(service.approve(run.id))

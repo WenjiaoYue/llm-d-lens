@@ -18,9 +18,13 @@ from llm_d_bench.deploy.providers.baseline_vllm import BaselineVllmAdapter
 from llm_d_bench.deploy.providers.configuration_manifest import ConfigurationManifestAdapter
 from llm_d_bench.deploy.providers.guide_adapter import GuideDefinition
 from llm_d_bench.deploy.providers.guide_catalog import GuideCatalog
-from llm_d_bench.deploy.providers.hardware_profile import overlay_variant, guide_overlays, default_guide_variant
+from llm_d_bench.deploy.providers.hardware_profile import (
+    default_guide_variant,
+    guide_overlays,
+    overlay_variant,
+    router_topology,
+)
 from llm_d_bench.deploy.providers.helm_kustomize import HelmKustomizeGuideAdapter, HelmKustomizeGuideDescriptor
-from llm_d_bench.deploy.providers.kubernetes import KubernetesExecutionPolicy, KubernetesGuideAdapter
 from llm_d_bench.deploy.providers.optimized_baseline import (
     OptimizedBaselineGuideAdapter,
     OptimizedBaselineGuidePolicy,
@@ -658,7 +662,7 @@ class RegisteredGuideCommandRunner:
             "--container",
             "modelserver",
             "--",
-            "python",
+            "python3",
             "-c",
             (
                 "from urllib.request import ProxyHandler, build_opener; "
@@ -681,7 +685,9 @@ class RegisteredGuideCommandRunner:
             return "endpoint smoke test timed out"
         output = f"{_redact_output(stdout)}\n{_redact_output(stderr)}"
         self._record(["kubectl", "exec", "endpoint-smoke"], process.returncode, output)
-        return None if process.returncode == 0 else "endpoint smoke test failed"
+        if process.returncode == 0:
+            return None
+        return f"endpoint smoke test failed: {_smoke_test_failure_detail(output)}"
 
     def _validate_kustomize(self, command: list[str]) -> None:
         namespace = (
@@ -773,7 +779,7 @@ class RegisteredGuideCommandRunner:
             namespace,
             "--container",
             "modelserver",
-        ) and command[7:9] == ["--", "python"]
+        ) and command[7:9] == ["--", "python3"]
         if prefix not in allowed and not is_endpoint_smoke:
             raise RuntimeConfigurationError("Kubernetes command operation is outside the registered Guide plan")
 
@@ -867,7 +873,9 @@ def _build_optimized_baseline_provider(settings: RuntimeEnvironment) -> Optimize
     if not guide_root.is_dir():
         guide_root = settings.manifest_root
     sources = guide_overlays(guide_root, "optimized-baseline", accelerator=settings.accelerator)
-    overlay_path = sources.get(".") or sources.get("base") or next(iter(sources.values()), guide_root / "unavailable-overlay")
+    overlay_path = (
+        sources.get(".") or sources.get("base") or next(iter(sources.values()), guide_root / "unavailable-overlay")
+    )
     router_base_values_path = guide_root / "guides" / "recipes" / "router" / "base.values.yaml"
     router_values_path = guide_root / "guides" / "optimized-baseline" / "router" / "optimized-baseline.values.yaml"
     neutral_router_values_path = (
@@ -893,7 +901,7 @@ def _build_optimized_baseline_provider(settings: RuntimeEnvironment) -> Optimize
         content_hash=stable_hash(_tree_checksum(overlay_path) if overlay_path.is_dir() else {}),
         maturity="supported-core",
         capabilities={
-        "variant": f"{overlay_variant(accelerator=settings.accelerator)}-routed-guide",
+            "variant": f"{overlay_variant(accelerator=settings.accelerator)}-routed-guide",
             "endpoint_service_name": "optimized-baseline-epp",
             "endpoint_service_port": 80,
         },
@@ -973,7 +981,11 @@ def _build_baseline_vllm_provider(settings: RuntimeEnvironment) -> BaselineVllmA
         settings.kubeconfig,
     )
     return BaselineVllmAdapter(
-        runner, settings.namespace_prefix, settings.readiness_timeout_seconds, settings.docker_path, accelerator=settings.accelerator
+        runner,
+        settings.namespace_prefix,
+        settings.readiness_timeout_seconds,
+        settings.docker_path,
+        accelerator=settings.accelerator,
     )
 
 
@@ -1016,7 +1028,10 @@ def _build_tiered_prefix_cache_provider(settings: RuntimeEnvironment) -> HelmKus
         router_version=router_chart_version(),
         router_values=(
             guide_root / "guides/recipes/router/base.values.yaml",
-            guide_root / "guides/tiered-prefix-cache/router/tiered-prefix-cache-cpu.values.yaml",
+            guide_root
+            / "guides/tiered-prefix-cache/router"
+            / router_topology(accelerator=settings.accelerator)
+            / "tiered-prefix-cache-cpu.values.yaml",
         ),
         release_name="tiered-prefix-cache",
         readiness_deployments=(f"{overlay_variant(accelerator=settings.accelerator)}-vllm-decode",),
@@ -1158,6 +1173,19 @@ def _argument_after(command: list[str], argument: str) -> str | None:
         return command[command.index(argument) + 1]
     except (ValueError, IndexError):
         return None
+
+
+def _smoke_test_failure_detail(output: str) -> str:
+    """The most specific line of a failed smoke test's captured output.
+
+    The model server often isn't listening yet while it is still loading the
+    model (``connection refused``); embedding that detail lets
+    ``_readiness_is_transient`` tell this startup race apart from a genuine
+    workload failure (for example an assertion on a non-200 response), which
+    a bare ``"endpoint smoke test failed"`` string could not distinguish.
+    """
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    return lines[-1] if lines else "no output captured"
 
 
 def _redact_output(value: bytes) -> str:
