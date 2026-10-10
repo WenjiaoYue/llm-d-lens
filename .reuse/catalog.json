@@ -2,6 +2,15 @@
   "version": 1,
   "entries": [
     {
+      "id": "router-pd-plugin-compatibility",
+      "path": "llm_d_bench/configuration/router_compatibility.py",
+      "symbols": ["compatible_router_values"],
+      "purpose": "Adapt legacy P/D plugin configurations to Router 0.11 while preserving source snapshots and disaggregation decisions.",
+      "boundaries": "Only known Router 0.11 endpoint-picker runtimes are adapted. The profile handler owns former header handling; deciderPluginName maps to deciders.prefill. Conflicting decisions and custom legacy header parameters are rejected. Node planning mirrors this contract; Python validation and bundle installation share this implementation. Original asset checksums are retained and installed derived values are recorded separately.",
+      "examples": ["server/guideDeploymentBundle.ts", "llm_d_bench/configuration/guide_settings.py", "llm_d_bench/deploy/providers/deployment_bundle.py", "llm_d_bench/deploy/providers/pd_disaggregation.py"],
+      "tests": ["llm_d_bench/configuration/test_router_compatibility.py", "server/guideDeploymentBundle.test.ts", "llm_d_bench/deploy/providers/test_pd_disaggregation.py"]
+    },
+    {
       "id": "public-ai-provider-transport",
       "path": "llm_d_bench/ai_providers/service.py",
       "symbols": [

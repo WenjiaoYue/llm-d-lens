@@ -4,6 +4,16 @@
 
 This is a starting point for discovery, not a complete function inventory. Source code, callers, and tests are authoritative. See the [reuse development guide](refactoring/reuse-first-agent-design.md) for usage.
 
+## router-pd-plugin-compatibility
+
+Adapt legacy P/D plugin configurations to Router 0.11 while preserving source snapshots and disaggregation decisions.
+
+- Entry point: [llm_d_bench/configuration/router_compatibility.py](../llm_d_bench/configuration/router_compatibility.py)
+- Symbols: `compatible_router_values`
+- Boundaries: Only known Router 0.11 endpoint-picker runtimes are adapted. The profile handler owns former header handling; deciderPluginName maps to deciders.prefill. Conflicting decisions and custom legacy header parameters are rejected. Node planning mirrors this contract; Python validation and bundle installation share this implementation. Original asset checksums are retained and installed derived values are recorded separately.
+- Examples: [server/guideDeploymentBundle.ts](../server/guideDeploymentBundle.ts), [llm_d_bench/configuration/guide_settings.py](../llm_d_bench/configuration/guide_settings.py), [llm_d_bench/deploy/providers/deployment_bundle.py](../llm_d_bench/deploy/providers/deployment_bundle.py), [llm_d_bench/deploy/providers/pd_disaggregation.py](../llm_d_bench/deploy/providers/pd_disaggregation.py)
+- Tests: [llm_d_bench/configuration/test_router_compatibility.py](../llm_d_bench/configuration/test_router_compatibility.py), [server/guideDeploymentBundle.test.ts](../server/guideDeploymentBundle.test.ts), [llm_d_bench/deploy/providers/test_pd_disaggregation.py](../llm_d_bench/deploy/providers/test_pd_disaggregation.py)
+
 ## public-ai-provider-transport
 
 Enforce public HTTPS destinations for external AI providers and pin outbound requests to validated IP addresses by default; explicitly trusted egress proxies may receive the original hostname.

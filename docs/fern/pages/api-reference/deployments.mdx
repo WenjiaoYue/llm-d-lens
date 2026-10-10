@@ -136,6 +136,25 @@ the backend so support checks and searches use the same SDK release.
 
 Start a deployment run from one or more already-rendered deployable configurations.
 
+For Router 0.11 endpoint-picker images, planning and installation adapt legacy P/D
+plugin settings: `disagg-headers-handler` is handled by `disagg-profile-handler`,
+and `parameters.deciderPluginName` becomes `parameters.deciders.prefill`. This also
+applies when retrying saved bundles. Source assets and their checksums remain
+unchanged; deployment evidence records the derived values actually installed.
+Conflicting old/new deciders and custom legacy header parameters are rejected.
+Other Router versions and custom image repositories retain their own settings.
+
+The same pure Python transformation is shared by configuration validation and
+`llm_d_bench.deploy.providers.deployment_bundle.install_deployment_bundle`:
+
+```python
+import yaml
+from llm_d_bench.configuration.router_compatibility import compatible_router_values
+
+values = yaml.safe_load(saved_router_values_yaml)
+effective_values = compatible_router_values(values, chart_version="v0.11.0")
+```
+
 <Tabs>
   <Tab title="REST API">
     **`POST /api/v1/deployments/runs`**

@@ -3,6 +3,13 @@ title: Deployments
 description: Plan, approve and execute inference deployments across clusters.
 ---
 
+P/D deployments using Router 0.11 automatically adapt legacy plugin settings when
+created or retried. The original configuration is retained, and deployment
+diagnostics record the effective Router values. A legacy `disagg-headers-handler`
+entry is replaced by the profile handler's built-in header handling; the saved
+prefill/decode decision is preserved. A conflicting old and new decider setting
+must be corrected before deployment.
+
 ## Hardware profiles and guide variants
 
 Deployment rendering resolves hardware through the profile registry. The selected

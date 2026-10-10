@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from .manifest_facts import _invocation_tokens, _option
+from .router_compatibility import compatible_router_values
 
 
 def _rdma_device_class(content: dict) -> str | None:
@@ -134,6 +135,8 @@ def validate_guide_settings(content: dict[str, Any], manifest: str, guide: str) 
         except (KeyError, StopIteration, TypeError) as error:
             raise ValueError("Precise router plugins are incomplete") from error
     effective = _mapping(layers["router-effective.yaml"])
+    expected = compatible_router_values(expected, bundle["helm"]["version"])
+    effective = compatible_router_values(effective, bundle["helm"]["version"])
     # Nested plugin YAML may be serialized differently by js-yaml and PyYAML.
     for values in (expected, effective):
         custom = values.get("router", {}).get("epp", {}).get("pluginsCustomConfig", {})

@@ -13,7 +13,8 @@ from typing import Any
 import yaml
 
 from llm_d_bench.common.hashing import stable_hash
-from llm_d_bench.deploy.data_plane import router_data_plane_args, router_data_plane_effective_values
+from llm_d_bench.configuration.router_compatibility import compatible_router_values
+from llm_d_bench.deploy.data_plane import _deep_merge, router_data_plane_args, router_data_plane_effective_values
 from llm_d_bench.deploy.providers.deployment_bundle import (
     install_deployment_bundle,
     subprocess_bundle_runner,
@@ -253,6 +254,14 @@ class PdDisaggregationAdapter:
         else:
             base_values = self._guide_root / "guides/recipes/router/base.values.yaml"
             pd_values = self._guide_root / "guides/pd-disaggregation/router/pd-disaggregation.values.yaml"
+            values = _deep_merge(
+                yaml.safe_load(base_values.read_text(encoding="utf-8")),
+                yaml.safe_load(pd_values.read_text(encoding="utf-8")),
+            )
+            compatible = compatible_router_values(values, router_chart_version())
+            if compatible != values:
+                pd_values = Path(artifact.manifest_ref).parent / "router-compatible-pd.yaml"
+                pd_values.write_text(yaml.safe_dump(compatible, sort_keys=False), encoding="utf-8")
             helm = await asyncio.create_subprocess_exec(
                 str(self._helm_path),
                 "upgrade",

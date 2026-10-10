@@ -5,6 +5,31 @@ import test from 'node:test';
 import yaml from 'js-yaml';
 import { buildGuideDeploymentBundle } from './guideDeploymentBundle.ts';
 
+test('P/D bundle adapts legacy plugins for Router 0.11 and retains original source layers', async () => {
+    const legacy = { plugins: [
+        { type: 'disagg-headers-handler' },
+        { type: 'always-disagg-pd-decider', name: 'force-prefill' },
+        { type: 'disagg-profile-handler', parameters: { deciderPluginName: 'force-prefill' } },
+        { type: 'prefill-filter' },
+    ], schedulingProfiles: [{ name: 'prefill', plugins: [{ pluginRef: 'prefill-filter' }] }] };
+    const original = yaml.dump({ router: { epp: { pluginsConfigFile: 'pd.yaml', pluginsCustomConfig: { 'pd.yaml': yaml.dump(legacy) } } } });
+    const build = (routerValues = '') => buildGuideDeploymentBundle({
+        guide: 'pd-disaggregation', source: { commit: 'a'.repeat(40) }, model: 'Test/Model', routerValues,
+        readSource: async path => path.includes('base.values') ? 'router: {}' : original,
+        renderSource: async () => '',
+    });
+    const bundle = await build();
+    assert.equal(bundle.helm.values[1].content, original);
+    const effective = yaml.load(bundle.helm.values.at(-1)!.content);
+    const config = yaml.load(effective.router.epp.pluginsCustomConfig['pd.yaml']);
+    assert.deepEqual(config.plugins.map(p => p.type), ['always-disagg-pd-decider', 'disagg-profile-handler', 'prefill-filter']);
+    assert.deepEqual(config.plugins[1].parameters, { deciders: { prefill: 'force-prefill' } });
+    assert.deepEqual(config.schedulingProfiles, legacy.schedulingProfiles);
+    const older = await build('router:\n  epp:\n    image:\n      tag: v0.10.0');
+    const olderValues = yaml.load(older.helm.values.at(-1)!.content);
+    assert.deepEqual(yaml.load(olderValues.router.epp.pluginsCustomConfig['pd.yaml']), legacy);
+});
+
 test('precise bundle pins auxiliary inputs and aligns tokenizer and index with model server', async () => {
     const source = { commit: 'a'.repeat(40), repository: 'llm-d/llm-d' };
     const values = yaml.dump({ router: { epp: { pluginsConfigFile: 'plugins.yaml', pluginsCustomConfig: { 'plugins.yaml': yaml.dump({ plugins: [

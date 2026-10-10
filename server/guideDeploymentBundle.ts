@@ -47,6 +47,42 @@ function merge(base: RecordValue, overlay: RecordValue): RecordValue {
     return base;
 }
 
+/* Mirror configuration/router_compatibility.py for the planning boundary.
+ * Original source layers remain intact; only effective values are adapted. */
+function adaptRouterPlugins(values: RecordValue): void {
+    const epp = values.router?.epp;
+    const image = epp?.image || {};
+    if (!mapping(image) || (image.repository || 'llm-d-router-endpoint-picker') !== 'llm-d-router-endpoint-picker') return;
+    if (!/^v?0\.11\.\d+$/.test(String(image.tag || ROUTER_CHART_VERSION))) return;
+    const key = epp?.pluginsConfigFile;
+    if (!key || typeof epp.pluginsCustomConfig?.[key] !== 'string') return;
+    const document = valuesYaml(epp.pluginsCustomConfig[key]);
+    if (!Array.isArray(document.plugins)) throw new Error('Router plugin configuration requires a plugins list');
+    const handlers = document.plugins.filter(p => p.type === 'disagg-profile-handler');
+    const headers = document.plugins.filter(p => p.type === 'disagg-headers-handler');
+    if (headers.length && (handlers.length !== 1 || headers.some(p => p.parameters && Object.keys(p.parameters).length))) {
+        throw new Error('Legacy disaggregation headers require one profile handler and no custom header parameters');
+    }
+    let changed = headers.length > 0;
+    for (const handler of handlers) {
+        const parameters = handler.parameters || {};
+        if (!Object.hasOwn(parameters, 'deciderPluginName')) continue;
+        const legacy = parameters.deciderPluginName;
+        parameters.deciders ||= {};
+        if (Object.hasOwn(parameters.deciders, 'prefill') && parameters.deciders.prefill !== legacy) {
+            throw new Error('Conflicting legacy and current P/D deciders');
+        }
+        parameters.deciders.prefill = legacy;
+        delete parameters.deciderPluginName;
+        handler.parameters = parameters;
+        changed = true;
+    }
+    if (changed) {
+        document.plugins = document.plugins.filter(p => p.type !== 'disagg-headers-handler');
+        epp.pluginsCustomConfig[key] = yaml.dump(document, { lineWidth: -1 });
+    }
+}
+
 /* Guides may publish their router values flat (`router/<file>`) or, on llm-d
  * versions/topologies that split per-topology, under a topology directory
  * (`router/<topology>/<file>`). Try the topology path first and fall back to
@@ -92,6 +128,7 @@ export async function buildGuideDeploymentBundle({ guide, source, model, blockSi
         epp.pluginsCustomConfig[key] = yaml.dump(plugins, { lineWidth: -1 });
         if (Number(epp.replicas ?? 1) !== 1) throw new Error('Precise token-load routing currently requires one EPP replica.');
     }
+    adaptRouterPlugins(values);
     const resources: ReturnType<typeof asset>[] = [];
     let calibration: ReturnType<typeof asset>[] | undefined;
     if (guide === 'precise-prefix-cache-routing') {
