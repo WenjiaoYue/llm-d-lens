@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from llm_d_bench.common.hashing import stable_hash
+from llm_d_bench.deploy.data_plane import GATEWAY_MODE_VALUES_PATH, PLAINTEXT_EPP_VALUES_PATH
 from llm_d_bench.deploy.providers.baseline_vllm import BaselineVllmAdapter
 from llm_d_bench.deploy.providers.configuration_manifest import ConfigurationManifestAdapter
 from llm_d_bench.deploy.providers.guide_adapter import GuideDefinition
@@ -818,7 +819,12 @@ class RegisteredGuideCommandRunner:
             str(self._guide.neutral_router_values_path),
         ]
         uninstall = ["helm", "uninstall", self._guide.router_release_name or "", "--namespace", namespace]
-        if command not in (install, neutral_install, uninstall):
+        plaintext = ["--values", str(PLAINTEXT_EPP_VALUES_PATH)]
+        gateway = ["--values", str(GATEWAY_MODE_VALUES_PATH)]
+        suffixes = ([], plaintext, [*plaintext, *gateway])
+        if command != uninstall and not any(
+            command == [*base, *suffix] for base in (install, neutral_install) for suffix in suffixes
+        ):
             raise RuntimeConfigurationError("Helm command operation is outside the registered Guide plan")
 
     def _take_kubectl_evidence(self) -> list[CommandEvidence]:
@@ -1096,8 +1102,10 @@ def build_namespace_factory(namespace_prefix: str):
         tensor_parallelism = int(decode.get("tensorParallelSize", prefill.get("tensorParallelSize", 1)))
         timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
         if requested_prefix is not None:
-            if not isinstance(requested_prefix, str) or not re.fullmatch(
-                r"[a-z0-9]+(?:-[a-z0-9]+)*-", requested_prefix
+            if (
+                not isinstance(requested_prefix, str)
+                or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*-", requested_prefix)
+                or not requested_prefix.startswith(namespace_prefix)
             ):
                 raise RuntimeConfigurationError("deployment namespace policy prefix is invalid")
             suffix = f"{replicas}-{tensor_parallelism}-{timestamp}"
@@ -1185,6 +1193,8 @@ def _smoke_test_failure_detail(output: str) -> str:
     a bare ``"endpoint smoke test failed"`` string could not distinguish.
     """
     lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if len(lines) > 1 and re.fullmatch(r"command terminated with exit code \d+", lines[-1]):
+        lines.pop()
     return lines[-1] if lines else "no output captured"
 
 

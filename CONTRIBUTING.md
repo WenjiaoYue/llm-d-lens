@@ -41,7 +41,7 @@ We are committed to accepting functional bug fixes that meet our quality standar
 
 #### Controversial Changes
 
-More controversial design changes (e.g., breaking changes to workload profiles, load generators, run rules or data collection and analisys tools) are evaluated on a case-by-case basis under the subjective judgment of core maintainers.
+More controversial design changes (e.g., breaking changes to workload profiles, load generators, run rules or data collection and analysis tools) are evaluated on a case-by-case basis under the subjective judgment of core maintainers.
 
 ## Submitting a Pull Request
 
@@ -61,6 +61,8 @@ Use `-- --text-file /tmp/pr-title.txt --text-file /tmp/pr-body.md` to include
 PR metadata in the check. The scanner reports Han characters in Git-visible text
 and filenames; it is not a natural-language classifier for every other language.
 Do not replace text with escapes or remove useful content to bypass the policy.
+The one exception is `docs/docusaurus/i18n/` (the bilingual docs site's
+Chinese translations), which the scanner skips on purpose.
 
 ## Development and validation
 

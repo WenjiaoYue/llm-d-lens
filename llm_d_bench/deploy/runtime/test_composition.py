@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from llm_d_bench.configuration.models import ModelSecretConfiguration
+from llm_d_bench.deploy.data_plane import GATEWAY_MODE_VALUES_PATH, PLAINTEXT_EPP_VALUES_PATH
 from llm_d_bench.deploy.runtime.composition import (
     RegisteredGuideCommandRunner,
     RegisteredGuideRuntime,
@@ -217,7 +218,11 @@ def test_registered_guide_allows_idempotent_namespace_cleanup(tmp_path: Path):
     )
 
 
-def test_namespace_factory_uses_the_request_policy_prefix():
+@pytest.mark.parametrize(
+    ("requested_prefix", "expected_prefix"),
+    [("llmd-team-", "llmd-team-2-4-"), (None, "llmd-baseline-vllm-2-4-")],
+)
+def test_namespace_factory_uses_only_allowed_request_prefix(requested_prefix, expected_prefix):
     request = type(
         "Request",
         (),
@@ -227,7 +232,7 @@ def test_namespace_factory_uses_the_request_policy_prefix():
                 "Policy",
                 (),
                 {
-                    "value": {"namespace_policy": {"prefix": "standard-"}},
+                    "value": {"namespace_policy": {"prefix": requested_prefix}},
                 },
             )(),
             "configuration_artifacts": [
@@ -244,8 +249,76 @@ def test_namespace_factory_uses_the_request_policy_prefix():
 
     namespace = build_namespace_factory("llmd-")(request)
 
-    assert namespace.startswith("standard-2-4-")
-    assert not namespace.startswith("llmd-")
+    assert namespace.startswith(expected_prefix)
+
+
+@pytest.mark.parametrize("requested_prefix", ["standard-", "other-llmd-", "LLMD-team-"])
+def test_namespace_factory_rejects_prefix_outside_allowlist(requested_prefix):
+    request = type(
+        "Request",
+        (),
+        {
+            "deployment_policy": type("Policy", (), {"value": {"namespace_policy": {"prefix": requested_prefix}}})(),
+            "configuration_artifacts": [type("Artifact", (), {"content": "{}"})()],
+        },
+    )()
+
+    with pytest.raises(RuntimeConfigurationError, match="namespace policy prefix is invalid"):
+        build_namespace_factory("llmd-")(request)
+
+
+def test_registered_guide_helm_allows_only_planned_data_plane_values(tmp_path: Path):
+    namespace = "llm-d-bench-router"
+    guide = RegisteredGuideRuntime(
+        guide_id="optimized-baseline",
+        source_ref="main",
+        content_hash="test",
+        maturity="supported",
+        manifest_path=tmp_path / "kustomization.yaml",
+        router_chart="oci://charts/router",
+        router_chart_version="1.0.0",
+        router_release_name="optimized-baseline",
+        router_base_values_path=tmp_path / "base.yaml",
+        router_values_path=tmp_path / "optimized.yaml",
+        neutral_router_values_path=tmp_path / "neutral.yaml",
+    )
+    runner = RegisteredGuideCommandRunner(
+        kubectl_path=tmp_path / "kubectl",
+        helm_path=tmp_path / "helm",
+        namespace_prefix="llm-d-bench-",
+        guide=guide,
+        timeout_seconds=30,
+        rendered_overlay_root=tmp_path,
+    )
+    install = [
+        "helm",
+        "upgrade",
+        "--install",
+        guide.router_release_name,
+        guide.router_chart,
+        "--namespace",
+        namespace,
+        "--version",
+        guide.router_chart_version,
+        "--values",
+        str(guide.router_base_values_path),
+        "--values",
+        str(guide.router_values_path),
+    ]
+    plaintext = ["--values", str(PLAINTEXT_EPP_VALUES_PATH)]
+    gateway = ["--values", str(GATEWAY_MODE_VALUES_PATH)]
+
+    runner._validate_helm(install)
+    runner._validate_helm([*install, *plaintext])
+    runner._validate_helm([*install, *plaintext, *gateway])
+    neutral_install = [*install[:-1], str(guide.neutral_router_values_path)]
+    runner._validate_helm([*neutral_install, *plaintext])
+    with pytest.raises(RuntimeConfigurationError, match="outside the registered Guide plan"):
+        runner._validate_helm([*install, *gateway])
+    with pytest.raises(RuntimeConfigurationError, match="outside the registered Guide plan"):
+        runner._validate_helm([*install, "--set", "router.enabled=false"])
+    with pytest.raises(RuntimeConfigurationError, match="outside the registered Guide plan"):
+        runner._validate_helm([*install, "--values", str(tmp_path / "unregistered.yaml")])
 
 
 @pytest.mark.parametrize(
@@ -337,6 +410,7 @@ async def test_smoke_test_failure_reason_preserves_connectivity_detail(tmp_path,
     from unittest.mock import AsyncMock
 
     from llm_d_bench.deploy.runtime import composition
+    from llm_d_bench.deploy.service import _readiness_is_transient
 
     namespace = "llm-d-bench-smoke-detail"
     runner = RegisteredGuideCommandRunner(
@@ -367,6 +441,16 @@ async def test_smoke_test_failure_reason_preserves_connectivity_detail(tmp_path,
     assert reason is not None
     assert "connection refused" in reason.lower()
 
+    process.communicate.return_value = (
+        b"",
+        b"urllib.error.URLError: <urlopen error [Errno 111] Connection refused>\ncommand terminated with exit code 1\n",
+    )
+    reason = await runner.endpoint_smoke_test(namespace, f"http://epp.{namespace}.svc:80")
+    assert reason is not None
+    assert "connection refused" in reason.lower()
+    assert _readiness_is_transient([reason])
+
     process.communicate.return_value = (b"", b"AssertionError\n")
     reason = await runner.endpoint_smoke_test(namespace, f"http://epp.{namespace}.svc:80")
     assert reason == "endpoint smoke test failed: AssertionError"
+    assert not _readiness_is_transient([reason])
