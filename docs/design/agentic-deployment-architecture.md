@@ -130,7 +130,7 @@ The UI is only the input and review surface for the workflow above. The entry po
 
 **Current implementation**
 
-`llm_d_bench.agentic.facts.resolve_planning_facts()`:
+`llm_d_lens.agentic.facts.resolve_planning_facts()`:
 
 1. Validates and reads the active cluster session;
 2. Calls cluster overview to obtain per-GPU VRAM, free GPU count, and available CPU buffer;
@@ -173,7 +173,7 @@ generate candidates.
 
 **Current implementation**
 
-`llm_d_bench.agentic.planner.DeterministicPlanner` generates only registered providers that can be
+`llm_d_lens.agentic.planner.DeterministicPlanner` generates only registered providers that can be
 mapped to Deploy:
 
 - `baseline-vllm`

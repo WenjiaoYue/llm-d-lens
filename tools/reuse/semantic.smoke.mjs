@@ -30,8 +30,8 @@ test('repository search finds the shared JSON HTTP client for an English require
   ], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
   const result = JSON.parse(output);
   assert.equal(result.mode, 'local-semantic');
-  assert.equal(result.capabilities[0].path, 'src/api/httpClient.js');
-  assert.ok(result.results.some(row => row.path === 'src/api/httpClient.js' && row.symbol === 'postJson'));
+  assert.equal(result.capabilities[0].path, 'apps/frontend/src/api/httpClient.js');
+  assert.ok(result.results.some(row => row.path === 'apps/frontend/src/api/httpClient.js' && row.symbol === 'postJson'));
 });
 
 // Real repository samples measure file recall separately from chunk ranking.

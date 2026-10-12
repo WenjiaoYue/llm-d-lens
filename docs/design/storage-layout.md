@@ -17,7 +17,7 @@ The scope covers unstructured content and its related configuration, task record
 | Deployment logs and Kubernetes events | During deployment execution, readiness checks, and failure diagnosis | `D/deploy/logs/<executionID>/entries.jsonl`, storing collected log fragments |
 | Deployment tasks and execution states | When deployments are created and state changes | `D/deploy/{runs,executions}/`, one JSON file per record |
 | Evaluation inputs, raw logs, metrics, and charts | At evaluation start, warm-up, runs for each parameter group, and result aggregation | `C/prism-evaluate-results/<runID>/`; contains subdirectories such as `warmup/` and `matrix-<index>/` |
-| Evaluation workflows, run records, and log tails | When evaluation tasks are created and during execution | `~/.llm_d_bench/run_store/evaluate/{runs,workflows}/`; old development scripts use `private/run_store/evaluate/` inside the repo |
+| Evaluation workflows, run records, and log tails | When evaluation tasks are created and during execution | `~/.llm_d_lens/run_store/evaluate/{runs,workflows}/`; old development scripts use `private/run_store/evaluate/` inside the repo |
 | Simulation tasks, request details, summaries, and process logs | When simulation tasks are created, requests are replayed, and results are organized | `C/simulations/<taskID>/task.json` and `artifacts/<runner tool>/` |
 | Trace request datasets and indexes | When datasets are downloaded or generated and replay is prepared | Datasets and timeline indexes in `C/datasets/`; converted request files in the simulation task directory |
 | KV cache access records | Generated with inference requests when collection is enabled and aggregated at evaluation end | `/tmp/prism-kv-trace/` in the inference-process environment; aggregated files enter the evaluation result directory |
@@ -42,7 +42,7 @@ The original paths for storage-volume registration, AI Provider configuration, a
 | `C/simulations/` | 22 | 2.60 MiB |
 | `C/datasets/` | 3 | 26.61 MiB |
 | Repo `private/run_store/` | 47 | 8.56 MiB |
-| `~/.llm_d_bench/run_store/` | 12 | 6.82 MiB |
+| `~/.llm_d_lens/run_store/` | 12 | 6.82 MiB |
 | Repo `.dev-logs/` | 9 | 1.10 MiB |
 | Repo `.cache/reuse/`, including retrieval models | 18 | 135.59 MiB |
 
@@ -170,17 +170,17 @@ Source downloads preserve the existing repository, version, and deployment-scena
 | External resource locations | Source code and tools use a unified cache root; model weights use the selected storage volume | Repository download, Guide, Model Cache |
 | Offline management tools | Historical file copying, manifest reconstruction, expiration-candidate statistics; preview by default, copy requires explicit execution | `utils/storage_admin.py` |
 
-All `utils/` entry points in Python are under `llm_d_bench/`.
+All `utils/` entry points in Python are under `llm_d_lens/`.
 
 ### Shared Entry Points and Integration Code
 
 | Capability | File path | Integration scope |
 | --- | --- | --- |
-| Python path selection | [llm_d_bench/utils/paths.py](../../llm_d_bench/utils/paths.py) | Persistent directories, cache, and temporary directories for Python business modules |
+| Python path selection | [llm_d_lens/utils/paths.py](../../llm_d_lens/utils/paths.py) | Persistent directories, cache, and temporary directories for Python business modules |
 | Node path selection | [server/storagePaths.ts](../../server/storagePaths.ts) | Cluster sessions, Guide planning cache |
 | Startup environment | [scripts/storage-env.sh](../../scripts/storage-env.sh) | Root-directory configuration for development and installation startup scripts |
-| File manifests and identifiers | [llm_d_bench/utils/artifact_store.py](../../llm_d_bench/utils/artifact_store.py) | Configuration, deployment, evaluation, simulation, dataset, and monitoring results |
-| Migration and retention checks | [llm_d_bench/utils/storage_admin.py](../../llm_d_bench/utils/storage_admin.py) | Offline copying, manifest reconstruction, cleanup-candidate statistics |
+| File manifests and identifiers | [llm_d_lens/utils/artifact_store.py](../../llm_d_lens/utils/artifact_store.py) | Configuration, deployment, evaluation, simulation, dataset, and monitoring results |
+| Migration and retention checks | [llm_d_lens/utils/storage_admin.py](../../llm_d_lens/utils/storage_admin.py) | Offline copying, manifest reconstruction, cleanup-candidate statistics |
 | Container storage | [Dockerfile](../../Dockerfile) | Service root directories and volume configuration |
 
 ### Content Kept Under Separate Management

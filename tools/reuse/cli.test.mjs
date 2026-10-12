@@ -349,13 +349,13 @@ test('review-status exposes live gaps without claiming completion or writing a f
   assert.equal(run('review', '--task', 'progress').status, 0);
   const taskPath = join(root, '.cache/reuse/tasks/progress.json');
   const before = readFileSync(taskPath, 'utf8');
-  put('llm_d_bench/new_domain/service.py', 'def load(): return 1\n');
+  put('llm_d_lens/new_domain/service.py', 'def load(): return 1\n');
   let result = run('review-status', '--task', 'progress', '--json');
   assert.equal(result.status, 1, result.stderr);
   let status = JSON.parse(result.stdout);
   assert.equal(status.completionVerified, false);
   assert.equal(status.coverage.mode, 'repository');
-  assert.ok(status.coverage.errors.some(x => x.includes('Unassigned review file: llm_d_bench/new_domain/service.py')));
+  assert.ok(status.coverage.errors.some(x => x.includes('Unassigned review file: llm_d_lens/new_domain/service.py')));
   assert.equal(readFileSync(taskPath, 'utf8'), before, 'progress must not mark files reviewed');
   assert.throws(() => readFileSync(join(root, '.cache/reuse/progress-review.json')), /ENOENT/);
   put('src/a.js', 'export function load() { return 2; }');

@@ -10,6 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.cache
+.dev-tools
+apps/docs/build
+apps/frontend/dist
 *.local
 .env.local
 .env

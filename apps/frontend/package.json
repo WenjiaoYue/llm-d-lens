@@ -1,0 +1,35 @@
+{
+  "name": "@repo/frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host",
+    "test": "node --import tsx --test $(find src -type f \\( -name '*.test.js' -o -name '*.test.jsx' -o -name '*.test.ts' \\))",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
+    "@repo/shared": "*",
+    "@tailwindcss/vite": "^4.1.17",
+    "clsx": "^2.1.1",
+    "echarts": "^6.1.0",
+    "lucide-react": "^0.554.0",
+    "opencc-js": "^1.4.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "recharts": "^3.4.1",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4",
+    "vite": "^7.3.6"
+  }
+}

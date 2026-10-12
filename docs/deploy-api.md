@@ -36,8 +36,8 @@ The BFF resolves its v1 upstream in this order:
 4. `http://127.0.0.1:8081`
 
 By default, local benchmark reports are read from
-`/root/.llm_d_bench/run_store`, and Cluster Overview reads its server list from
-`/root/.llm_d_bench/run_store/server_list.json`. Set `PRISM_LOCAL_DIR` or
+`/root/.llm_d_lens/run_store`, and Cluster Overview reads its server list from
+`/root/.llm_d_lens/run_store/server_list.json`. Set `PRISM_LOCAL_DIR` or
 `LLM_D_BENCH_SERVER_LIST` only to override those locations.
 
 `LLM_D_ROOT` is optional on this host: its default is `/root/wenxin/llm-d` for
@@ -46,8 +46,8 @@ optional when the Python API listens on its default `http://127.0.0.1:8081`;
 set it only to use a different upstream.
 
 Evaluate workflow and benchmark records are stored by default under
-`/root/.llm_d_bench/run_store/evaluate`. Python Cluster sessions share
-`/root/.llm_d_bench/run_store/cluster_sessions` and call the local BFF at
+`/root/.llm_d_lens/run_store/evaluate`. Python Cluster sessions share
+`/root/.llm_d_lens/run_store/cluster_sessions` and call the local BFF at
 `http://127.0.0.1:3000` unless their corresponding environment variables are
 set.
 
@@ -135,7 +135,7 @@ comparison.
 These are the APIs used by the current Optimization Workspace for configuration
 driven, provider-backed deployments. They persist runs under
 `~/.llm-d-bench/deploy/{runs,executions}` by default. Existing records in
-`<current working directory>/.llm_d_bench/deploy_store` are migrated on first
+`<current working directory>/.llm_d_lens/deploy_store` are migrated on first
 use when no explicit store path is supplied.
 
 All requests and responses use JSON. Send `Content-Type: application/json` for

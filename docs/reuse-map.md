@@ -8,711 +8,721 @@ This is a starting point for discovery, not a complete function inventory. Sourc
 
 Enforce public HTTPS destinations for external AI providers and pin outbound requests to validated IP addresses by default; explicitly trusted egress proxies may receive the original hostname.
 
-- Entry point: [llm_d_bench/ai_providers/service.py](../llm_d_bench/ai_providers/service.py)
+- Entry point: [apps/backend/src/llm_d_lens/ai_providers/service.py](../apps/backend/src/llm_d_lens/ai_providers/service.py)
 - Symbols: `validate_provider_endpoint`, `public_provider_client`, `PublicProviderTransport`
 - Boundaries: AI provider domain only. Rejects private or mixed DNS answers, URL credentials, query strings, fragments and traversal. Preserves Host and TLS SNI, and does not follow redirects. LENS_TRUSTED_AI_PROVIDER_PROXY must exactly match the active HTTPS proxy and requires a proxy that rejects non-public resolution results and pins the validated IP for each CONNECT tunnel. Without that match, or when bypassing the proxy, the application pins the IP. Callers keep their own error mapping and provider payload semantics.
-- Examples: [llm_d_bench/ai_providers/client.py](../llm_d_bench/ai_providers/client.py), [llm_d_bench/ai_providers/router.py](../llm_d_bench/ai_providers/router.py)
-- Tests: [llm_d_bench/ai_providers/test_service.py](../llm_d_bench/ai_providers/test_service.py), [llm_d_bench/ai_providers/test_client.py](../llm_d_bench/ai_providers/test_client.py)
+- Examples: [apps/backend/src/llm_d_lens/ai_providers/client.py](../apps/backend/src/llm_d_lens/ai_providers/client.py), [apps/backend/src/llm_d_lens/ai_providers/router.py](../apps/backend/src/llm_d_lens/ai_providers/router.py)
+- Tests: [apps/backend/tests/unit/ai_providers/test_service.py](../apps/backend/tests/unit/ai_providers/test_service.py), [apps/backend/tests/unit/ai_providers/test_client.py](../apps/backend/tests/unit/ai_providers/test_client.py)
 
 ## deploy-hardware-profile
 
 Resolve the deployment hardware identity (DRA device class, claim request name, overlay variant, accelerator support) from the registered profile, and return the profile-owned model-server runtime image (repository and version) with normalization of stored managed images, using literal fallbacks. Also resolves router_topology (the per-guide router-values directory some Guides split by topology, e.g. single-host vs a multi-host LeaderWorkerSet), defaulting to single-host for every profile that does not set it.
 
-- Entry point: [llm_d_bench/deploy/providers/hardware_profile.py](../llm_d_bench/deploy/providers/hardware_profile.py)
+- Entry point: [apps/backend/src/llm_d_lens/deploy/providers/hardware_profile.py](../apps/backend/src/llm_d_lens/deploy/providers/hardware_profile.py)
 - Symbols: `active_profile`, `device_class`, `claim_request_name`, `overlay_variant`, `accelerator_supported`, `request_model`, `requires_dra_claim`, `resource_name`, `runtime_image`, `pin_runtime_image`, `set_accelerator_request`, `router_topology`
-- Boundaries: Deploy rendering only. Profile semantics live in llm_d_bench.hardware; this module picks the deploy accelerator key ('xpu') and exposes fallbacks for discovery failures. Model-server image repository and version are data in the profile, never hardcoded here. Do not add guide-specific logic here.
-- Examples: [llm_d_bench/deploy/providers/baseline_vllm.py](../llm_d_bench/deploy/providers/baseline_vllm.py), [llm_d_bench/deploy/providers/pd_disaggregation.py](../llm_d_bench/deploy/providers/pd_disaggregation.py), [llm_d_bench/deploy/providers/gpu_selection.py](../llm_d_bench/deploy/providers/gpu_selection.py), [llm_d_bench/deploy/runtime/composition.py](../llm_d_bench/deploy/runtime/composition.py)
-- Tests: [llm_d_bench/deploy/providers/test_hardware_profile.py](../llm_d_bench/deploy/providers/test_hardware_profile.py)
+- Boundaries: Deploy rendering only. Profile semantics live in llm_d_lens.hardware; this module picks the deploy accelerator key ('xpu') and exposes fallbacks for discovery failures. Model-server image repository and version are data in the profile, never hardcoded here. Do not add guide-specific logic here.
+- Examples: [apps/backend/src/llm_d_lens/deploy/providers/baseline_vllm.py](../apps/backend/src/llm_d_lens/deploy/providers/baseline_vllm.py), [apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py](../apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py), [apps/backend/src/llm_d_lens/deploy/providers/gpu_selection.py](../apps/backend/src/llm_d_lens/deploy/providers/gpu_selection.py), [apps/backend/src/llm_d_lens/deploy/runtime/composition.py](../apps/backend/src/llm_d_lens/deploy/runtime/composition.py)
+- Tests: [apps/backend/tests/unit/deploy/providers/test_hardware_profile.py](../apps/backend/tests/unit/deploy/providers/test_hardware_profile.py)
 
 ## node-hardware-profiles
 
 Node client for the hardware profile registry plus pure helpers that resolve the AIC accelerator and known DRA device classes from registered profiles.
 
-- Entry point: [server/hardwareProfiles.ts](../server/hardwareProfiles.ts)
+- Entry point: [apps/server/src/services/hardwareProfiles.ts](../apps/server/src/services/hardwareProfiles.ts)
 - Symbols: `loadHardwareProfiles`, `aicAcceleratorForSystem`, `isKnownDeviceClass`
 - Boundaries: Read-only, cached, non-blocking (returns the previous snapshot or [] on failure); callers keep their own regex defaults. Vendor names come from the backend registry, not this module.
-- Examples: [server/candidateSearch.ts](../server/candidateSearch.ts)
-- Tests: [server/hardwareProfiles.test.ts](../server/hardwareProfiles.test.ts)
+- Examples: [apps/server/src/routes/candidateSearch.ts](../apps/server/src/routes/candidateSearch.ts)
+- Tests: [apps/server/testing/services/hardwareProfiles.test.ts](../apps/server/testing/services/hardwareProfiles.test.ts)
 
 ## frontend-hardware-profiles
 
 Browser client for GET /api/v1/hardware/capabilities and a pure mapper from registered profiles to accelerator vendor tabs.
 
-- Entry point: [src/components/ClusterMonitoringStack/hardwareProfilesBackend.js](../src/components/ClusterMonitoringStack/hardwareProfilesBackend.js)
+- Entry point: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/hardwareProfilesBackend.js](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/hardwareProfilesBackend.js)
 - Symbols: `getHardwareProfiles`, `acceleratorVendorsFromProfiles`, `accessModesForVendor`
 - Boundaries: Presentation mapping only; the backend registry is authoritative. Falls back to the caller's static vendor list when no profiles resolve.
-- Examples: [src/components/CreateClusterWizard.jsx](../src/components/CreateClusterWizard.jsx)
-- Tests: [src/components/ClusterMonitoringStack/hardwareProfilesBackend.test.js](../src/components/ClusterMonitoringStack/hardwareProfilesBackend.test.js)
+- Examples: [apps/frontend/src/pages/clusters/ui/CreateClusterWizard.jsx](../apps/frontend/src/pages/clusters/ui/CreateClusterWizard.jsx)
+- Tests: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/hardwareProfilesBackend.test.js](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/hardwareProfilesBackend.test.js)
 
 ## accelerator-display-label
 
 Map a benchmark run's accelerator profile/runtime to a display label (XPU/GPU/neutral) for chart titles and metric labels, and identify the profile-owned default model-server image repositories so hardware realignment never clobbers a custom image.
 
-- Entry point: [src/components/benchmark-results/acceleratorDisplay.js](../src/components/benchmark-results/acceleratorDisplay.js)
+- Entry point: [apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.js)
 - Symbols: `acceleratorValue`, `acceleratorDisplayLabel`, `utilizationLabel`, `DEFAULT_RUNTIME_IMAGES`, `MANAGED_RUNTIME_IMAGE_REPOSITORIES`, `runtimeImageRepository`, `runtimeImageForHardware`, `isDefaultRuntimeImage`
 - Boundaries: Display and default-image selection only; no metric computation and no model-server version. The hardware profile owns the model-server repository/version; only repositories are tracked here. Unknown hardware falls back to the neutral 'GPU / XPU' wording.
-- Examples: [src/components/benchmark-results/ResourceExplorer.jsx](../src/components/benchmark-results/ResourceExplorer.jsx), [src/components/EvaluationTaskWizard.jsx](../src/components/EvaluationTaskWizard.jsx), [src/features/evaluation/setup.js](../src/features/evaluation/setup.js)
-- Tests: [src/components/benchmark-results/acceleratorDisplay.test.js](../src/components/benchmark-results/acceleratorDisplay.test.js), [src/features/evaluation/setup.test.js](../src/features/evaluation/setup.test.js)
+- Examples: [apps/frontend/src/pages/evaluation/ui/benchmark-results/ResourceExplorer.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/ResourceExplorer.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx), [apps/frontend/src/pages/evaluation/model/setup.js](../apps/frontend/src/pages/evaluation/model/setup.js)
+- Tests: [apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.test.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.test.js), [apps/frontend/src/pages/evaluation/model/setup.test.js](../apps/frontend/src/pages/evaluation/model/setup.test.js)
 
 ## hardware-version-gate
 
 Read the cluster's Kubernetes server version and reject a driver access mode whose profile requires a newer Kubernetes, with an actionable message.
 
-- Entry point: [llm_d_bench/hardware/version.py](../llm_d_bench/hardware/version.py)
+- Entry point: [apps/backend/src/llm_d_lens/hardware/version.py](../apps/backend/src/llm_d_lens/hardware/version.py)
 - Symbols: `parse_version`, `server_kubernetes_version`, `access_mode_version_message`
 - Boundaries: Read-only gating. Minimums come from the profile's driver.modes[access_mode].min_kubernetes_version; unknown version (unreadable) skips the gate. Callers decide whether to return a status message or raise.
-- Examples: [llm_d_bench/hardware/providers/nvidia.py](../llm_d_bench/hardware/providers/nvidia.py), [llm_d_bench/monitoring/gpu_driver/service.py](../llm_d_bench/monitoring/gpu_driver/service.py)
-- Tests: [llm_d_bench/hardware/providers/test_nvidia.py](../llm_d_bench/hardware/providers/test_nvidia.py), [llm_d_bench/monitoring/gpu_driver/test_gpu_driver.py](../llm_d_bench/monitoring/gpu_driver/test_gpu_driver.py)
+- Examples: [apps/backend/src/llm_d_lens/hardware/providers/nvidia.py](../apps/backend/src/llm_d_lens/hardware/providers/nvidia.py), [apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py](../apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py)
+- Tests: [apps/backend/tests/unit/hardware/providers/test_nvidia.py](../apps/backend/tests/unit/hardware/providers/test_nvidia.py), [apps/backend/tests/unit/monitoring/gpu_driver/test_gpu_driver.py](../apps/backend/tests/unit/monitoring/gpu_driver/test_gpu_driver.py)
 
 ## hardware-profile-registry
 
 In-process hardware profile/provider registry populated once from bundled JSON and entry-point plugins, indexing each profile by its identities.
 
-- Entry point: [llm_d_bench/hardware/registry.py](../llm_d_bench/hardware/registry.py)
+- Entry point: [apps/backend/src/llm_d_lens/hardware/registry.py](../apps/backend/src/llm_d_lens/hardware/registry.py)
 - Symbols: `HardwareProvider`, `register_profile`, `register_provider`, `all_profiles`, `get_profile`, `get_provider`, `get_driver_provider`, `ensure_loaded`
 - Boundaries: Registry only. Profile JSON Schema validation lives in discovery.py; payload loading lives in discovery.discover_and_register. Registration is fail-fast on conflicting device class/resource prefix/upstream variant/accelerator key. get_driver_provider(profile_id) selects the driver-capable provider by the optional hardware id, defaulting to the single registered one. Lookups never branch on vendor names.
-- Examples: [llm_d_bench/hardware/service.py](../llm_d_bench/hardware/service.py), [llm_d_bench/hardware/providers/intel_xpu.py](../llm_d_bench/hardware/providers/intel_xpu.py), [llm_d_bench/hardware/discovery.py](../llm_d_bench/hardware/discovery.py), [llm_d_bench/cluster/service.py](../llm_d_bench/cluster/service.py), [llm_d_bench/monitoring/gpu_driver/service.py](../llm_d_bench/monitoring/gpu_driver/service.py)
-- Tests: [llm_d_bench/hardware/test_hardware.py](../llm_d_bench/hardware/test_hardware.py)
+- Examples: [apps/backend/src/llm_d_lens/hardware/service.py](../apps/backend/src/llm_d_lens/hardware/service.py), [apps/backend/src/llm_d_lens/hardware/providers/intel_xpu.py](../apps/backend/src/llm_d_lens/hardware/providers/intel_xpu.py), [apps/backend/src/llm_d_lens/hardware/discovery.py](../apps/backend/src/llm_d_lens/hardware/discovery.py), [apps/backend/src/llm_d_lens/cluster/service.py](../apps/backend/src/llm_d_lens/cluster/service.py), [apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py](../apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py)
+- Tests: [apps/backend/tests/unit/hardware/test_hardware.py](../apps/backend/tests/unit/hardware/test_hardware.py)
 
 ## hardware-telemetry-query
 
 Build namespace/pod-scoped, unit-aware device PromQL from a hardware profile's telemetry.device_metric_sources, treating an empty or missing entry as disabled.
 
-- Entry point: [llm_d_bench/hardware/telemetry.py](../llm_d_bench/hardware/telemetry.py)
+- Entry point: [apps/backend/src/llm_d_lens/hardware/telemetry.py](../apps/backend/src/llm_d_lens/hardware/telemetry.py)
 - Symbols: `device_metric_source`, `scoped_device_query`, `combined_device_query`
 - Boundaries: Reads profile config only; never hardcodes vendor metric names. device_metrics (full PromQL) stays the cluster-overview source; device_metric_sources carries the bare metric name, unit, scale and required label matchers for selector injection into profiling/evaluate queries. combined_device_query OR-combines one metric across profiles so only the vendor present returns samples; an empty metric means the hardware does not report it (skip). Does not decide readiness or units for the cluster page.
-- Examples: [llm_d_bench/monitoring/profiling/service.py](../llm_d_bench/monitoring/profiling/service.py), [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
-- Tests: [llm_d_bench/monitoring/profiling/test_benchmark_xpu.py](../llm_d_bench/monitoring/profiling/test_benchmark_xpu.py)
+- Examples: [apps/backend/src/llm_d_lens/monitoring/profiling/service.py](../apps/backend/src/llm_d_lens/monitoring/profiling/service.py), [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py](../apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py)
 
 ## hardware-profile-model
 
 Typed hardware profile contract: frozen dataclasses for each contribution plus the capabilities API response model.
 
-- Entry point: [llm_d_bench/hardware/models.py](../llm_d_bench/hardware/models.py)
+- Entry point: [apps/backend/src/llm_d_lens/hardware/models.py](../apps/backend/src/llm_d_lens/hardware/models.py)
 - Symbols: `DriverContribution`, `HardwarePresence`, `TelemetryContribution`, `DeploymentContribution`, `PlanningContribution`, `UiContribution`, `HardwareProfile`, `HardwareCapabilitiesResponse`
 - Boundaries: Data model only. The authoritative form is profiles/*.json validated by schema.json; this module maps JSON to typed objects and back. Do not add resolver or vendor-specific logic here.
-- Examples: [llm_d_bench/hardware/registry.py](../llm_d_bench/hardware/registry.py), [llm_d_bench/hardware/discovery.py](../llm_d_bench/hardware/discovery.py), [llm_d_bench/hardware/service.py](../llm_d_bench/hardware/service.py)
-- Tests: [llm_d_bench/hardware/test_hardware.py](../llm_d_bench/hardware/test_hardware.py)
+- Examples: [apps/backend/src/llm_d_lens/hardware/registry.py](../apps/backend/src/llm_d_lens/hardware/registry.py), [apps/backend/src/llm_d_lens/hardware/discovery.py](../apps/backend/src/llm_d_lens/hardware/discovery.py), [apps/backend/src/llm_d_lens/hardware/service.py](../apps/backend/src/llm_d_lens/hardware/service.py)
+- Tests: [apps/backend/tests/unit/hardware/test_hardware.py](../apps/backend/tests/unit/hardware/test_hardware.py)
 
 ## hardware-profile-discovery
 
 Load hardware profiles/providers from bundled JSON and entry points, validate payloads against the shipped JSON Schema, and register them once.
 
-- Entry point: [llm_d_bench/hardware/discovery.py](../llm_d_bench/hardware/discovery.py)
+- Entry point: [apps/backend/src/llm_d_lens/hardware/discovery.py](../apps/backend/src/llm_d_lens/hardware/discovery.py)
 - Symbols: `validate_profile_payload`, `bundled_profile_payloads`, `entry_point_profile_payloads`, `discover_profiles`, `discover_and_register`
 - Boundaries: Discovery and validation only. Registration conflict rules live in registry.py; profile semantics live in models.py. Duplicate ids with identical content are deduplicated, inconsistent duplicates raise.
-- Examples: [llm_d_bench/hardware/registry.py](../llm_d_bench/hardware/registry.py), [llm_d_bench/hardware/providers/intel_xpu.py](../llm_d_bench/hardware/providers/intel_xpu.py)
-- Tests: [llm_d_bench/hardware/test_hardware.py](../llm_d_bench/hardware/test_hardware.py)
+- Examples: [apps/backend/src/llm_d_lens/hardware/registry.py](../apps/backend/src/llm_d_lens/hardware/registry.py), [apps/backend/src/llm_d_lens/hardware/providers/intel_xpu.py](../apps/backend/src/llm_d_lens/hardware/providers/intel_xpu.py)
+- Tests: [apps/backend/tests/unit/hardware/test_hardware.py](../apps/backend/tests/unit/hardware/test_hardware.py)
 
 ## hardware-profile-resolver
 
 Resolve a hardware profile by the identity a caller actually has: DRA device class, extended-resource key, node label, upstream variant, accelerator key or AIC system name.
 
-- Entry point: [llm_d_bench/hardware/resolver.py](../llm_d_bench/hardware/resolver.py)
+- Entry point: [apps/backend/src/llm_d_lens/hardware/resolver.py](../apps/backend/src/llm_d_lens/hardware/resolver.py)
 - Symbols: `resolve_by_device_class`, `resolve_by_resource`, `resolve_by_node_label`, `resolve_by_upstream_variant`, `resolve_by_accelerator_key`, `resolve_by_aic_system`, `require_accelerator`
 - Boundaries: Read-only resolution. Unknown identity returns None so discovery can degrade; require_accelerator raises ACCELERATOR_NOT_REGISTERED for explicit use (design decision 4/D5). Callers must resolve by identity, not branch on vendor names.
-- Examples: [llm_d_bench/hardware/__init__.py](../llm_d_bench/hardware/__init__.py), [llm_d_bench/monitoring/accelerator/models.py](../llm_d_bench/monitoring/accelerator/models.py), [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py), [llm_d_bench/monitoring/profiling/xpu_metrics.py](../llm_d_bench/monitoring/profiling/xpu_metrics.py), [llm_d_bench/cluster/service.py](../llm_d_bench/cluster/service.py), [llm_d_bench/monitoring/gpu_driver/service.py](../llm_d_bench/monitoring/gpu_driver/service.py), [llm_d_bench/monitoring/accelerator/intel_gpu.py](../llm_d_bench/monitoring/accelerator/intel_gpu.py)
-- Tests: [llm_d_bench/hardware/test_hardware.py](../llm_d_bench/hardware/test_hardware.py)
+- Examples: [apps/backend/src/llm_d_lens/hardware/__init__.py](../apps/backend/src/llm_d_lens/hardware/__init__.py), [apps/backend/src/llm_d_lens/monitoring/accelerator/models.py](../apps/backend/src/llm_d_lens/monitoring/accelerator/models.py), [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py), [apps/backend/src/llm_d_lens/monitoring/profiling/xpu_metrics.py](../apps/backend/src/llm_d_lens/monitoring/profiling/xpu_metrics.py), [apps/backend/src/llm_d_lens/cluster/service.py](../apps/backend/src/llm_d_lens/cluster/service.py), [apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py](../apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py), [apps/backend/src/llm_d_lens/monitoring/accelerator/intel_gpu.py](../apps/backend/src/llm_d_lens/monitoring/accelerator/intel_gpu.py)
+- Tests: [apps/backend/tests/unit/hardware/test_hardware.py](../apps/backend/tests/unit/hardware/test_hardware.py)
 
 ## json-http
 
 JSON HTTP requests, response parsing, and consistent API errors with structured problem responses.
 
-- Entry point: [src/api/httpClient.js](../src/api/httpClient.js)
+- Entry point: [apps/frontend/src/shared/api/httpClient.js](../apps/frontend/src/shared/api/httpClient.js)
 - Symbols: `requestJson`, `postJson`, `readJson`, `problemError`
 - Boundaries: JSON only; streaming chat, binary downloads and authentication policy stay in domain clients. Check fallback/204/error semantics before reuse. errorFactory adapts domain validation errors without changing shared transport; FormData requests must omit Content-Type. strictJson preserves strict success parsing for bootstrap and config; failures still use errorFactory. expectedStatus enforces an exact success status (e.g. the deployment DELETE 204 contract) without bypassing CSRF/credentials.
-- Examples: [src/components/AIProviders/aiProvidersBackend.js](../src/components/AIProviders/aiProvidersBackend.js), [src/components/ModelCache/modelCacheBackend.js](../src/components/ModelCache/modelCacheBackend.js), [src/components/OptimizationWorkspace/remoteDeployBackend.js](../src/components/OptimizationWorkspace/remoteDeployBackend.js), [src/components/OptimizationWorkspace/guidePlanningBackend.js](../src/components/OptimizationWorkspace/guidePlanningBackend.js)
-- Tests: [src/api/httpClient.test.js](../src/api/httpClient.test.js), [src/components/OptimizationWorkspace/remoteDeployBackend.test.js](../src/components/OptimizationWorkspace/remoteDeployBackend.test.js), [src/components/OptimizationWorkspace/guidePlanningBackend.test.js](../src/components/OptimizationWorkspace/guidePlanningBackend.test.js), [src/features/evaluation/client.test.js](../src/features/evaluation/client.test.js)
+- Examples: [apps/frontend/src/pages/ai-providers/ui/aiProvidersBackend.js](../apps/frontend/src/pages/ai-providers/ui/aiProvidersBackend.js), [apps/frontend/src/pages/model-cache/ui/ModelCache/modelCacheBackend.js](../apps/frontend/src/pages/model-cache/ui/ModelCache/modelCacheBackend.js), [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.js), [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/guidePlanningBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/guidePlanningBackend.js)
+- Tests: [apps/frontend/src/shared/api/httpClient.test.js](../apps/frontend/src/shared/api/httpClient.test.js), [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.test.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.test.js), [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/guidePlanningBackend.test.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/guidePlanningBackend.test.js), [apps/frontend/src/pages/evaluation/model/client.test.js](../apps/frontend/src/pages/evaluation/model/client.test.js)
 
 ## async-state
 
 Loading, error, retry, empty-state, and content presentation.
 
-- Entry point: [src/components/shared/AsyncState.jsx](../src/components/shared/AsyncState.jsx)
+- Entry point: [apps/frontend/src/shared/ui/AsyncState.jsx](../apps/frontend/src/shared/ui/AsyncState.jsx)
 - Symbols: `AsyncState`
 - Boundaries: Presentation only. Request lifecycle, cancellation and retry policy belong to callers. Order is loading, error, empty, children. Optional loadingContent/errorContent/emptyContent preserve domain copy and actions. Callers decide whether refresh errors hide cached data.
-- Examples: [src/components/AIProviders/AIProvidersPage.jsx](../src/components/AIProviders/AIProvidersPage.jsx), [src/components/StorageManagement/StorageManagementPage.jsx](../src/components/StorageManagement/StorageManagementPage.jsx), [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx), [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx)
-- Tests: [src/components/shared/AsyncState.test.jsx](../src/components/shared/AsyncState.test.jsx)
+- Examples: [apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx](../apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx)
+- Tests: [apps/frontend/src/shared/ui/AsyncState.test.jsx](../apps/frontend/src/shared/ui/AsyncState.test.jsx)
 
 ## modal
 
 Shared dialogs with overlays, dismissal interactions, titles, and footer actions.
 
-- Entry point: [src/components/ui/Modal.jsx](../src/components/ui/Modal.jsx)
+- Entry point: [apps/frontend/src/shared/ui/Modal.jsx](../apps/frontend/src/shared/ui/Modal.jsx)
 - Symbols: `Modal`
 - Boundaries: Follow .agents/skills/ui/SKILL.md; domain submission/validation stays outside the primitive. Inspect accessibility and close behavior before extending.
-- Examples: [src/components/ui/DeleteConfirmation.jsx](../src/components/ui/DeleteConfirmation.jsx)
+- Examples: [apps/frontend/src/shared/ui/DeleteConfirmation.jsx](../apps/frontend/src/shared/ui/DeleteConfirmation.jsx)
 - Tests: No dedicated modal test currently; verify escape, backdrop, focus and themes for changes.
 
 ## resource-loader
 
 Cached asynchronous resource loading and in-flight request deduplication.
 
-- Entry point: [src/utils/resourceLoader.js](../src/utils/resourceLoader.js)
+- Entry point: [apps/frontend/src/shared/lib/resourceLoader.js](../apps/frontend/src/shared/lib/resourceLoader.js)
 - Symbols: `createResourceLoader`
 - Boundaries: Caller owns cache scope and keys. Do not share cluster-specific state across clusters; inspect TTL and refresh semantics.
-- Examples: [src/components/OptimizationWorkspace/configurationBackend.js](../src/components/OptimizationWorkspace/configurationBackend.js), [src/components/OptimizationWorkspace/guidePlanningBackend.js](../src/components/OptimizationWorkspace/guidePlanningBackend.js)
-- Tests: [src/utils/resourceLoader.test.js](../src/utils/resourceLoader.test.js)
+- Examples: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/configurationBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/configurationBackend.js), [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/guidePlanningBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/guidePlanningBackend.js)
+- Tests: [apps/frontend/src/shared/lib/resourceLoader.test.js](../apps/frontend/src/shared/lib/resourceLoader.test.js)
 
 ## evaluation-validation
 
 Evaluation configuration validation and mapping server errors to form fields.
 
-- Entry point: [src/features/evaluation/configurationValidation.js](../src/features/evaluation/configurationValidation.js)
+- Entry point: [apps/frontend/src/pages/evaluation/model/configurationValidation.js](../apps/frontend/src/pages/evaluation/model/configurationValidation.js)
 - Symbols: `validateConfigurationInputs`, `configurationServerErrors`
 - Boundaries: Evaluation domain rules; backend remains authoritative. Do not move evaluation-specific rules into generic UI components.
-- Examples: [src/components/EvaluationConfigurationEditor.jsx](../src/components/EvaluationConfigurationEditor.jsx)
-- Tests: [src/features/evaluation/configurationValidation.test.js](../src/features/evaluation/configurationValidation.test.js)
+- Examples: [apps/frontend/src/pages/evaluation/ui/EvaluationConfigurationEditor.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationConfigurationEditor.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/model/configurationValidation.test.js](../apps/frontend/src/pages/evaluation/model/configurationValidation.test.js)
 
 ## domain-errors
 
 Shared domain error classification and foundations for HTTP status mapping.
 
-- Entry point: [llm_d_bench/core/exceptions.py](../llm_d_bench/core/exceptions.py)
+- Entry point: [apps/backend/src/llm_d_lens/core/exceptions.py](../apps/backend/src/llm_d_lens/core/exceptions.py)
 - Symbols: `DomainError`, `NotFoundError`, `ConflictError`, `DomainValidationError`
-- Boundaries: HTTP serialization belongs to llm_d_bench/api/problems.py; domain-specific details belong to domain services. Configuration route adaptation reraises DomainError unchanged to the shared ProblemDetails handler; legacy ConfigurationError and per-operation ValueError/OSError status policies remain local.
-- Examples: [llm_d_bench/api/problems.py](../llm_d_bench/api/problems.py), [llm_d_bench/configuration/router.py](../llm_d_bench/configuration/router.py)
-- Tests: [llm_d_bench/configuration/test_router_errors.py](../llm_d_bench/configuration/test_router_errors.py), [llm_d_bench/api/test_problems.py](../llm_d_bench/api/test_problems.py)
+- Boundaries: HTTP serialization belongs to llm_d_lens/api/problems.py; domain-specific details belong to domain services. Configuration route adaptation reraises DomainError unchanged to the shared ProblemDetails handler; legacy ConfigurationError and per-operation ValueError/OSError status policies remain local.
+- Examples: [apps/backend/src/llm_d_lens/api/problems.py](../apps/backend/src/llm_d_lens/api/problems.py), [apps/backend/src/llm_d_lens/configuration/router.py](../apps/backend/src/llm_d_lens/configuration/router.py)
+- Tests: [apps/backend/tests/unit/configuration/test_router_errors.py](../apps/backend/tests/unit/configuration/test_router_errors.py), [apps/backend/tests/unit/api/test_problems.py](../apps/backend/tests/unit/api/test_problems.py)
 
 ## temporary-paths
 
 Unified Lens persistent data, logs, cache, scratch and runtime path selection; only LENS roots and XDG defaults are supported.
 
-- Entry point: [llm_d_bench/utils/paths.py](../llm_d_bench/utils/paths.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/storage/paths.py](../apps/backend/src/llm_d_lens/infrastructure/storage/paths.py)
 - Symbols: `storage_path`, `prism_temp_root`
 - Boundaries: Path selection only; LENS_* overrides XDG defaults, legacy domain directory variables are ignored. No implicit migration, creation or cleanup. Reject traversal; domains own lifecycle. prism_temp_root uses LENS_SCRATCH_DIR.
-- Examples: [llm_d_bench/cluster/settings.py](../llm_d_bench/cluster/settings.py), [llm_d_bench/configuration/service.py](../llm_d_bench/configuration/service.py), [llm_d_bench/simulation/service.py](../llm_d_bench/simulation/service.py)
-- Tests: [llm_d_bench/utils/test_paths.py](../llm_d_bench/utils/test_paths.py)
+- Examples: [apps/backend/src/llm_d_lens/cluster/settings.py](../apps/backend/src/llm_d_lens/cluster/settings.py), [apps/backend/src/llm_d_lens/configuration/service.py](../apps/backend/src/llm_d_lens/configuration/service.py), [apps/backend/src/llm_d_lens/simulation/service.py](../apps/backend/src/llm_d_lens/simulation/service.py)
+- Tests: [apps/backend/tests/unit/infrastructure/storage/test_paths.py](../apps/backend/tests/unit/infrastructure/storage/test_paths.py)
 
 ## submission-guard
 
 Synchronous duplicate-submission guard; supports success latch and retry after failure.
 
-- Entry point: [src/utils/submissionGuard.js](../src/utils/submissionGuard.js)
+- Entry point: [apps/frontend/src/shared/lib/submissionGuard.js](../apps/frontend/src/shared/lib/submissionGuard.js)
 - Symbols: `createSubmissionGuard`
 - Boundaries: Instance-local; no retries or business validation. Destructive success may stay pending until dialog closes.
-- Examples: [src/hooks/useSubmission.js](../src/hooks/useSubmission.js)
-- Tests: [src/utils/submissionGuard.test.js](../src/utils/submissionGuard.test.js)
+- Examples: [apps/frontend/src/shared/lib/useSubmission.js](../apps/frontend/src/shared/lib/useSubmission.js)
+- Tests: [apps/frontend/src/shared/lib/submissionGuard.test.js](../apps/frontend/src/shared/lib/submissionGuard.test.js)
 
 ## submission-state
 
 React pending/error state and guarded asynchronous form actions.
 
-- Entry point: [src/hooks/useSubmission.js](../src/hooks/useSubmission.js)
+- Entry point: [apps/frontend/src/shared/lib/useSubmission.js](../apps/frontend/src/shared/lib/useSubmission.js)
 - Symbols: `useSubmission`
 - Boundaries: Caller owns validation, modal closing and success callback; explicit keepPendingOnSuccess retains dialog lock after successful create or delete.
-- Examples: [src/components/AIProviders/AIProviderFormModal.jsx](../src/components/AIProviders/AIProviderFormModal.jsx), [src/components/StorageManagement/DeleteStorageVolumeModal.jsx](../src/components/StorageManagement/DeleteStorageVolumeModal.jsx), [src/components/DeploymentManagement/DeleteDeploymentModal.jsx](../src/components/DeploymentManagement/DeleteDeploymentModal.jsx), [src/components/ModelCache/DownloadModelModal.jsx](../src/components/ModelCache/DownloadModelModal.jsx), [src/components/StorageManagement/CreateStorageVolumeModal.jsx](../src/components/StorageManagement/CreateStorageVolumeModal.jsx)
-- Tests: [src/utils/submissionGuard.test.js](../src/utils/submissionGuard.test.js)
+- Examples: [apps/frontend/src/pages/ai-providers/ui/AIProviderFormModal.jsx](../apps/frontend/src/pages/ai-providers/ui/AIProviderFormModal.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/DeleteStorageVolumeModal.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/DeleteStorageVolumeModal.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeleteDeploymentModal.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeleteDeploymentModal.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/DownloadModelModal.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/DownloadModelModal.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/CreateStorageVolumeModal.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/CreateStorageVolumeModal.jsx)
+- Tests: [apps/frontend/src/shared/lib/submissionGuard.test.js](../apps/frontend/src/shared/lib/submissionGuard.test.js)
 
 ## pagination-controls
 
 Shared page navigation, optional total/range summary and rows-per-page selector.
 
-- Entry point: [src/components/ui/PaginationControls.jsx](../src/components/ui/PaginationControls.jsx)
+- Entry point: [apps/frontend/src/shared/ui/PaginationControls.jsx](../apps/frontend/src/shared/ui/PaginationControls.jsx)
 - Symbols: `PaginationControls`
 - Boundaries: Zero-based page; totalPages at least one. Caller owns slicing, filtering and authoritative total (including server pagination). Optional onPageSizeChange resets page to zero; formatValue retains caller number formatting. Omitting total retains navigation-only layout.
-- Examples: [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx), [src/components/StorageManagement/StorageManagementPage.jsx](../src/components/StorageManagement/StorageManagementPage.jsx), [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx), [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx)
-- Tests: [src/components/ui/PaginationControls.test.jsx](../src/components/ui/PaginationControls.test.jsx)
+- Examples: [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx), [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx)
+- Tests: [apps/frontend/src/shared/ui/PaginationControls.test.jsx](../apps/frontend/src/shared/ui/PaginationControls.test.jsx)
+
+## storage-volume-presentation
+
+Format storage volume kinds and statuses consistently across selectors and storage views.
+
+- Entry point: [apps/frontend/src/shared/lib/storageVolumePresentation.js](../apps/frontend/src/shared/lib/storageVolumePresentation.js)
+- Symbols: `kindLabel`, `statusLabel`, `statusDotClass`
+- Boundaries: Pure presentation mapping only; it does not determine storage health or selectability.
+- Examples: [apps/frontend/src/shared/ui/StorageVolumeSelect.jsx](../apps/frontend/src/shared/ui/StorageVolumeSelect.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/storagePresentation.js](../apps/frontend/src/pages/storage/ui/StorageManagement/storagePresentation.js)
+- Tests: The existing storage page and selector tests exercise these mappings through their public consumers.
 
 ## error-message
 
 Display API error details, message or fallback consistently.
 
-- Entry point: [src/utils/errorMessage.js](../src/utils/errorMessage.js)
+- Entry point: [apps/frontend/src/shared/lib/errorMessage.js](../apps/frontend/src/shared/lib/errorMessage.js)
 - Symbols: `errorMessage`
 - Boundaries: String details take priority; does not interpret domain validation objects.
-- Examples: [src/components/AIProviders/aiProvidersPresentation.js](../src/components/AIProviders/aiProvidersPresentation.js), [src/components/ModelCache/modelCachePresentation.js](../src/components/ModelCache/modelCachePresentation.js), [src/components/StorageManagement/storagePresentation.js](../src/components/StorageManagement/storagePresentation.js), [src/components/DeploymentManagement/deploymentPresentation.js](../src/components/DeploymentManagement/deploymentPresentation.js)
-- Tests: [src/utils/submissionGuard.test.js](../src/utils/submissionGuard.test.js)
+- Examples: [apps/frontend/src/pages/ai-providers/ui/aiProvidersPresentation.js](../apps/frontend/src/pages/ai-providers/ui/aiProvidersPresentation.js), [apps/frontend/src/pages/model-cache/ui/ModelCache/modelCachePresentation.js](../apps/frontend/src/pages/model-cache/ui/ModelCache/modelCachePresentation.js), [apps/frontend/src/pages/storage/ui/StorageManagement/storagePresentation.js](../apps/frontend/src/pages/storage/ui/StorageManagement/storagePresentation.js), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/deploymentPresentation.js](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/deploymentPresentation.js)
+- Tests: [apps/frontend/src/shared/lib/submissionGuard.test.js](../apps/frontend/src/shared/lib/submissionGuard.test.js)
 
 ## timestamp-display
 
 Local timestamp formatting with missing and invalid fallback.
 
-- Entry point: [src/utils/formatTimestamp.js](../src/utils/formatTimestamp.js)
+- Entry point: [apps/frontend/src/shared/lib/formatTimestamp.js](../apps/frontend/src/shared/lib/formatTimestamp.js)
 - Symbols: `formatTimestamp`
 - Boundaries: Locale/timezone follow browser. Caller supplies invalid callback when raw fallback is required.
-- Examples: [src/components/DeploymentManagement/deploymentPresentation.js](../src/components/DeploymentManagement/deploymentPresentation.js), [src/components/StorageManagement/StorageResourceDetailPanel.jsx](../src/components/StorageManagement/StorageResourceDetailPanel.jsx), [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx)
-- Tests: [src/utils/submissionGuard.test.js](../src/utils/submissionGuard.test.js)
+- Examples: [apps/frontend/src/pages/deployment/ui/DeploymentManagement/deploymentPresentation.js](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/deploymentPresentation.js), [apps/frontend/src/pages/storage/ui/StorageManagement/StorageResourceDetailPanel.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/StorageResourceDetailPanel.jsx), [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx)
+- Tests: [apps/frontend/src/shared/lib/submissionGuard.test.js](../apps/frontend/src/shared/lib/submissionGuard.test.js)
 
 ## cluster-session
 
 Open a selected cluster session and normalize sessionId/session_id.
 
-- Entry point: [src/components/OptimizationWorkspace/clusterBackend.js](../src/components/OptimizationWorkspace/clusterBackend.js)
+- Entry point: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.js)
 - Symbols: `openClusterSession`
 - Boundaries: Returns ID; does not persist selection or mutate sessionStorage. Rejects missing IDs.
-- Examples: [src/components/Playground/playgroundBackend.js](../src/components/Playground/playgroundBackend.js), [src/components/ModelMarketPage.jsx](../src/components/ModelMarketPage.jsx)
-- Tests: [src/components/Playground/playgroundBackend.test.js](../src/components/Playground/playgroundBackend.test.js)
+- Examples: [apps/frontend/src/pages/playground/ui/Playground/playgroundBackend.js](../apps/frontend/src/pages/playground/ui/Playground/playgroundBackend.js), [apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx](../apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx)
+- Tests: [apps/frontend/src/pages/playground/ui/Playground/playgroundBackend.test.js](../apps/frontend/src/pages/playground/ui/Playground/playgroundBackend.test.js)
 
 ## chart-tooltip
 
 Shared chart tooltip shell and series/value rows.
 
-- Entry point: [src/components/ui/charts/ChartTooltip.jsx](../src/components/ui/charts/ChartTooltip.jsx)
+- Entry point: [apps/frontend/src/shared/ui/charts/ChartTooltip.jsx](../apps/frontend/src/shared/ui/charts/ChartTooltip.jsx)
 - Symbols: `ChartTooltip`, `ChartTooltipRow`
 - Boundaries: Presentation only; domain owns units and aggregation.
-- Examples: [src/components/benchmark-results/ResultTimeline.jsx](../src/components/benchmark-results/ResultTimeline.jsx)
+- Examples: [apps/frontend/src/pages/evaluation/ui/benchmark-results/ResultTimeline.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/ResultTimeline.jsx)
 - Tests: Existing component catalogued after audit; no implementation change in this task.
 
 ## form-error
 
 Shared accessible submission error display with both themes.
 
-- Entry point: [src/components/ui/FormError.jsx](../src/components/ui/FormError.jsx)
+- Entry point: [apps/frontend/src/shared/ui/FormError.jsx](../apps/frontend/src/shared/ui/FormError.jsx)
 - Symbols: `FormError`
 - Boundaries: Text display only; caller owns error interpretation and submission lifecycle.
-- Examples: [src/components/AIProviders/AIProviderFormModal.jsx](../src/components/AIProviders/AIProviderFormModal.jsx), [src/components/ModelCache/DownloadModelModal.jsx](../src/components/ModelCache/DownloadModelModal.jsx), [src/components/ModelCache/ModelCacheLogsModal.jsx](../src/components/ModelCache/ModelCacheLogsModal.jsx), [src/components/StorageManagement/CreateStorageVolumeModal.jsx](../src/components/StorageManagement/CreateStorageVolumeModal.jsx), [src/components/DeploymentManagement/EditDeploymentModal.jsx](../src/components/DeploymentManagement/EditDeploymentModal.jsx), [src/components/ui/DeleteConfirmation.jsx](../src/components/ui/DeleteConfirmation.jsx)
-- Tests: [src/components/ui/PaginationControls.test.jsx](../src/components/ui/PaginationControls.test.jsx), [src/components/ui/DeleteConfirmation.test.jsx](../src/components/ui/DeleteConfirmation.test.jsx)
+- Examples: [apps/frontend/src/pages/ai-providers/ui/AIProviderFormModal.jsx](../apps/frontend/src/pages/ai-providers/ui/AIProviderFormModal.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/DownloadModelModal.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/DownloadModelModal.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCacheLogsModal.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCacheLogsModal.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/CreateStorageVolumeModal.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/CreateStorageVolumeModal.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/EditDeploymentModal.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/EditDeploymentModal.jsx), [apps/frontend/src/shared/ui/DeleteConfirmation.jsx](../apps/frontend/src/shared/ui/DeleteConfirmation.jsx)
+- Tests: [apps/frontend/src/shared/ui/PaginationControls.test.jsx](../apps/frontend/src/shared/ui/PaginationControls.test.jsx), [apps/frontend/src/app/DeleteConfirmation.test.jsx](../apps/frontend/src/app/DeleteConfirmation.test.jsx)
 
 ## configuration-checksum
 
 Canonical JSON configuration SHA-256 checksum.
 
-- Entry point: [src/features/evaluation/checksum.js](../src/features/evaluation/checksum.js)
+- Entry point: [apps/frontend/src/pages/evaluation/model/checksum.js](../apps/frontend/src/pages/evaluation/model/checksum.js)
 - Symbols: `configurationChecksum`, `sha256`
 - Boundaries: Sort object keys recursively; array order stays significant. Uses Web Crypto and sha256: prefix.
-- Examples: [src/components/EvaluationDashboard.jsx](../src/components/EvaluationDashboard.jsx), [src/components/EvaluationTaskWizard.jsx](../src/components/EvaluationTaskWizard.jsx)
-- Tests: [src/features/evaluation/checksum.test.js](../src/features/evaluation/checksum.test.js)
+- Examples: [apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/model/checksum.test.js](../apps/frontend/src/pages/evaluation/model/checksum.test.js)
 
 ## cluster-download-polling
 
 Poll software downloads for create/edit cluster until both repos stop downloading.
 
-- Entry point: [src/components/OptimizationWorkspace/clusterBackend.js](../src/components/OptimizationWorkspace/clusterBackend.js)
+- Entry point: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.js)
 - Symbols: `waitForSoftwareDownloads`
 - Boundaries: Domain owns llmD and llmDBenchmark states; caller receives every update. Timeout and interval remain configurable.
-- Examples: [src/components/CreateClusterWizard.jsx](../src/components/CreateClusterWizard.jsx), [src/components/EditClusterModal.jsx](../src/components/EditClusterModal.jsx)
-- Tests: [src/components/OptimizationWorkspace/clusterBackend.test.js](../src/components/OptimizationWorkspace/clusterBackend.test.js)
+- Examples: [apps/frontend/src/pages/clusters/ui/CreateClusterWizard.jsx](../apps/frontend/src/pages/clusters/ui/CreateClusterWizard.jsx), [apps/frontend/src/pages/clusters/ui/EditClusterModal.jsx](../apps/frontend/src/pages/clusters/ui/EditClusterModal.jsx)
+- Tests: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.test.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.test.js)
 
 ## cluster-software-download-workflow
 
 Start cluster software preparation, reuse polling, aggregate failures and project resulting repository paths.
 
-- Entry point: [src/components/OptimizationWorkspace/clusterBackend.js](../src/components/OptimizationWorkspace/clusterBackend.js)
+- Entry point: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.js)
 - Symbols: `downloadClusterSoftware`
 - Boundaries: Caller retains PATCH persistence, create/edit trigger conditions, loading state and navigation. No rollback or implicit retry. Missing paths retain saved values.
-- Examples: [src/components/CreateClusterWizard.jsx](../src/components/CreateClusterWizard.jsx), [src/components/EditClusterModal.jsx](../src/components/EditClusterModal.jsx)
-- Tests: [src/components/OptimizationWorkspace/clusterBackend.test.js](../src/components/OptimizationWorkspace/clusterBackend.test.js)
+- Examples: [apps/frontend/src/pages/clusters/ui/CreateClusterWizard.jsx](../apps/frontend/src/pages/clusters/ui/CreateClusterWizard.jsx), [apps/frontend/src/pages/clusters/ui/EditClusterModal.jsx](../apps/frontend/src/pages/clusters/ui/EditClusterModal.jsx)
+- Tests: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.test.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.test.js)
 
 ## debounced-value
 
 Debounced React value propagation with timer cleanup.
 
-- Entry point: [src/hooks/useDebouncedValue.js](../src/hooks/useDebouncedValue.js)
+- Entry point: [apps/frontend/src/shared/lib/useDebouncedValue.js](../apps/frontend/src/shared/lib/useDebouncedValue.js)
 - Symbols: `useDebouncedValue`
 - Boundaries: Caller owns normalization, requests and cancellation; initial value is immediate; delay defaults to 300ms.
-- Examples: [src/components/StorageManagement/StorageManagementPage.jsx](../src/components/StorageManagement/StorageManagementPage.jsx), [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx), [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx)
+- Examples: [apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx)
 - Tests: React StrictMode browser checks: debounce replacement, notice replacement/expiry, copy timer replacement and unmount; see docs/refactoring/nine-shared-capabilities.md.
 
 ## transient-notice
 
 Transient notice state with automatic expiry.
 
-- Entry point: [src/hooks/useNotice.js](../src/hooks/useNotice.js)
+- Entry point: [apps/frontend/src/shared/lib/useNotice.js](../apps/frontend/src/shared/lib/useNotice.js)
 - Symbols: `useNotice`
 - Boundaries: Returns useState-compatible pair; 4000ms default, timer resets when message changes and cleans up on unmount; no business text.
-- Examples: [src/components/StorageManagement/StorageManagementPage.jsx](../src/components/StorageManagement/StorageManagementPage.jsx), [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx), [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx)
+- Examples: [apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx)
 - Tests: React StrictMode browser checks: debounce replacement, notice replacement/expiry, copy timer replacement and unmount; see docs/refactoring/nine-shared-capabilities.md.
 
 ## collection-pagination
 
 Page count, clamping, visible range and slicing for filtered collections.
 
-- Entry point: [src/utils/pagination.js](../src/utils/pagination.js)
+- Entry point: [apps/frontend/src/shared/lib/pagination.js](../apps/frontend/src/shared/lib/pagination.js)
 - Symbols: `paginate`
 - Boundaries: Expects nonnegative integer page and positive integer pageSize; filtering and reset conditions belong to callers. Empty collections have one page and range 0–0.
-- Examples: [src/components/StorageManagement/StorageManagementPage.jsx](../src/components/StorageManagement/StorageManagementPage.jsx), [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx), [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx)
-- Tests: [src/utils/pagination.test.js](../src/utils/pagination.test.js)
+- Examples: [apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx)
+- Tests: [apps/frontend/src/shared/lib/pagination.test.js](../apps/frontend/src/shared/lib/pagination.test.js)
 
 ## blob-download
 
 Download a browser Blob with temporary URL cleanup.
 
-- Entry point: [src/utils/download.js](../src/utils/download.js)
+- Entry point: [apps/frontend/src/shared/lib/download.js](../apps/frontend/src/shared/lib/download.js)
 - Symbols: `downloadBlob`, `downloadFile`
 - Boundaries: downloadBlob owns only anchor and URL lifecycle (1000ms delayed revocation). downloadFile retains token, response filename and HTTP error semantics; domain artifact validation stays outside.
-- Examples: [src/components/benchmark-results/resultExports.js](../src/components/benchmark-results/resultExports.js), [src/components/OptimizationEvaluationDetails.jsx](../src/components/OptimizationEvaluationDetails.jsx), [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx)
-- Tests: [src/utils/browserActions.test.js](../src/utils/browserActions.test.js)
+- Examples: [apps/frontend/src/pages/evaluation/ui/benchmark-results/resultExports.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/resultExports.js), [apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx](../apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx), [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx)
+- Tests: [apps/frontend/src/shared/lib/browserActions.test.js](../apps/frontend/src/shared/lib/browserActions.test.js)
 
 ## clipboard-copy
 
 Copy text with clipboard API and legacy HTTP fallback.
 
-- Entry point: [src/utils/clipboard.js](../src/utils/clipboard.js)
+- Entry point: [apps/frontend/src/shared/lib/clipboard.js](../apps/frontend/src/shared/lib/clipboard.js)
 - Symbols: `copyText`
 - Boundaries: Rejects when neither method succeeds; removes temporary textarea and restores focus. Does not own feedback state.
-- Examples: [src/hooks/useClipboard.js](../src/hooks/useClipboard.js)
-- Tests: [src/utils/browserActions.test.js](../src/utils/browserActions.test.js)
+- Examples: [apps/frontend/src/shared/lib/useClipboard.js](../apps/frontend/src/shared/lib/useClipboard.js)
+- Tests: [apps/frontend/src/shared/lib/browserActions.test.js](../apps/frontend/src/shared/lib/browserActions.test.js)
 
 ## clipboard-feedback
 
 React clipboard success feedback, latest-action tracking and timer cleanup.
 
-- Entry point: [src/hooks/useClipboard.js](../src/hooks/useClipboard.js)
+- Entry point: [apps/frontend/src/shared/lib/useClipboard.js](../apps/frontend/src/shared/lib/useClipboard.js)
 - Symbols: `useClipboard`
 - Boundaries: Returns copied/copiedValue/copy; copy resolves boolean, blank input ignored; no success feedback on failure or stale/unmounted completion. Duration is caller-configurable.
-- Examples: [src/components/DeploymentManagement/DeploymentTable.jsx](../src/components/DeploymentManagement/DeploymentTable.jsx), [src/components/DeploymentManagement/DeploymentDetailsModal.jsx](../src/components/DeploymentManagement/DeploymentDetailsModal.jsx), [src/components/DeploymentManagement/DeploymentPodsLogsModal.jsx](../src/components/DeploymentManagement/DeploymentPodsLogsModal.jsx), [src/components/OptimizationClusterOverview.jsx](../src/components/OptimizationClusterOverview.jsx), [src/components/OptimizationWorkspace/OptimizationWorkspace.jsx](../src/components/OptimizationWorkspace/OptimizationWorkspace.jsx), [src/components/ui/PageHeader.jsx](../src/components/ui/PageHeader.jsx)
-- Tests: [src/utils/browserActions.test.js](../src/utils/browserActions.test.js)
+- Examples: [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentTable.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentTable.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentDetailsModal.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentDetailsModal.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentPodsLogsModal.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentPodsLogsModal.jsx), [apps/frontend/src/pages/clusters/ui/OptimizationClusterOverview.jsx](../apps/frontend/src/pages/clusters/ui/OptimizationClusterOverview.jsx), [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/OptimizationWorkspace.jsx](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/OptimizationWorkspace.jsx), [apps/frontend/src/shared/ui/PageHeader.jsx](../apps/frontend/src/shared/ui/PageHeader.jsx)
+- Tests: [apps/frontend/src/shared/lib/browserActions.test.js](../apps/frontend/src/shared/lib/browserActions.test.js)
 
 ## kubernetes-namespace
 
 Kubernetes namespace DNS-label validation.
 
-- Entry point: [llm_d_bench/utils/kubernetes.py](../llm_d_bench/utils/kubernetes.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py)
 - Symbols: `validate_namespace`
 - Boundaries: Validates without normalization; preserves ValueError message and 63-character limit. Monitoring services re-export the same function for callers and model validators.
-- Examples: [llm_d_bench/monitoring/accelerator/service.py](../llm_d_bench/monitoring/accelerator/service.py), [llm_d_bench/monitoring/cluster_stack/service.py](../llm_d_bench/monitoring/cluster_stack/service.py)
-- Tests: [llm_d_bench/utils/test_namespace.py](../llm_d_bench/utils/test_namespace.py), [llm_d_bench/monitoring/accelerator/test_accelerator.py](../llm_d_bench/monitoring/accelerator/test_accelerator.py), [llm_d_bench/monitoring/cluster_stack/test_cluster_stack.py](../llm_d_bench/monitoring/cluster_stack/test_cluster_stack.py)
+- Examples: [apps/backend/src/llm_d_lens/monitoring/accelerator/service.py](../apps/backend/src/llm_d_lens/monitoring/accelerator/service.py), [apps/backend/src/llm_d_lens/monitoring/cluster_stack/service.py](../apps/backend/src/llm_d_lens/monitoring/cluster_stack/service.py)
+- Tests: [apps/backend/tests/unit/infrastructure/kubernetes/test_namespace.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_namespace.py), [apps/backend/tests/unit/monitoring/accelerator/test_accelerator.py](../apps/backend/tests/unit/monitoring/accelerator/test_accelerator.py), [apps/backend/tests/unit/monitoring/cluster_stack/test_cluster_stack.py](../apps/backend/tests/unit/monitoring/cluster_stack/test_cluster_stack.py)
 
 ## upstream-json-transport
 
 Node upstream JSON fetch with timeout through body consumption.
 
-- Entry point: [server/http.ts](../server/http.ts)
+- Entry point: [apps/server/src/infrastructure/http.ts](../apps/server/src/infrastructure/http.ts)
 - Symbols: `fetchJsonWithTimeout`
 - Boundaries: Returns Response and payload, including non-2xx responses; empty body becomes {}, malformed text becomes detail. Caller retains status/error mapping. Cleans timer and respects caller abort signal; not for streaming.
-- Examples: [server/configuration.ts](../server/configuration.ts), [server/candidateSearch.ts](../server/candidateSearch.ts)
-- Tests: [server/http.test.ts](../server/http.test.ts)
+- Examples: [apps/server/src/routes/configuration.ts](../apps/server/src/routes/configuration.ts), [apps/server/src/routes/candidateSearch.ts](../apps/server/src/routes/candidateSearch.ts)
+- Tests: [apps/server/testing/infrastructure/http.test.ts](../apps/server/testing/infrastructure/http.test.ts)
 
 ## binary-byte-scaling
 
 Binary byte scaling with configurable maximum unit.
 
-- Entry point: [src/utils/formatBytes.js](../src/utils/formatBytes.js)
+- Entry point: [apps/frontend/src/shared/lib/formatBytes.js](../apps/frontend/src/shared/lib/formatBytes.js)
 - Symbols: `scaleBytes`
 - Boundaries: Only unit conversion; caller retains input validation, missing values, precision and labels. Defaults through PiB; simulation caps at GiB.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/OptimizationClusterOverview.jsx](../src/components/OptimizationClusterOverview.jsx)
-- Tests: [src/utils/pagination.test.js](../src/utils/pagination.test.js)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/clusters/ui/OptimizationClusterOverview.jsx](../apps/frontend/src/pages/clusters/ui/OptimizationClusterOverview.jsx)
+- Tests: [apps/frontend/src/shared/lib/pagination.test.js](../apps/frontend/src/shared/lib/pagination.test.js)
 
 ## fixed-executable-spawn
 
 Launch a fixed executable with arguments passed as a separate argv vector.
 
-- Entry point: [llm_d_bench/utils/shell.py](../llm_d_bench/utils/shell.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/process/__init__.py](../apps/backend/src/llm_d_lens/infrastructure/process/__init__.py)
 - Symbols: `spawn_with_executable`
 - Boundaries: Shell-free through asyncio.create_subprocess_exec. Resolves the executable independently from argument values; preserves cwd, env, stdio, session and kubectl-cache behavior. Callers remain responsible for choosing a trusted executable and validating domain inputs; existing spawn(argv) remains available for command-discovery callers.
-- Examples: [llm_d_bench/monitoring/cluster_stack/operations.py](../llm_d_bench/monitoring/cluster_stack/operations.py)
-- Tests: [llm_d_bench/utils/test_shell.py](../llm_d_bench/utils/test_shell.py)
+- Examples: [apps/backend/src/llm_d_lens/monitoring/cluster_stack/operations.py](../apps/backend/src/llm_d_lens/monitoring/cluster_stack/operations.py)
+- Tests: [apps/backend/tests/unit/infrastructure/process/test_process.py](../apps/backend/tests/unit/infrastructure/process/test_process.py)
 
 ## kubernetes-resource-reads
 
 Cluster-scoped Kubernetes resource lists and finite command adapters with official asynchronous SDK and CLI rollback.
 
-- Entry point: [llm_d_bench/utils/kubernetes.py](../llm_d_bench/utils/kubernetes.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py)
 - Symbols: `list_resources`, `kubeconfig_environment`, `scoped_runner`, `KubernetesCommandRunner`
 - Boundaries: PRISM_KUBERNETES_BACKEND=sdk enables supported reads and writes; legacy READ_BACKEND controls reads only. Explicit clusters resolve strictly. Known argv shapes adapt before execution; API failures never retry CLI. Preserve raw JSON, CommandResult and legacy list-error behavior. Apply/Helm/exec/port-forward/SSH and unsupported flags stay CLI. Deployment policy precedes SDK execution. Unset backend variables default to SDK reads and writes; explicit BACKEND overrides legacy READ_BACKEND, whose read-only behavior is preserved. BACKEND=cli explicitly rolls back.
-- Examples: [llm_d_bench/storage/service.py](../llm_d_bench/storage/service.py), [llm_d_bench/monitoring/gpu_driver/service.py](../llm_d_bench/monitoring/gpu_driver/service.py)
-- Tests: [llm_d_bench/utils/test_kubernetes_reads.py](../llm_d_bench/utils/test_kubernetes_reads.py), [llm_d_bench/utils/test_kubernetes_commands.py](../llm_d_bench/utils/test_kubernetes_commands.py), [llm_d_bench/utils/test_kubernetes_integration.py](../llm_d_bench/utils/test_kubernetes_integration.py)
+- Examples: [apps/backend/src/llm_d_lens/storage/service.py](../apps/backend/src/llm_d_lens/storage/service.py), [apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py](../apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py)
+- Tests: [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_reads.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_reads.py), [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_commands.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_commands.py), [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_integration.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_integration.py)
 
 ## agentic-benchmark-evidence-retrieval
 
 Select raw benchmark samples for an individual candidate using compatibility, similarity, and time/runtime decay, and compute candidate-level aggregated evidence.
 
-- Entry point: [llm_d_bench/agentic/benchmark_evidence.py](../llm_d_bench/agentic/benchmark_evidence.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/benchmark_evidence.py](../apps/backend/src/llm_d_lens/agentic/benchmark_evidence.py)
 - Symbols: `BenchmarkEvidenceRetriever`
 - Boundaries: Processes only persisted BenchmarkRecord objects; does not generate candidates or deployments. matching_benchmarks returns raw weighted samples; retrieve computes aggregated metrics, effective sample size, confidence, and negative evidence.
-- Examples: [llm_d_bench/agentic/performance_evidence.py](../llm_d_bench/agentic/performance_evidence.py), [llm_d_bench/agentic/historical_candidate_seeds.py](../llm_d_bench/agentic/historical_candidate_seeds.py)
-- Tests: [llm_d_bench/agentic/test_benchmark_evidence.py](../llm_d_bench/agentic/test_benchmark_evidence.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/performance_evidence.py](../apps/backend/src/llm_d_lens/agentic/performance_evidence.py), [apps/backend/src/llm_d_lens/agentic/historical_candidate_seeds.py](../apps/backend/src/llm_d_lens/agentic/historical_candidate_seeds.py)
+- Tests: [apps/backend/tests/unit/agentic/test_benchmark_evidence.py](../apps/backend/tests/unit/agentic/test_benchmark_evidence.py)
 
 ## agentic-benchmark-performance-evidence
 
 Aggregate normalized benchmark history into immutable candidate-level Agentic scoring inputs.
 
-- Entry point: [llm_d_bench/agentic/performance_evidence.py](../llm_d_bench/agentic/performance_evidence.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/performance_evidence.py](../apps/backend/src/llm_d_lens/agentic/performance_evidence.py)
 - Symbols: `BenchmarkPerformanceEvidence`
 - Boundaries: Retrieves local BenchmarkRecord objects only for candidates satisfying live resource constraints. Reuses BenchmarkEvidenceRetriever compatibility, weighting, confidence, and negative-evidence rules. Does not create candidates, modify performance facts, execute deployments, or allow external providers to rewrite scoring inputs.
-- Examples: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py)
-- Tests: [llm_d_bench/agentic/test_performance_evidence.py](../llm_d_bench/agentic/test_performance_evidence.py), [llm_d_bench/agentic/test_planner.py](../llm_d_bench/agentic/test_planner.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py)
+- Tests: [apps/backend/tests/unit/agentic/test_performance_evidence.py](../apps/backend/tests/unit/agentic/test_performance_evidence.py), [apps/backend/tests/unit/agentic/test_planner.py](../apps/backend/tests/unit/agentic/test_planner.py)
 
 ## agentic-planning-facts
 
 Freeze cluster, model, workload, and AIC planning facts for Agentic candidate generation, validation, and scoring.
 
-- Entry point: [llm_d_bench/agentic/facts.py](../llm_d_bench/agentic/facts.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/facts.py](../apps/backend/src/llm_d_lens/agentic/facts.py)
 - Symbols: `ResolvedPlanningFacts`, `resolve_planning_facts`
 - Boundaries: Resolves live facts and controlled evidence references without reading benchmark aggregates or calling external AI. The Agentic planner still determines candidate validity and ranking. Structured trace records effective workload, SLOs, direct AIC inputs and evidence status without storing credentials.
-- Examples: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py)
-- Tests: [llm_d_bench/agentic/test_facts.py](../llm_d_bench/agentic/test_facts.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py)
+- Tests: [apps/backend/tests/unit/agentic/test_facts.py](../apps/backend/tests/unit/agentic/test_facts.py)
 
 ## agentic-candidate-planning
 
 Define validated Agentic candidates and planning facts, with deterministic ranking and constrained external-AI candidate scoring.
 
-- Entry point: [llm_d_bench/agentic/planner.py](../llm_d_bench/agentic/planner.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/planner.py](../apps/backend/src/llm_d_lens/agentic/planner.py)
 - Symbols: `PlannedCandidate`, `PlanningFacts`, `DeterministicPlanner`, `OpenAICompatiblePlanner`
 - Boundaries: PlanningFacts carries the deployment request's GPU memory utilization for deterministic and AI candidate capacity checks; it does not estimate live free GPU memory. DeterministicPlanner consumes aggregated PerformanceScoreInput. OpenAICompatiblePlanner consumes only candidates satisfying hard constraints, raw historical samples and candidate-level AIC estimates, prioritizes each candidate's own estimate and requires rationale explaining the relative disadvantage of every returned lower-scored candidate. It must not receive aggregated results or filter candidates using them. Neither planner may create unvalidated configurations or execute deployments. Deterministic operator-preference keyword matching uses English aliases only; Chinese aliases are not supported.
-- Examples: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py)
-- Tests: [llm_d_bench/agentic/test_planner.py](../llm_d_bench/agentic/test_planner.py), [llm_d_bench/agentic/test_service.py](../llm_d_bench/agentic/test_service.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py)
+- Tests: [apps/backend/tests/unit/agentic/test_planner.py](../apps/backend/tests/unit/agentic/test_planner.py), [apps/backend/tests/unit/agentic/test_service.py](../apps/backend/tests/unit/agentic/test_service.py)
 
 ## agentic-deployment-orchestration
 
 Coordinate Agentic candidate generation, hard-constraint validation, dual evidence views, optional AI scoring, approval plans, and snapshots.
 
-- Entry point: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py)
 - Symbols: `AgenticDeploymentService`
 - Boundaries: The request's max_model_len and gpu_memory_utilization drive candidate checks, approval revalidation and the deployed configuration, including both PD vLLM roles. The deterministic view exclusively owns PerformanceScoreInput and aggregate-based blocking. The AI view contains only raw historical samples and all candidates satisfying hard constraints. Candidates without raw AIC search predictions receive best-effort exact-topology estimates; failures remain unknown. The service creates awaiting_approval plans without deploying automatically.
-- Examples: [llm_d_bench/agentic/router.py](../llm_d_bench/agentic/router.py)
-- Tests: [llm_d_bench/agentic/test_service.py](../llm_d_bench/agentic/test_service.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/router.py](../apps/backend/src/llm_d_lens/agentic/router.py)
+- Tests: [apps/backend/tests/unit/agentic/test_service.py](../apps/backend/tests/unit/agentic/test_service.py)
 
 ## agentic-opensearch-evidence-search
 
 Search rebuildable log, trace, and reference-material projections in OpenSearch, validating manifests and content checksums before using local artifact hits.
 
-- Entry point: [llm_d_bench/agentic/opensearch_evidence_search.py](../llm_d_bench/agentic/opensearch_evidence_search.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/opensearch_evidence_search.py](../apps/backend/src/llm_d_lens/agentic/opensearch_evidence_search.py)
 - Symbols: `OpenSearchEvidenceSearchRepository`, `verify_artifact_evidence`
 - Boundaries: Handles only unstructured diagnostics and methodological evidence; does not read/compute performance metrics or change candidate ranking. Every query enforces tenant/ACL filters; kNN runs only with caller-provided embeddings. Source retrieval is limited to controlled artifact/dataset roots for evidence/diagnostic retention; raw text does not enter planner or provider prompts.
-- Examples: [llm_d_bench/agentic/evidence_search_repository.py](../llm_d_bench/agentic/evidence_search_repository.py)
-- Tests: [llm_d_bench/agentic/test_opensearch_evidence_search.py](../llm_d_bench/agentic/test_opensearch_evidence_search.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/evidence_search_repository.py](../apps/backend/src/llm_d_lens/agentic/evidence_search_repository.py)
+- Tests: [apps/backend/tests/unit/agentic/test_opensearch_evidence_search.py](../apps/backend/tests/unit/agentic/test_opensearch_evidence_search.py)
 
 ## artifact-inventory
 
 Portable artifact manifests with SHA256, source versions, configuration IDs, truncation and retention categories.
 
-- Entry point: [llm_d_bench/utils/artifact_store.py](../llm_d_bench/utils/artifact_store.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/artifacts/store.py](../apps/backend/src/llm_d_lens/infrastructure/artifacts/store.py)
 - Symbols: `register_artifacts`, `artifact_uri`, `resolve_artifact`
 - Boundaries: Local filesystem inventory only; owners choose files and terminal lifecycle. Reject traversal/symlinks, preserve ownership/creation time and atomically publish manifests. Logical URIs are root-independent; credentials excluded by callers. No object storage, automatic retention deletion or domain-state abstraction.
-- Examples: [llm_d_bench/configuration/service.py](../llm_d_bench/configuration/service.py), [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py), [llm_d_bench/simulation/service.py](../llm_d_bench/simulation/service.py), [llm_d_bench/monitoring/cluster_stack/operations.py](../llm_d_bench/monitoring/cluster_stack/operations.py)
-- Tests: [llm_d_bench/utils/test_artifact_store.py](../llm_d_bench/utils/test_artifact_store.py), [llm_d_bench/evaluate/test_artifact_storage.py](../llm_d_bench/evaluate/test_artifact_storage.py), [tests/test_simulation.py](../tests/test_simulation.py)
+- Examples: [apps/backend/src/llm_d_lens/configuration/service.py](../apps/backend/src/llm_d_lens/configuration/service.py), [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py), [apps/backend/src/llm_d_lens/simulation/service.py](../apps/backend/src/llm_d_lens/simulation/service.py), [apps/backend/src/llm_d_lens/monitoring/cluster_stack/operations.py](../apps/backend/src/llm_d_lens/monitoring/cluster_stack/operations.py)
+- Tests: [apps/backend/tests/unit/infrastructure/artifacts/test_store.py](../apps/backend/tests/unit/infrastructure/artifacts/test_store.py), [apps/backend/tests/unit/evaluation/test_artifact_storage.py](../apps/backend/tests/unit/evaluation/test_artifact_storage.py), [apps/backend/tests/integration/test_simulation.py](../apps/backend/tests/integration/test_simulation.py)
 
 ## storage-administration
 
 Offline legacy data copy, artifact backfill and non-destructive retention inventory.
 
-- Entry point: [llm_d_bench/utils/storage_admin.py](../llm_d_bench/utils/storage_admin.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/storage/admin.py](../apps/backend/src/llm_d_lens/infrastructure/storage/admin.py)
 - Symbols: `migrate_tree`, `reindex_artifacts`, `retention_inventory`
 - Boundaries: Dry-run default, explicit --apply copies without deleting sources or overwriting conflicts. Stop writers before apply. Only known local path fields rebase; cache executable bits preserved, symlinks skipped. Reindex retains unknown historical provenance. Retention reports candidates; domain delete APIs own removal.
 - Examples: [specs/changes/unified-artifact-storage.md](../specs/changes/unified-artifact-storage.md)
-- Tests: [llm_d_bench/utils/test_storage_admin.py](../llm_d_bench/utils/test_storage_admin.py)
+- Tests: [apps/backend/tests/unit/infrastructure/storage/test_admin.py](../apps/backend/tests/unit/infrastructure/storage/test_admin.py)
 
 ## model-cache-job-launch
 
 Shared node progress initialization and Job submission for download, deletion and incremental synchronization.
 
-- Entry point: [llm_d_bench/model_cache/jobs.py](../llm_d_bench/model_cache/jobs.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_cache/jobs.py](../apps/backend/src/llm_d_lens/model_cache/jobs.py)
 - Symbols: `launch_cache_jobs`
 - Boundaries: Caller owns target nodes, credentials and action commands. Append preserves existing progress. Failures propagate before in-progress publication. No automatic retry or cleanup.
-- Examples: [llm_d_bench/model_cache/jobs.py](../llm_d_bench/model_cache/jobs.py)
-- Tests: [llm_d_bench/model_cache/test_jobs.py](../llm_d_bench/model_cache/test_jobs.py)
+- Examples: [apps/backend/src/llm_d_lens/model_cache/jobs.py](../apps/backend/src/llm_d_lens/model_cache/jobs.py)
+- Tests: [apps/backend/tests/unit/model_cache/test_jobs.py](../apps/backend/tests/unit/model_cache/test_jobs.py)
 
 ## node-storage-paths
 
 Node storage path selection matching the Python LENS/XDG contract.
 
-- Entry point: [server/storagePaths.ts](../server/storagePaths.ts)
+- Entry point: [apps/server/src/infrastructure/storagePaths.ts](../apps/server/src/infrastructure/storagePaths.ts)
 - Symbols: `storagePath`
 - Boundaries: No IO, migration, or cleanup. Legacy domain directory variables are ignored. Browser download paths and remote host environments remain separate.
-- Examples: [server/clusterSession.ts](../server/clusterSession.ts), [server/guidePlanning.ts](../server/guidePlanning.ts)
-- Tests: [server/storagePaths.test.ts](../server/storagePaths.test.ts), [server/clusterSession.test.ts](../server/clusterSession.test.ts)
+- Examples: [apps/server/src/services/clusterSession.ts](../apps/server/src/services/clusterSession.ts), [apps/server/src/routes/guidePlanning.ts](../apps/server/src/routes/guidePlanning.ts)
+- Tests: [apps/server/testing/infrastructure/storagePaths.test.ts](../apps/server/testing/infrastructure/storagePaths.test.ts), [apps/server/testing/services/clusterSession.test.ts](../apps/server/testing/services/clusterSession.test.ts)
 
 ## configuration-persistence
 
 Publish immutable UUID-scoped configuration YAML, saved configuration record and portable artifact inventory.
 
-- Entry point: [llm_d_bench/configuration/service.py](../llm_d_bench/configuration/service.py)
+- Entry point: [apps/backend/src/llm_d_lens/configuration/service.py](../apps/backend/src/llm_d_lens/configuration/service.py)
 - Symbols: `save_configuration`, `get_configuration_artifact`, `delete_configuration_artifact`
 - Boundaries: Configuration domain owns checksum, cluster binding and manifest validation. Keep original display filename and /configs route compatibility; storage uses LENS_DATA_DIR and ignores legacy directory variables. Repeated filenames cannot overwrite other artifact IDs; deletion validates owner paths.
-- Examples: [llm_d_bench/configuration/router.py](../llm_d_bench/configuration/router.py)
-- Tests: [llm_d_bench/configuration/test_bundle_roundtrip.py](../llm_d_bench/configuration/test_bundle_roundtrip.py), [tests/python/test_configuration.py](../tests/python/test_configuration.py)
+- Examples: [apps/backend/src/llm_d_lens/configuration/router.py](../apps/backend/src/llm_d_lens/configuration/router.py)
+- Tests: [apps/backend/tests/unit/configuration/test_bundle_roundtrip.py](../apps/backend/tests/unit/configuration/test_bundle_roundtrip.py), [apps/backend/tests/integration/python/test_configuration.py](../apps/backend/tests/integration/python/test_configuration.py)
 
 ## deployment-diagnostic-archive
 
 Append deployment diagnostics independently of Kubernetes and register partial snapshots with execution provenance.
 
-- Entry point: [llm_d_bench/deploy/service.py](../llm_d_bench/deploy/service.py)
+- Entry point: [apps/backend/src/llm_d_lens/deploy/service.py](../apps/backend/src/llm_d_lens/deploy/service.py)
 - Symbols: `ExecutionLogArchive`
 - Boundaries: Snapshots are explicitly truncated, not a complete pod log stream. Deployment lifecycle owns status/configuration IDs. Default data/artifacts/deployments; explicit base_dir preserves caller-owned legacy archive layout.
-- Examples: [llm_d_bench/deploy/service.py](../llm_d_bench/deploy/service.py)
-- Tests: [llm_d_bench/deploy/test_artifact_storage.py](../llm_d_bench/deploy/test_artifact_storage.py)
+- Examples: [apps/backend/src/llm_d_lens/deploy/service.py](../apps/backend/src/llm_d_lens/deploy/service.py)
+- Tests: [apps/backend/tests/unit/deploy/test_artifact_storage.py](../apps/backend/tests/unit/deploy/test_artifact_storage.py)
 
 ## deployment-routing-workload
 
 Fresh shared-prefix defaults for optimized and precise routing comparisons.
 
-- Entry point: [llm_d_bench/deploy/capabilities.py](../llm_d_bench/deploy/capabilities.py)
+- Entry point: [apps/backend/src/llm_d_lens/deploy/capabilities.py](../apps/backend/src/llm_d_lens/deploy/capabilities.py)
 - Symbols: `shared_prefix_routing_workload`
 - Boundaries: New nested data per call. Provider goals, baselines, tiered-cache and PD workload definitions remain distinct.
-- Examples: [llm_d_bench/deploy/capabilities.py](../llm_d_bench/deploy/capabilities.py)
-- Tests: [llm_d_bench/deploy/test_capabilities.py](../llm_d_bench/deploy/test_capabilities.py)
+- Examples: [apps/backend/src/llm_d_lens/deploy/capabilities.py](../apps/backend/src/llm_d_lens/deploy/capabilities.py)
+- Tests: [apps/backend/tests/unit/deploy/test_capabilities.py](../apps/backend/tests/unit/deploy/test_capabilities.py)
 
 ## remote-repository-preparation
 
 Prepare a validated deployment repository on the remote host using its Lens/XDG cache layout.
 
-- Entry point: [server/remoteDeploy.ts](../server/remoteDeploy.ts)
+- Entry point: [apps/server/src/routes/remoteDeploy.ts](../apps/server/src/routes/remoteDeploy.ts)
 - Symbols: `prepareRepositoryCommand`
 - Boundaries: Builds shell command only; remote execution/lifecycle remains in remoteDeploy. Preserve explicit absolute or home paths; GitHub clones isolate owner/repository. Expand only trusted remote HOME/LENS/XDG variables, quote user path/ref as literal.
-- Examples: [server/remoteDeploy.ts](../server/remoteDeploy.ts)
-- Tests: [server/remoteDeploy.test.ts](../server/remoteDeploy.test.ts)
+- Examples: [apps/server/src/routes/remoteDeploy.ts](../apps/server/src/routes/remoteDeploy.ts)
+- Tests: [apps/server/testing/routes/remoteDeploy.test.ts](../apps/server/testing/routes/remoteDeploy.test.ts)
 
 ## kubernetes-raw-api
 
 Raw Kubernetes SDK resource discovery and strict named/paginated reads.
 
-- Entry point: [llm_d_bench/utils/kubernetes_api.py](../llm_d_bench/utils/kubernetes_api.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/api.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/api.py)
 - Symbols: `api_session`, `resolve_resource`, `query_resource`, `server_version`
 - Boundaries: Independent reloaded credentials; strict API errors and raw JSON; discover served CRD version. Typed list envelopes supply missing item kind/apiVersion on every page for kubectl compatibility; explicit item types and generic Lists are preserved. Pool lifecycle remains separate.
-- Examples: [llm_d_bench/utils/kubernetes_reads.py](../llm_d_bench/utils/kubernetes_reads.py), [llm_d_bench/utils/kubernetes_mutations.py](../llm_d_bench/utils/kubernetes_mutations.py)
-- Tests: [llm_d_bench/utils/test_kubernetes_api.py](../llm_d_bench/utils/test_kubernetes_api.py), [llm_d_bench/utils/test_kubernetes_integration.py](../llm_d_bench/utils/test_kubernetes_integration.py)
+- Examples: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/reads.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/reads.py), [apps/backend/src/llm_d_lens/infrastructure/kubernetes/mutations.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/mutations.py)
+- Tests: [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_api.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_api.py), [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_integration.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_integration.py)
 
 ## kubernetes-auth
 
 Merged kubeconfig and safe noninteractive ExecCredential loading.
 
-- Entry point: [llm_d_bench/utils/kubernetes_auth.py](../llm_d_bench/utils/kubernetes_auth.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/auth.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/auth.py)
 - Symbols: `load_configuration`, `cleanup_configuration`
 - Boundaries: No global config; legacy auth-provider selects CLI before effects. Exec uses bounded argv processes and sanitized errors; POSIX process-group cleanup. Owner must cleanup temp credentials after client close. load_configuration also adds the selected API-server host to process NO_PROXY/no_proxy when a proxy is configured (kubernetes-proxy-bypass).
-- Examples: [llm_d_bench/utils/kubernetes_api.py](../llm_d_bench/utils/kubernetes_api.py), [llm_d_bench/utils/kubernetes_pool.py](../llm_d_bench/utils/kubernetes_pool.py)
-- Tests: [llm_d_bench/utils/test_kubernetes_auth.py](../llm_d_bench/utils/test_kubernetes_auth.py)
+- Examples: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/api.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/api.py), [apps/backend/src/llm_d_lens/infrastructure/kubernetes/pool.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/pool.py)
+- Tests: [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_auth.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_auth.py)
 
 ## kubernetes-client-pool
 
 Bounded event-loop-local Kubernetes HTTP transport reuse and credential cleanup.
 
-- Entry point: [llm_d_bench/utils/kubernetes_pool.py](../llm_d_bench/utils/kubernetes_pool.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/pool.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/pool.py)
 - Symbols: `start_pool`, `close_pool`, `pooled_client`
 - Boundaries: No response cache; configs reloaded by caller. Owns supplied configuration cleanup. Idle-only eviction, credential identity and application lifecycle. Watch bypasses pool.
-- Examples: [llm_d_bench/utils/kubernetes_api.py](../llm_d_bench/utils/kubernetes_api.py), [llm_d_bench/utils/kubernetes.py](../llm_d_bench/utils/kubernetes.py)
-- Tests: [llm_d_bench/utils/test_kubernetes_pool.py](../llm_d_bench/utils/test_kubernetes_pool.py)
+- Examples: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/api.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/api.py), [apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py)
+- Tests: [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_pool.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_pool.py)
 
 ## kubernetes-mutations
 
 Typed Kubernetes resource mutations preserving patch/conflict/delete-wait contracts.
 
-- Entry point: [llm_d_bench/utils/kubernetes_mutations.py](../llm_d_bench/utils/kubernetes_mutations.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/mutations.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/mutations.py)
 - Symbols: `create_sdk_resource`, `patch_sdk_resource`, `label_sdk_resource`, `scale_sdk_resource`, `delete_sdk_resource`, `delete_sdk_resources`
 - Boundaries: No automatic retries or client-side apply translation. Caller owns business scope/authorization. UID-aware deletion completion, namespace and label selection explicit.
-- Examples: [llm_d_bench/utils/kubernetes_commands.py](../llm_d_bench/utils/kubernetes_commands.py)
-- Tests: [llm_d_bench/utils/test_kubernetes_mutations.py](../llm_d_bench/utils/test_kubernetes_mutations.py)
+- Examples: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/commands.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/commands.py)
+- Tests: [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_mutations.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_mutations.py)
 
 ## kubernetes-watch
 
 Kubernetes list/watch events with relist, resourceVersion and bounded reconnect.
 
-- Entry point: [llm_d_bench/utils/kubernetes_watch.py](../llm_d_bench/utils/kubernetes_watch.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/watch.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/watch.py)
 - Symbols: `watch_resource_events`
 - Boundaries: RESET clears consumer state; bookmarks update cursor. Unpooled clients refresh on reconnect. Caller owns domain snapshot and closes abandoned iterator.
-- Examples: [llm_d_bench/evaluate/harness_watch.py](../llm_d_bench/evaluate/harness_watch.py)
-- Tests: [llm_d_bench/utils/test_kubernetes_watch.py](../llm_d_bench/utils/test_kubernetes_watch.py), [llm_d_bench/evaluate/test_harness_watch.py](../llm_d_bench/evaluate/test_harness_watch.py)
+- Examples: [apps/backend/src/llm_d_lens/evaluation/harness_watch.py](../apps/backend/src/llm_d_lens/evaluation/harness_watch.py)
+- Tests: [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_watch.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_watch.py), [apps/backend/tests/unit/evaluation/test_harness_watch.py](../apps/backend/tests/unit/evaluation/test_harness_watch.py)
 
 ## aic-exact-topology-estimate
 
 Estimate TTFT and TPOT for a specified AIC aggregated or P/D deployment topology.
 
-- Entry point: [llm_d_bench/aic/service.py](../llm_d_bench/aic/service.py)
+- Entry point: [apps/backend/src/llm_d_lens/aic/service.py](../apps/backend/src/llm_d_lens/aic/service.py)
 - Symbols: `estimate`, `estimate_sync`
 - Boundaries: Validate GPU count against TP and replicas, reject unverified PP and non-matching SDK results; without explicit latency targets use direct fixed-topology SDK estimation, while explicit targets retain the manual experiment path. Multi-replica aggregate throughput is unknown without measurement. Expose typed POST /api/v1/aic/estimate and generated MCP estimate_aic_configuration. AIC failures are not predictions.
-- Examples: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py), [server/candidateSearch.ts](../server/candidateSearch.ts)
-- Tests: [llm_d_bench/aic/test_service.py](../llm_d_bench/aic/test_service.py), [llm_d_bench/agentic/test_service.py](../llm_d_bench/agentic/test_service.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py), [apps/server/src/routes/candidateSearch.ts](../apps/server/src/routes/candidateSearch.ts)
+- Tests: [apps/backend/tests/unit/aic/test_service.py](../apps/backend/tests/unit/aic/test_service.py), [apps/backend/tests/unit/agentic/test_service.py](../apps/backend/tests/unit/agentic/test_service.py)
 
 ## aic-exact-topology-estimate-request
 
 Validate the explicit workload and topology inputs for an AIC estimate.
 
-- Entry point: [llm_d_bench/aic/models.py](../llm_d_bench/aic/models.py)
+- Entry point: [apps/backend/src/llm_d_lens/aic/models.py](../apps/backend/src/llm_d_lens/aic/models.py)
 - Symbols: `AICEstimateRequest`
 - Boundaries: The typed FastAPI request defines the OpenAPI schema used to generate MCP estimate_aic_configuration inputs; service-level validation checks the topology against SDK output.
-- Examples: [llm_d_bench/aic/router.py](../llm_d_bench/aic/router.py)
-- Tests: [llm_d_bench/aic/test_service.py](../llm_d_bench/aic/test_service.py)
+- Examples: [apps/backend/src/llm_d_lens/aic/router.py](../apps/backend/src/llm_d_lens/aic/router.py)
+- Tests: [apps/backend/tests/unit/aic/test_service.py](../apps/backend/tests/unit/aic/test_service.py)
 
 ## aic-exact-topology-estimate-api
 
 Expose exact-topology AIC estimation through the HTTP and generated MCP contracts.
 
-- Entry point: [llm_d_bench/aic/router.py](../llm_d_bench/aic/router.py)
+- Entry point: [apps/backend/src/llm_d_lens/aic/router.py](../apps/backend/src/llm_d_lens/aic/router.py)
 - Symbols: `estimate_endpoint`
 - Boundaries: POST /api/v1/aic/estimate accepts AICEstimateRequest and delegates to the AIC service; generated MCP tooling follows the OpenAPI request schema.
-- Examples: [server/candidateSearch.ts](../server/candidateSearch.ts), [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py)
-- Tests: [server/http.test.ts](../server/http.test.ts), [llm_d_bench/aic/test_service.py](../llm_d_bench/aic/test_service.py)
+- Examples: [apps/server/src/routes/candidateSearch.ts](../apps/server/src/routes/candidateSearch.ts), [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py)
+- Tests: [apps/server/testing/infrastructure/http.test.ts](../apps/server/testing/infrastructure/http.test.ts), [apps/backend/tests/unit/aic/test_service.py](../apps/backend/tests/unit/aic/test_service.py)
 
 ## agentic-candidate-generation
 
 Generate bounded Agentic deployment proposals through an AI-directed native MCP tool loop and independently validate every topology against facts derived from that loop.
 
-- Entry point: [llm_d_bench/agentic/generator.py](../llm_d_bench/agentic/generator.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/generator.py](../apps/backend/src/llm_d_lens/agentic/generator.py)
 - Symbols: `AICandidateGenerator`, `AgenticMcpClient`, `CandidateValidator`
 - Boundaries: The AI path starts with deployment intent and requests get_cluster_overview before submitting proposals. The server runs cluster overview before AIC search and overrides the AI-supplied GPU budget with live capacity in the selected mode. An AIC no-feasible-configurations 400 is treated as an empty candidate result, retaining its error detail, so search_aic_with_relaxation can use cluster-derived GPU capacity and invoke the bounded AIC search API; its anchor is not SLO proof. A valid relaxed anchor is preserved as a separate bounded proposal when not already submitted; the same resource validator checks it before exact-topology estimation. Other AIC errors do not trigger relaxation. AI proposals are untrusted and cannot score, select, approve, render, or deploy. Only allowlisted planning MCP tools are exposed and executed. Explicit numeric ISL, OSL, TTFT and TPOT constraints in operator preference take precedence over the corresponding structured fields for AI generation, AIC search and SLO filtering; otherwise AIC search uses server-normalized structured inputs. Concurrency is a planning workload signal, not an AIC search input. Generator tool traces retain the effective AIC search arguments and result. Partial valid output is accepted; deterministic fallback resolves facts through internal domain services. Run planning_trace records facts, validation, ranking and selection.
-- Examples: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py), [server/mcp/specialTools.ts](../server/mcp/specialTools.ts), [server/candidateSearch.ts](../server/candidateSearch.ts)
-- Tests: [llm_d_bench/agentic/test_generator.py](../llm_d_bench/agentic/test_generator.py), [llm_d_bench/agentic/test_service.py](../llm_d_bench/agentic/test_service.py), [server/http.test.ts](../server/http.test.ts), [server/mcp/specialTools.test.ts](../server/mcp/specialTools.test.ts)
+- Examples: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py), [apps/server/src/mcp/specialTools.ts](../apps/server/src/mcp/specialTools.ts), [apps/server/src/routes/candidateSearch.ts](../apps/server/src/routes/candidateSearch.ts)
+- Tests: [apps/backend/tests/unit/agentic/test_generator.py](../apps/backend/tests/unit/agentic/test_generator.py), [apps/backend/tests/unit/agentic/test_service.py](../apps/backend/tests/unit/agentic/test_service.py), [apps/server/testing/infrastructure/http.test.ts](../apps/server/testing/infrastructure/http.test.ts), [apps/server/testing/mcp/specialTools.test.ts](../apps/server/testing/mcp/specialTools.test.ts)
 
 ## agentic-aic-relaxed-mcp-search
 
 Expose a bounded AIC latency-relaxation search to Agentic via an audited MCP tool and cluster-derived GPU budget.
 
-- Entry point: [server/mcp/specialTools.ts](../server/mcp/specialTools.ts)
+- Entry point: [apps/server/src/mcp/specialTools.ts](../apps/server/src/mcp/specialTools.ts)
 - Symbols: `specialTools`
 - Boundaries: The MCP tool calls the read-only Node candidate-search API and cluster overview; it returns attempts and a complete closest anchor using at most the available GPU budget, never a verified SLO for scaled proposals. Other MCP tools retain their existing contracts.
-- Examples: [llm_d_bench/agentic/generator.py](../llm_d_bench/agentic/generator.py), [server/candidateSearch.ts](../server/candidateSearch.ts)
-- Tests: [server/mcp/specialTools.test.ts](../server/mcp/specialTools.test.ts), [server/http.test.ts](../server/http.test.ts), [llm_d_bench/agentic/test_generator.py](../llm_d_bench/agentic/test_generator.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/generator.py](../apps/backend/src/llm_d_lens/agentic/generator.py), [apps/server/src/routes/candidateSearch.ts](../apps/server/src/routes/candidateSearch.ts)
+- Tests: [apps/server/testing/mcp/specialTools.test.ts](../apps/server/testing/mcp/specialTools.test.ts), [apps/server/testing/infrastructure/http.test.ts](../apps/server/testing/infrastructure/http.test.ts), [apps/backend/tests/unit/agentic/test_generator.py](../apps/backend/tests/unit/agentic/test_generator.py)
 
 ## agentic-deterministic-ranking
 
 Generate and rank bounded Agentic deployment topologies with an auditable ranking priority.
 
-- Entry point: [llm_d_bench/agentic/planner.py](../llm_d_bench/agentic/planner.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/planner.py](../apps/backend/src/llm_d_lens/agentic/planner.py)
 - Symbols: `DeterministicPlanner`
 - Boundaries: The ranking trace shares the actual ranking key and only describes validated deployable candidates; known latency SLO misses rank by relative target violation before resource savings, while missing AIC measurements remain unknown. Deterministic operator-preference keyword matching uses English aliases only; Chinese aliases are not supported.
-- Examples: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py)
-- Tests: [llm_d_bench/agentic/test_planner.py](../llm_d_bench/agentic/test_planner.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py)
+- Tests: [apps/backend/tests/unit/agentic/test_planner.py](../apps/backend/tests/unit/agentic/test_planner.py)
 
 ## agentic-ai-candidate-scoring
 
 Represent validated deployment candidates and present their performance evidence to AI scoring.
 
-- Entry point: [llm_d_bench/agentic/planner.py](../llm_d_bench/agentic/planner.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/planner.py](../apps/backend/src/llm_d_lens/agentic/planner.py)
 - Symbols: `PlannedCandidate`, `OpenAICompatiblePlanner`
 - Boundaries: Exact AIC search or estimate metrics carry their source into scoring; candidates with known unmet latency SLOs carry not_satisfied status, and AI rankings that prefer a worse known SLO miss over a closer estimate are retried or rejected. Absent estimates remain unknown and do not imply zero latency.
-- Examples: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py)
-- Tests: [llm_d_bench/agentic/test_planner.py](../llm_d_bench/agentic/test_planner.py), [llm_d_bench/agentic/test_service.py](../llm_d_bench/agentic/test_service.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py)
+- Tests: [apps/backend/tests/unit/agentic/test_planner.py](../apps/backend/tests/unit/agentic/test_planner.py), [apps/backend/tests/unit/agentic/test_service.py](../apps/backend/tests/unit/agentic/test_service.py)
 
 ## agentic-planning-run-audit
 
 Orchestrate Agentic planning and expose per-stage trace alongside the approval-pending run.
 
-- Entry point: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py)
 - Symbols: `AgenticDeploymentService`
 - Boundaries: The run model retains input, facts, generation, validation, deterministic ranking, scoring and selection; refinement replaces the latest trace. After AI candidate validation, AIC-eligible candidates without exact search predictions receive a best-effort exact-topology estimate before scoring. Failed estimates remain unknown. Stage logs are summaries, not raw prompts or secrets.
-- Examples: [llm_d_bench/agentic/models.py](../llm_d_bench/agentic/models.py), [llm_d_bench/agentic/router.py](../llm_d_bench/agentic/router.py)
-- Tests: [llm_d_bench/agentic/test_service.py](../llm_d_bench/agentic/test_service.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/models.py](../apps/backend/src/llm_d_lens/agentic/models.py), [apps/backend/src/llm_d_lens/agentic/router.py](../apps/backend/src/llm_d_lens/agentic/router.py)
+- Tests: [apps/backend/tests/unit/agentic/test_service.py](../apps/backend/tests/unit/agentic/test_service.py)
 
 ## agentic-planning-run-contract
 
 Expose the approval-pending Agentic deployment run and its auditable planning stages.
 
-- Entry point: [llm_d_bench/agentic/models.py](../llm_d_bench/agentic/models.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/models.py](../apps/backend/src/llm_d_lens/agentic/models.py)
 - Symbols: `AgenticDeploymentRun`
 - Boundaries: planning_trace contains structured planning inputs and stage decisions, while generator_tool_trace retains AIC MCP arguments and results. No authentication credentials are included.
-- Examples: [llm_d_bench/agentic/service.py](../llm_d_bench/agentic/service.py), [llm_d_bench/agentic/router.py](../llm_d_bench/agentic/router.py)
-- Tests: [llm_d_bench/agentic/test_service.py](../llm_d_bench/agentic/test_service.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/service.py](../apps/backend/src/llm_d_lens/agentic/service.py), [apps/backend/src/llm_d_lens/agentic/router.py](../apps/backend/src/llm_d_lens/agentic/router.py)
+- Tests: [apps/backend/tests/unit/agentic/test_service.py](../apps/backend/tests/unit/agentic/test_service.py)
 
 ## cluster-planning-discovery
 
 Allowlisted selected-session planning discovery reused by Node.
 
-- Entry point: [llm_d_bench/cluster/sdk_discovery.py](../llm_d_bench/cluster/sdk_discovery.py)
+- Entry point: [apps/backend/src/llm_d_lens/cluster/sdk_discovery.py](../apps/backend/src/llm_d_lens/cluster/sdk_discovery.py)
 - Symbols: `planning_discovery`
 - Boundaries: Require active session; four read-only queries. Never accept arbitrary kubeconfig paths. Node-host ambient context remains Node-local.
-- Examples: [server/planningDiscovery.ts](../server/planningDiscovery.ts), [llm_d_bench/cluster/router.py](../llm_d_bench/cluster/router.py)
-- Tests: [llm_d_bench/cluster/test_sdk_discovery.py](../llm_d_bench/cluster/test_sdk_discovery.py), [server/planningDiscovery.test.ts](../server/planningDiscovery.test.ts)
+- Examples: [apps/server/src/services/planningDiscovery.ts](../apps/server/src/services/planningDiscovery.ts), [apps/backend/src/llm_d_lens/cluster/router.py](../apps/backend/src/llm_d_lens/cluster/router.py)
+- Tests: [apps/backend/tests/unit/cluster/test_sdk_discovery.py](../apps/backend/tests/unit/cluster/test_sdk_discovery.py), [apps/server/testing/services/planningDiscovery.test.ts](../apps/server/testing/services/planningDiscovery.test.ts)
 
 ## kubernetes-command-adapter
 
 Finite Kubernetes argv compatibility adapter over typed SDK operations.
 
-- Entry point: [llm_d_bench/utils/kubernetes_commands.py](../llm_d_bench/utils/kubernetes_commands.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/commands.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/commands.py)
 - Symbols: `execute_sdk_command`, `sdk_enabled`, `sdk_writes_enabled`
 - Boundaries: Recognize complete command before execution; unsupported forms return None for CLI selection before side effects. SDK failures return CommandResult and never retry CLI. Caller controls write enablement and enforces domain policy. Default mutation output excludes resource bodies. Unset backend variables default to SDK reads and writes; explicit BACKEND overrides legacy READ_BACKEND, whose read-only behavior is preserved. BACKEND=cli explicitly rolls back.
-- Examples: [llm_d_bench/utils/kubernetes.py](../llm_d_bench/utils/kubernetes.py), [llm_d_bench/deploy/runtime/composition.py](../llm_d_bench/deploy/runtime/composition.py), [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
-- Tests: [llm_d_bench/utils/test_kubernetes_commands.py](../llm_d_bench/utils/test_kubernetes_commands.py), [llm_d_bench/utils/test_kubernetes_integration.py](../llm_d_bench/utils/test_kubernetes_integration.py)
+- Examples: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py), [apps/backend/src/llm_d_lens/deploy/runtime/composition.py](../apps/backend/src/llm_d_lens/deploy/runtime/composition.py), [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_commands.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_commands.py), [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_integration.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_integration.py)
 
 ## evaluation-proxy-isolation
 
 Separate benchmark Kubernetes control-plane subprocesses from harness Pod and Helm download proxies.
 
-- Entry point: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
 - Symbols: `_harness_proxy_environment`, `_harness_proxy_override`, `_install_helm_proxy_wrapper`
 - Boundaries: Evaluation domain only. _execute strips inherited HTTP/HTTPS/ALL proxy variables case-insensitively, preserves kubeconfig, passes Pod proxies as harness.extraEnvVars and restores external proxies only in the Helm wrapper. Merge existing bypass entries; never modify global environment or third-party virtualenvs. Explicit kubeconfig proxy-url remains supported. Helm and Pods still require appropriate bypass entries for direct cluster access.
-- Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
-- Tests: [llm_d_bench/evaluate/test_models.py](../llm_d_bench/evaluate/test_models.py), [llm_d_bench/evaluate/test_matrix.py](../llm_d_bench/evaluate/test_matrix.py)
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_models.py](../apps/backend/tests/unit/evaluation/test_models.py), [apps/backend/tests/unit/evaluation/test_matrix.py](../apps/backend/tests/unit/evaluation/test_matrix.py)
 
 ## reuse-task-evidence
 
@@ -768,140 +778,140 @@ Per-capability module coverage and repository review evidence.
 
 Permission catalog and permission sets for the three built-in roles (admin/maintainer/end-user), serving as the authoritative permission contract in code.
 
-- Entry point: [llm_d_bench/auth/permissions.py](../llm_d_bench/auth/permissions.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/permissions.py](../apps/backend/src/llm_d_lens/auth/permissions.py)
 - Symbols: `Permission`, `permission_matches`, `permission_granted`, `role_permissions`, `role_self_scoped`
 - Boundaries: Catalog is code, not a table: role_permissions only stores role-to-code rows. Codes are domain:resource:action with segment wildcards. self-scoped means a cluster binding does not grant the action on resources the principal neither owns nor was granted. Custom roles pass their own permission/self-scope maps into Principal; do not add UI-only capabilities here. Built-in end-user cannot create deployments by any path (decision D26): it lacks deployment:run:create, deployment:agentic:create/approve, and the new evaluate:workflow:create, while keeping evaluate:run:create for benchmarking an existing deployment.
-- Examples: [llm_d_bench/auth/policy.py](../llm_d_bench/auth/policy.py), [llm_d_bench/auth/__init__.py](../llm_d_bench/auth/__init__.py)
-- Tests: [llm_d_bench/auth/test_permissions.py](../llm_d_bench/auth/test_permissions.py)
+- Examples: [apps/backend/src/llm_d_lens/auth/policy.py](../apps/backend/src/llm_d_lens/auth/policy.py), [apps/backend/src/llm_d_lens/auth/__init__.py](../apps/backend/src/llm_d_lens/auth/__init__.py)
+- Tests: [apps/backend/tests/unit/auth/test_permissions.py](../apps/backend/tests/unit/auth/test_permissions.py)
 
 ## auth-policy
 
 Framework-free authorization through pure action-gate (role permissions) and scope-gate (bindings, ownership, and sharing) checks.
 
-- Entry point: [llm_d_bench/auth/policy.py](../llm_d_bench/auth/policy.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/policy.py](../apps/backend/src/llm_d_lens/auth/policy.py)
 - Symbols: `authorize`, `Decision`, `role_has_permission`, `accessible_cluster_ids`
 - Boundaries: Ownership is scope-only: an owner still needs the action in an in-scope role. self-scoped end-user actions require ownership or a resource share even under a cluster binding. Resource share requires the grantee to already reach the resource's cluster. No persistence, HTTP or caching here; the Casbin/DAO adapter populates Principal. A resource share only confers the shared role's non-creator-only actions: owner-scoped delete/share/grant-access stay with the creator, so a shared end-user binding cannot delete or re-share the deployment.
-- Examples: [llm_d_bench/auth/__init__.py](../llm_d_bench/auth/__init__.py)
-- Tests: [llm_d_bench/auth/test_policy.py](../llm_d_bench/auth/test_policy.py)
+- Examples: [apps/backend/src/llm_d_lens/auth/__init__.py](../apps/backend/src/llm_d_lens/auth/__init__.py)
+- Tests: [apps/backend/tests/unit/auth/test_policy.py](../apps/backend/tests/unit/auth/test_policy.py)
 
 ## authz-scope
 
 Pure resource-scope resolution: accessible clusters, resource coverage by bindings, and operate coverage through ownership or owner groups.
 
-- Entry point: [llm_d_bench/auth/scope.py](../llm_d_bench/auth/scope.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/scope.py](../apps/backend/src/llm_d_lens/auth/scope.py)
 - Symbols: `reachable_clusters`, `cluster_reachable`, `binding_applies`, `is_creator`, `is_owner_group_member`, `ownership_covers`
 - Boundaries: Only global/cluster bindings establish cluster reachability; a resource-level share never grants cluster access. Owner-group members get operate but not delete/share. Keep domain-agnostic; resource identity is passed in as ResourceRef.
-- Examples: [llm_d_bench/auth/policy.py](../llm_d_bench/auth/policy.py)
-- Tests: [llm_d_bench/auth/test_scope.py](../llm_d_bench/auth/test_scope.py)
+- Examples: [apps/backend/src/llm_d_lens/auth/policy.py](../apps/backend/src/llm_d_lens/auth/policy.py)
+- Tests: [apps/backend/tests/unit/auth/test_scope.py](../apps/backend/tests/unit/auth/test_scope.py)
 
 ## auth-credentials
 
 Credential and secret primitives: Argon2id passwords, revocable session-token hashes, Node-to-Python internal signatures, and symmetric encryption with rotatable keys.
 
-- Entry point: [llm_d_bench/auth/security.py](../llm_d_bench/auth/security.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/security.py](../apps/backend/src/llm_d_lens/auth/security.py)
 - Symbols: `hash_password`, `verify_password`, `generate_session_token`, `hash_session_token`, `sign_internal`, `verify_internal`, `SecretCipher`
 - Boundaries: Pure primitives only. verify_password never raises. Internal signature binds timestamp+method+path+principal and enforces a freshness window. SecretCipher decrypts with the primary key then fallbacks; never log plaintext or tokens.
-- Examples: [llm_d_bench/auth/__init__.py](../llm_d_bench/auth/__init__.py)
-- Tests: [llm_d_bench/auth/test_security.py](../llm_d_bench/auth/test_security.py)
+- Examples: [apps/backend/src/llm_d_lens/auth/__init__.py](../apps/backend/src/llm_d_lens/auth/__init__.py)
+- Tests: [apps/backend/tests/unit/auth/test_security.py](../apps/backend/tests/unit/auth/test_security.py)
 
 ## casbin-authorization-engine
 
 Embedded Casbin action/scope authorization using domains for cluster scopes and policies synthesized from resolved DAO-backed Principals; distinct from the official SQL adapter.
 
-- Entry point: [llm_d_bench/auth/casbin_adapter.py](../llm_d_bench/auth/casbin_adapter.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/casbin_adapter.py](../apps/backend/src/llm_d_lens/auth/casbin_adapter.py)
 - Symbols: `role_has_permission`
 - Boundaries: Python authoritative side only (design 20.4); Node uses introspect. RBAC-with-domains, obj/act = domain:resource / action, global bindings expanded to the requested domain. Resource-level shares and ownership stay in policy.py. Do not use the official sqlalchemy-adapter (bypasses DAO layer). Matcher uses keyMatch (single '*' wildcard), never keyMatch2: codes are colon-delimited, and keyMatch2 would treat ':' as a path parameter so e.g. deployment:agentic:create would match deployment:run:create.
-- Examples: [llm_d_bench/auth/policy.py](../llm_d_bench/auth/policy.py)
-- Tests: [llm_d_bench/auth/test_policy.py](../llm_d_bench/auth/test_policy.py), [llm_d_bench/auth/test_api.py](../llm_d_bench/auth/test_api.py)
+- Examples: [apps/backend/src/llm_d_lens/auth/policy.py](../apps/backend/src/llm_d_lens/auth/policy.py)
+- Tests: [apps/backend/tests/unit/auth/test_policy.py](../apps/backend/tests/unit/auth/test_policy.py), [apps/backend/tests/unit/auth/test_api.py](../apps/backend/tests/unit/auth/test_api.py)
 
 ## auth-route-registry
 
 Route-to-permission registry with fail-fast startup validation and default denial of unregistered routes.
 
-- Entry point: [llm_d_bench/auth/routes.py](../llm_d_bench/auth/routes.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/routes.py](../apps/backend/src/llm_d_lens/auth/routes.py)
 - Symbols: `RoutePermission`, `resolve_route_permission`, `validate_route_registry`, `app_route_table`
 - Boundaries: permission None = public, empty string = authenticated-only. Every served route must be registered; startup fails otherwise. Keep in sync with the design permission matrix when routes change.
-- Examples: [llm_d_bench/api/main.py](../llm_d_bench/api/main.py), [llm_d_bench/auth/context.py](../llm_d_bench/auth/context.py)
-- Tests: [llm_d_bench/auth/test_api.py](../llm_d_bench/auth/test_api.py)
+- Examples: [apps/backend/src/llm_d_lens/api/main.py](../apps/backend/src/llm_d_lens/api/main.py), [apps/backend/src/llm_d_lens/auth/context.py](../apps/backend/src/llm_d_lens/auth/context.py)
+- Tests: [apps/backend/tests/unit/auth/test_api.py](../apps/backend/tests/unit/auth/test_api.py)
 
 ## auth-first-run-admin
 
 First-run global administrator bootstrap for an empty database, generating/reading credentials, printing a banner, writing a credential file, and cleaning it up after a password change.
 
-- Entry point: [llm_d_bench/auth/bootstrap.py](../llm_d_bench/auth/bootstrap.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/bootstrap.py](../apps/backend/src/llm_d_lens/auth/bootstrap.py)
 - Symbols: `ensure_initial_admin`, `clear_initial_admin_credentials`, `format_initial_admin_banner`, `initial_admin_path`
 - Boundaries: Only when auth is enabled and the users table is empty; gated by PRISM_ADMIN_AUTOSEED. Generated passwords go to $LENS_DATA_DIR/credentials/initial_admin.txt (mode 600) and are removed after the password changes. Env-supplied passwords are never written to disk. Account is created with must_change_password=true.
-- Examples: [llm_d_bench/api/main.py](../llm_d_bench/api/main.py), [scripts/dev.sh](../scripts/dev.sh)
-- Tests: [llm_d_bench/auth/test_bootstrap.py](../llm_d_bench/auth/test_bootstrap.py), [llm_d_bench/auth/test_api.py](../llm_d_bench/auth/test_api.py)
+- Examples: [apps/backend/src/llm_d_lens/api/main.py](../apps/backend/src/llm_d_lens/api/main.py), [scripts/dev.sh](../scripts/dev.sh)
+- Tests: [apps/backend/tests/unit/auth/test_bootstrap.py](../apps/backend/tests/unit/auth/test_bootstrap.py), [apps/backend/tests/unit/auth/test_api.py](../apps/backend/tests/unit/auth/test_api.py)
 
 ## admin-ui-kit
 
 Shared dark panels, toolbars, and search controls for Administration pages, consistent with module pages such as AIProviders.
 
-- Entry point: [src/components/Administration/AdminPanel.jsx](../src/components/Administration/AdminPanel.jsx)
+- Entry point: [apps/frontend/src/pages/administration/ui/AdminPanel.jsx](../apps/frontend/src/pages/administration/ui/AdminPanel.jsx)
 - Symbols: `AdminPanel`, `AdminToolbar`, `AdminSearch`, `AdminClearButton`
 - Boundaries: Presentation only. Companions: ConfirmDeleteModal.jsx (destructive confirm with useSubmission) and AdminAlert.jsx (inline banners). Pair with ModulePage + ModuleHeader at the page top. Keep table rows in the page; do not bake domain columns into these shells.
-- Examples: [src/components/Administration/UsersPage.jsx](../src/components/Administration/UsersPage.jsx), [src/components/Administration/GroupsPage.jsx](../src/components/Administration/GroupsPage.jsx), [src/components/Administration/RolesPage.jsx](../src/components/Administration/RolesPage.jsx), [src/components/Administration/IdentityProvidersPage.jsx](../src/components/Administration/IdentityProvidersPage.jsx), [src/components/Administration/SessionsPage.jsx](../src/components/Administration/SessionsPage.jsx), [src/components/Administration/AuditLogsPage.jsx](../src/components/Administration/AuditLogsPage.jsx), [src/components/Administration/ConfirmDeleteModal.jsx](../src/components/Administration/ConfirmDeleteModal.jsx), [src/components/Administration/AdminAlert.jsx](../src/components/Administration/AdminAlert.jsx)
+- Examples: [apps/frontend/src/pages/administration/ui/UsersPage.jsx](../apps/frontend/src/pages/administration/ui/UsersPage.jsx), [apps/frontend/src/pages/administration/ui/GroupsPage.jsx](../apps/frontend/src/pages/administration/ui/GroupsPage.jsx), [apps/frontend/src/pages/administration/ui/RolesPage.jsx](../apps/frontend/src/pages/administration/ui/RolesPage.jsx), [apps/frontend/src/pages/administration/ui/IdentityProvidersPage.jsx](../apps/frontend/src/pages/administration/ui/IdentityProvidersPage.jsx), [apps/frontend/src/pages/administration/ui/SessionsPage.jsx](../apps/frontend/src/pages/administration/ui/SessionsPage.jsx), [apps/frontend/src/pages/administration/ui/AuditLogsPage.jsx](../apps/frontend/src/pages/administration/ui/AuditLogsPage.jsx), [apps/frontend/src/pages/administration/ui/ConfirmDeleteModal.jsx](../apps/frontend/src/pages/administration/ui/ConfirmDeleteModal.jsx), [apps/frontend/src/pages/administration/ui/AdminAlert.jsx](../apps/frontend/src/pages/administration/ui/AdminAlert.jsx)
 - Tests: Presentation-only; covered by npm run build and the Administration page smoke checks.
 
 ## auth-admin-cli
 
 Operator account-recovery CLI: create-admin, reset-password, and list-users.
 
-- Entry point: [llm_d_bench/auth/cli.py](../llm_d_bench/auth/cli.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/cli.py](../apps/backend/src/llm_d_lens/auth/cli.py)
 - Symbols: `main`, `build_parser`
 - Boundaries: Runs against the same LLM_D_BENCH_* database settings as the backend; stop the backend first when it owns the embedded PostgreSQL instance. reset-password unlocks the account and forces a change at next sign-in. Never prints an operator-supplied password.
-- Examples: [llm_d_bench/auth/bootstrap.py](../llm_d_bench/auth/bootstrap.py)
+- Examples: [apps/backend/src/llm_d_lens/auth/bootstrap.py](../apps/backend/src/llm_d_lens/auth/bootstrap.py)
 - Tests: Thin argparse wrapper over AuthService/bootstrap; covered indirectly by auth service/bootstrap tests. Verify --help and a reset against a scratch database.
 
 ## auth-request-scope
 
 Request-scope helpers for domain routers that filter lists by the caller's accessible clusters and validate individual resource access.
 
-- Entry point: [llm_d_bench/auth/access.py](../llm_d_bench/auth/access.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/access.py](../apps/backend/src/llm_d_lens/auth/access.py)
 - Symbols: `current_principal`, `visible_cluster_ids`, `cluster_allowed`, `require_cluster_access`, `filter_by_cluster`, `owner_for_create`, `resource_readable`
 - Boundaries: Auth disabled injects a global admin, so filtering is a no-op and existing behaviour is preserved. Request is optional so direct handler tests keep working. Raises ForbiddenError for inaccessible single resources.
-- Examples: [llm_d_bench/storage/router.py](../llm_d_bench/storage/router.py), [llm_d_bench/model_cache/router.py](../llm_d_bench/model_cache/router.py), [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py), [llm_d_bench/deploy/router.py](../llm_d_bench/deploy/router.py), [llm_d_bench/cluster/router.py](../llm_d_bench/cluster/router.py)
-- Tests: [llm_d_bench/auth/test_api.py](../llm_d_bench/auth/test_api.py)
+- Examples: [apps/backend/src/llm_d_lens/storage/router.py](../apps/backend/src/llm_d_lens/storage/router.py), [apps/backend/src/llm_d_lens/model_cache/router.py](../apps/backend/src/llm_d_lens/model_cache/router.py), [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py), [apps/backend/src/llm_d_lens/deploy/router.py](../apps/backend/src/llm_d_lens/deploy/router.py), [apps/backend/src/llm_d_lens/cluster/router.py](../apps/backend/src/llm_d_lens/cluster/router.py)
+- Tests: [apps/backend/tests/unit/auth/test_api.py](../apps/backend/tests/unit/auth/test_api.py)
 
 ## node-auth-gateway
 
 Browser-facing authentication/authorization gateway that resolves sessions, protects native Node routes, and strips forged internal headers.
 
-- Entry point: [server/auth.ts](../server/auth.ts)
+- Entry point: [apps/server/src/middleware/auth.ts](../apps/server/src/middleware/auth.ts)
 - Symbols: `authMiddleware`, `fetchPrincipal`, `permissionForNodeRoute`, `permissionGranted`, `isPublicApiPath`, `permissionAnyGranted`
 - Boundaries: Node is the primary policy enforcement point; proxied routes are still enforced by Python. Public paths and disabled-auth mode pass through. Never trust client x-prism-principal-* headers (they are stripped). Signed x-prism-internal-* assertions from internalAuth are accepted only when their HMAC matches the exact method+path; unsigned client headers are still stripped. Node-native route rules may require an any-of permission list (string | string[]): authMiddleware accepts the caller when they hold any listed code (e.g. /api/mcp accepts mcp:tool:invoke or playground:chat:use for the Playground assistant loopback). Each tool action is still enforced by its own target route permission.
-- Examples: [server/server.js](../server/server.js), [server/backend-api-proxy.ts](../server/backend-api-proxy.ts)
-- Tests: [server/auth.test.ts](../server/auth.test.ts)
+- Examples: [apps/server/src/server.js](../apps/server/src/server.js), [apps/server/src/proxy/backend-api-proxy.ts](../apps/server/src/proxy/backend-api-proxy.ts)
+- Tests: [apps/server/testing/middleware/auth.test.ts](../apps/server/testing/middleware/auth.test.ts)
 
 ## frontend-auth-permissions
 
 Frontend permission matching and a view-to-permission catalog for route guards and navigation filtering.
 
-- Entry point: [src/features/auth/permissions.js](../src/features/auth/permissions.js)
+- Entry point: [apps/frontend/src/pages/auth/permissions.js](../apps/frontend/src/pages/auth/permissions.js)
 - Symbols: `permissionMatches`, `hasPermission`, `canAccessView`
-- Boundaries: Mirrors llm_d_bench/auth/permissions.py segment wildcards. UI hiding is affordance only; backend remains authoritative. Keep VIEW_PERMISSIONS in step with the design page matrix.
-- Examples: [src/App.jsx](../src/App.jsx), [src/components/LeftNavigation.jsx](../src/components/LeftNavigation.jsx), [src/features/auth/PermissionGate.jsx](../src/features/auth/PermissionGate.jsx)
-- Tests: [src/features/auth/permissions.test.js](../src/features/auth/permissions.test.js)
+- Boundaries: Mirrors llm_d_lens/auth/permissions.py segment wildcards. UI hiding is affordance only; backend remains authoritative. Keep VIEW_PERMISSIONS in step with the design page matrix.
+- Examples: [apps/frontend/src/app/App.jsx](../apps/frontend/src/app/App.jsx), [apps/frontend/src/app/ui/LeftNavigation.jsx](../apps/frontend/src/app/ui/LeftNavigation.jsx), [apps/frontend/src/pages/auth/PermissionGate.jsx](../apps/frontend/src/pages/auth/PermissionGate.jsx)
+- Tests: [apps/frontend/src/pages/auth/permissions.test.js](../apps/frontend/src/pages/auth/permissions.test.js)
 
 ## frontend-auth-context
 
 React context maintaining the current principal and permission checks.
 
-- Entry point: [src/features/auth/AuthProvider.jsx](../src/features/auth/AuthProvider.jsx)
+- Entry point: [apps/frontend/src/pages/auth/AuthProvider.jsx](../apps/frontend/src/pages/auth/AuthProvider.jsx)
 - Symbols: `AuthProvider`
 - Boundaries: Session is a revocable httpOnly cookie; this provider only mirrors /api/v1/auth/session. 401 from httpClient dispatches prism:auth-expired to reset state. Use useAuth() inside the provider.
-- Examples: [src/App.jsx](../src/App.jsx), [src/features/auth/LoginPage.jsx](../src/features/auth/LoginPage.jsx)
-- Tests: [src/features/auth/permissions.test.js](../src/features/auth/permissions.test.js)
+- Examples: [apps/frontend/src/app/App.jsx](../apps/frontend/src/app/App.jsx), [apps/frontend/src/pages/auth/LoginPage.jsx](../apps/frontend/src/pages/auth/LoginPage.jsx)
+- Tests: [apps/frontend/src/pages/auth/permissions.test.js](../apps/frontend/src/pages/auth/permissions.test.js)
 
 ## frontend-permission-gate
 
 Shared gate that renders children only when the required permission is present.
 
-- Entry point: [src/features/auth/PermissionGate.jsx](../src/features/auth/PermissionGate.jsx)
+- Entry point: [apps/frontend/src/pages/auth/PermissionGate.jsx](../apps/frontend/src/pages/auth/PermissionGate.jsx)
 - Symbols: `PermissionGate`
 - Boundaries: Presentation only; never a security boundary. Requires AuthProvider above it.
-- Examples: [src/components/Administration/UsersPage.jsx](../src/components/Administration/UsersPage.jsx)
+- Examples: [apps/frontend/src/pages/administration/ui/UsersPage.jsx](../apps/frontend/src/pages/administration/ui/UsersPage.jsx)
 - Tests: Presentation-only; covered indirectly by the admin pages and permissions tests.
 
 ## node-internal-auth
@@ -911,541 +921,541 @@ METHOD
 path
 principal_id), with AsyncLocalStorage propagating authenticated callers to deeper internal reads.
 
-- Entry point: [server/internalAuth.ts](../server/internalAuth.ts)
+- Entry point: [apps/server/src/middleware/internalAuth.ts](../apps/server/src/middleware/internalAuth.ts)
 - Symbols: `signInternalHeaders`, `verifyInternalHeaders`, `internalHeadersFor`, `runWithInternalAuth`, `currentInternalPrincipalId`, `internalAuthEnabled`
 - Boundaries: Only the principal id is claimed; Python recomputes permissions/scope from the DB. Requires a shared LENS_INTERNAL_AUTH_SECRET on both sides; empty secret disables signing (cookie fallback). Signatures bind method+path and expire after 60s, so they cannot be replayed or used for a rewritten path.
-- Examples: [server/auth.ts](../server/auth.ts), [server/backend-api-proxy.ts](../server/backend-api-proxy.ts), [server/clusterSources.ts](../server/clusterSources.ts), [server/planningDiscovery.ts](../server/planningDiscovery.ts), [server/mcp/internal.ts](../server/mcp/internal.ts)
-- Tests: [server/auth.test.ts](../server/auth.test.ts)
+- Examples: [apps/server/src/middleware/auth.ts](../apps/server/src/middleware/auth.ts), [apps/server/src/proxy/backend-api-proxy.ts](../apps/server/src/proxy/backend-api-proxy.ts), [apps/server/src/services/clusterSources.ts](../apps/server/src/services/clusterSources.ts), [apps/server/src/services/planningDiscovery.ts](../apps/server/src/services/planningDiscovery.ts), [apps/server/src/mcp/internal.ts](../apps/server/src/mcp/internal.ts)
+- Tests: [apps/server/testing/middleware/auth.test.ts](../apps/server/testing/middleware/auth.test.ts)
 
 ## deployment-resource-sharing
 
 Share an individual deployment run or execution with users/groups through resource-scoped role bindings: create, revoke, and list bindings.
 
-- Entry point: [llm_d_bench/auth/service.py](../llm_d_bench/auth/service.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/service.py](../apps/backend/src/llm_d_lens/auth/service.py)
 - Symbols: `share_resource`, `revoke_resource_share`, `list_resource_shares`
 - Boundaries: Supports only deployment_run/deployment_execution resources. Recipients must already have access to the resource's cluster; sharing cannot bypass cluster boundaries or span clusters. Only creators or cluster maintainers/admins may share; ordinary owner-group members may not. Duplicate bindings return 409. Read-side _run_readable/_execution_readable checks in deployment routes match the same resource_type+id. The share drawer subject/role picker uses the resource-scoped GET .../access/options catalog (id/display only) instead of the admin Users/Groups/Roles APIs, which end-users cannot read. Shares are purged when the deployment is deleted: the run worker revokes deployment_execution shares for each removed execution and deployment_run shares only when the run record itself is deleted (users and groups alike). Revocation requires the authorized resource type, ID and cluster; unknown, mismatched or non-resource bindings return 404 before mutation.
-- Examples: [llm_d_bench/deploy/router.py](../llm_d_bench/deploy/router.py), [llm_d_bench/auth/routes.py](../llm_d_bench/auth/routes.py), [src/components/DeploymentManagement/DeploymentShareDrawer.jsx](../src/components/DeploymentManagement/DeploymentShareDrawer.jsx), [src/components/OptimizationWorkspace/remoteDeployBackend.js](../src/components/OptimizationWorkspace/remoteDeployBackend.js)
-- Tests: [llm_d_bench/auth/test_sharing.py](../llm_d_bench/auth/test_sharing.py), [llm_d_bench/deploy/test_router.py](../llm_d_bench/deploy/test_router.py)
+- Examples: [apps/backend/src/llm_d_lens/deploy/router.py](../apps/backend/src/llm_d_lens/deploy/router.py), [apps/backend/src/llm_d_lens/auth/routes.py](../apps/backend/src/llm_d_lens/auth/routes.py), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentShareDrawer.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentShareDrawer.jsx), [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.js)
+- Tests: [apps/backend/tests/unit/auth/test_sharing.py](../apps/backend/tests/unit/auth/test_sharing.py), [apps/backend/tests/unit/deploy/test_router.py](../apps/backend/tests/unit/deploy/test_router.py)
 
 ## frontend-polling
 
 Shared periodic page-data refresh hook with quiet refreshes, unmount cleanup, hidden-tab suspension, immediate refresh on visibility, and overlap prevention.
 
-- Entry point: [src/hooks/usePolling.js](../src/hooks/usePolling.js)
+- Entry point: [apps/frontend/src/shared/lib/usePolling.js](../apps/frontend/src/shared/lib/usePolling.js)
 - Symbols: `usePolling`
 - Boundaries: Use this for server-state freshness instead of a full page reload or an ad-hoc setInterval. Default interval is 5s; gate with enabled when there is nothing to watch (e.g. only while a download is in flight). Callbacks should refresh quietly — keep existing rows and reuse the page's load({ quiet: true }) instead of a full-page loading state — and must not disturb filters, form input, selected rows or open dialogs. Specialized loops with cancellation/streaming semantics (port-forward, logs, clocks) may keep their own timer but must still pause when hidden and clean up on unmount.
-- Examples: [src/components/Administration/UsersPage.jsx](../src/components/Administration/UsersPage.jsx), [src/components/ModelMarketPage.jsx](../src/components/ModelMarketPage.jsx), [src/components/AIProviders/AIProvidersPage.jsx](../src/components/AIProviders/AIProvidersPage.jsx), [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx), [src/components/EvaluationDashboard.jsx](../src/components/EvaluationDashboard.jsx), [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx)
+- Examples: [apps/frontend/src/pages/administration/ui/UsersPage.jsx](../apps/frontend/src/pages/administration/ui/UsersPage.jsx), [apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx](../apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx), [apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx](../apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx)
 - Tests: No dedicated unit test: this repo has no jsdom/testing-library setup, so the timer, visibility-pause and overlap guards are covered indirectly by the pages that use usePolling plus the type/build checks.
 
 ## agentic-deployment-workspace
 
 Domain workspace presenting Agentic deployment requests, candidate scores, historical benchmark samples, approval, and recomputation actions.
 
-- Entry point: [src/components/AgenticDeploymentWorkspace.jsx](../src/components/AgenticDeploymentWorkspace.jsx)
+- Entry point: [apps/frontend/src/pages/deployment/ui/AgenticDeploymentWorkspace.jsx](../apps/frontend/src/pages/deployment/ui/AgenticDeploymentWorkspace.jsx)
 - Symbols: `AgenticDeploymentWorkspace`
 - Boundaries: Displays only server-validated candidates and evidence; cannot create provider, TP, replica, or runtime parameters in the browser. Historical samples are for presentation only; the frontend does not aggregate them, filter candidates, or replace server-side approval.
-- Examples: [src/components/ModelMarketPage.jsx](../src/components/ModelMarketPage.jsx)
-- Tests: [src/components/agenticPresentation.test.js](../src/components/agenticPresentation.test.js)
+- Examples: [apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx](../apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx)
+- Tests: [apps/frontend/src/pages/deployment/lib/agenticPresentation.test.js](../apps/frontend/src/pages/deployment/lib/agenticPresentation.test.js)
 
 ## agentic-history-presentation
 
 Presentation helpers for historical benchmark records and candidate-generator provenance.
 
-- Entry point: [src/components/agenticPresentation.js](../src/components/agenticPresentation.js)
+- Entry point: [apps/frontend/src/pages/deployment/lib/agenticPresentation.js](../apps/frontend/src/pages/deployment/lib/agenticPresentation.js)
 - Symbols: `historicalEvidenceSummary`, `historicalBenchmarkLabel`, `generatorLabel`
 - Boundaries: Presentation only. It formats server-provided measurements, relevance and outcomes without aggregating metrics, calculating confidence, or changing candidate eligibility.
-- Examples: [src/components/AgenticDeploymentWorkspace.jsx](../src/components/AgenticDeploymentWorkspace.jsx)
-- Tests: [src/components/agenticPresentation.test.js](../src/components/agenticPresentation.test.js)
+- Examples: [apps/frontend/src/pages/deployment/ui/AgenticDeploymentWorkspace.jsx](../apps/frontend/src/pages/deployment/ui/AgenticDeploymentWorkspace.jsx)
+- Tests: [apps/frontend/src/pages/deployment/lib/agenticPresentation.test.js](../apps/frontend/src/pages/deployment/lib/agenticPresentation.test.js)
 
 ## model-access-token
 
 Issue, reset, revoke, and validate per-user model-service gateway tokens with the lens-mk- prefix, storing only SHA-256 hashes.
 
-- Entry point: [llm_d_bench/model_service/tokens.py](../llm_d_bench/model_service/tokens.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_service/tokens.py](../apps/backend/src/llm_d_lens/model_service/tokens.py)
 - Symbols: `ModelTokenService`, `generate_model_token`, `hash_model_token`
 - Boundaries: Separate table and namespace from login sessions; reuses auth/security.py hashing + random primitives. Plaintext is returned exactly once at create/regenerate; the service never exposes the hash. Validation checks status and expiry and throttles last_used_at writes; it does not itself check the user's active status or call permissions (the routing service does). Admin/UI must not log plaintext.
-- Examples: [llm_d_bench/model_service/service.py](../llm_d_bench/model_service/service.py), [llm_d_bench/model_service/router.py](../llm_d_bench/model_service/router.py)
-- Tests: [llm_d_bench/model_service/test_model_service.py](../llm_d_bench/model_service/test_model_service.py)
+- Examples: [apps/backend/src/llm_d_lens/model_service/service.py](../apps/backend/src/llm_d_lens/model_service/service.py), [apps/backend/src/llm_d_lens/model_service/router.py](../apps/backend/src/llm_d_lens/model_service/router.py)
+- Tests: [apps/backend/tests/unit/model_service/test_model_service.py](../apps/backend/tests/unit/model_service/test_model_service.py)
 
 ## selection-strategy
 
 Extensible backend-selection strategy abstraction and registry for model services, currently implementing uniform random and per-group round_robin selection.
 
-- Entry point: [llm_d_bench/model_service/selection.py](../llm_d_bench/model_service/selection.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_service/selection.py](../apps/backend/src/llm_d_lens/model_service/selection.py)
 - Symbols: `SelectionStrategy`, `RandomSelection`, `select_member`, `available_policies`
 - Boundaries: Implements decision D1: the protocol/registry exist for weighted/affinity later, but only random is registered, so get_strategy raises ValueError for unimplemented names. Selection receives the already permission-filtered candidate list and must not re-check permissions or reach the network.
-- Examples: [llm_d_bench/model_service/service.py](../llm_d_bench/model_service/service.py)
-- Tests: [llm_d_bench/model_service/test_model_service.py](../llm_d_bench/model_service/test_model_service.py)
+- Examples: [apps/backend/src/llm_d_lens/model_service/service.py](../apps/backend/src/llm_d_lens/model_service/service.py)
+- Tests: [apps/backend/tests/unit/model_service/test_model_service.py](../apps/backend/tests/unit/model_service/test_model_service.py)
 
 ## model-service-routing
 
 Authoritative resolution from model name to routing group, members, permission filtering, and backend selection, plus group/member CRUD and usage recording.
 
-- Entry point: [llm_d_bench/model_service/service.py](../llm_d_bench/model_service/service.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_service/service.py](../apps/backend/src/llm_d_lens/model_service/service.py)
 - Symbols: `ModelService`, `default_service`
 - Boundaries: Authorization is per execution via auth.policy.authorize with model-service:inference:use; the grant is the same rule used by the public OpenAI GET /v1/models endpoint (decision D2: unknown and unauthorized both raise ModelServiceNotFoundError, no existence leak; an invalid token is 401). Inference bytes never flow through this module; usage rows arrive via /record-usage (internal) and are idempotent by request_id, storing counts only (no pricing/quota in this version).
-- Examples: [llm_d_bench/model_service/router.py](../llm_d_bench/model_service/router.py), [llm_d_bench/api/main.py](../llm_d_bench/api/main.py)
-- Tests: [llm_d_bench/model_service/test_model_service.py](../llm_d_bench/model_service/test_model_service.py)
+- Examples: [apps/backend/src/llm_d_lens/model_service/router.py](../apps/backend/src/llm_d_lens/model_service/router.py), [apps/backend/src/llm_d_lens/api/main.py](../apps/backend/src/llm_d_lens/api/main.py)
+- Tests: [apps/backend/tests/unit/model_service/test_model_service.py](../apps/backend/tests/unit/model_service/test_model_service.py)
 
 ## model-gateway-operations
 
 llm-d Gateway Mode data-plane operations: cluster preflight, installation/reuse of cluster-shared Gateways, IPP installation/removal, per-model HTTPRoute + ReferenceGrant + IPP model-map reconciliation, component scaling, and status aggregation. Operations are audited in model_service_gateway_operations.
 
-- Entry point: [llm_d_bench/model_service/gateway_ops.py](../llm_d_bench/model_service/gateway_ops.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_service/gateway_ops.py](../apps/backend/src/llm_d_lens/model_service/gateway_ops.py)
 - Symbols: `GatewayOpsService`, `apply_node_inotify_limit`
 - Boundaries: Reuses scoped_runner/run_kubectl (injectable for tests). install_inference_gateway renders ProviderSpec-based GatewayClass/Gateway (+ ClientTrafficPolicy for Envoy); for Envoy, LENS_GATEWAY_SERVICE_TYPE optionally adds an EnvoyProxy wired via Gateway.spec.infrastructure.parametersRef so LB-less clusters get Programmed=True, install_cluster_gateway resolves the cluster's pinned provider, and reconcile_cluster_gateway applies one HTTPRoute per model service referencing exactly ONE InferencePool (the highest-priority active member; cross-namespace ReferenceGrant, no backendRef port), matching llm-d's one-EPP-per-pool data plane. The Gateway also carries a lens.ai/gateway-provider label. member_pool_name/default_pool_name heal members published before pool_name; resource_name slug-ifies model ids for metadata.name. install_ipp installs the llm-d payload-processor chart (LENS_IPP_CHART / LENS_IPP_VERSION, cluster.ipp_version). Member create/update/delete auto-reconcile the cluster via FastAPI BackgroundTasks; a background task reconciles and probes every LENS_MODEL_RECONCILE_INTERVAL_SECONDS / LENS_MODEL_HEALTH_INTERVAL_SECONDS. scale_component scales the Gateway data plane / EPP / model server; uninstall_inference_gateway also clears legacy lens-agent-router leftovers. Delivery does not run a per-deployment proxy; the cluster Gateway is shared.
-- Examples: [llm_d_bench/model_service/router.py](../llm_d_bench/model_service/router.py), [src/components/ModelService/ModelServiceAdminPage.jsx](../src/components/ModelService/ModelServiceAdminPage.jsx)
-- Tests: [llm_d_bench/model_service/test_gateway_ops.py](../llm_d_bench/model_service/test_gateway_ops.py)
+- Examples: [apps/backend/src/llm_d_lens/model_service/router.py](../apps/backend/src/llm_d_lens/model_service/router.py), [apps/frontend/src/pages/model-service/ui/ModelService/ModelServiceAdminPage.jsx](../apps/frontend/src/pages/model-service/ui/ModelService/ModelServiceAdminPage.jsx)
+- Tests: [apps/backend/tests/unit/model_service/test_gateway_ops.py](../apps/backend/tests/unit/model_service/test_gateway_ops.py)
 
 ## tcp-port-availability
 
 Local TCP port availability checking through actual bind + SO_REUSEADDR and port-range validation.
 
-- Entry point: [llm_d_bench/utils/ports.py](../llm_d_bench/utils/ports.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/network/ports.py](../apps/backend/src/llm_d_lens/infrastructure/network/ports.py)
 - Symbols: `valid_port`, `port_available`
 - Boundaries: Pure socket helper, no state: valid_port checks a range and port_available binds to test availability. A successful check does not reserve the port. Not on the Gateway Mode request path.
-- Examples: [llm_d_bench/utils/test_ports.py](../llm_d_bench/utils/test_ports.py)
-- Tests: [llm_d_bench/utils/test_ports.py](../llm_d_bench/utils/test_ports.py)
+- Examples: [apps/backend/tests/unit/infrastructure/network/test_ports.py](../apps/backend/tests/unit/infrastructure/network/test_ports.py)
+- Tests: [apps/backend/tests/unit/infrastructure/network/test_ports.py](../apps/backend/tests/unit/infrastructure/network/test_ports.py)
 
 ## model-service-data-plane-topology
 
 Model-service data-plane topology: one Gateway and one IPP per cluster; one HTTPRoute → InferencePool → EPP → model server per (cluster, model service), with one pool per llm-d EPP. Includes status indicators and installation/start/stop/reconciliation menus.
 
-- Entry point: [src/components/ModelService/DataPlaneTopology.jsx](../src/components/ModelService/DataPlaneTopology.jsx)
+- Entry point: [apps/frontend/src/pages/model-service/ui/ModelService/DataPlaneTopology.jsx](../apps/frontend/src/pages/model-service/ui/ModelService/DataPlaneTopology.jsx)
 - Symbols: `DataPlaneTopology`
 - Boundaries: Presentation only: consumes GatewayStatus (per-cluster gateway/ipp status and members) and model-service summaries, delegating operations to the management page through callbacks without issuing requests. Uses horizontally scrollable cluster sections and top-level Portal menus. Reuses Button, Badge, PermissionGate, and page status-color mappings.
-- Examples: [src/components/ModelService/ModelServiceAdminPage.jsx](../src/components/ModelService/ModelServiceAdminPage.jsx)
+- Examples: [apps/frontend/src/pages/model-service/ui/ModelService/ModelServiceAdminPage.jsx](../apps/frontend/src/pages/model-service/ui/ModelService/ModelServiceAdminPage.jsx)
 - Tests: No frontend test harness exists for ModelService components; validated with eslint and npm run build, plus the backend lifecycle tests.
 
 ## model-service-usage-analytics
 
 Aggregate the usage ledger into administrator dashboard totals, time series, model/user/cluster groups, and filter facets. Python performs time bucketing for compatibility across database dialects.
 
-- Entry point: [llm_d_bench/model_service/usage_analytics.py](../llm_d_bench/model_service/usage_analytics.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_service/usage_analytics.py](../apps/backend/src/llm_d_lens/model_service/usage_analytics.py)
 - Symbols: `build_usage_analytics`
 - Boundaries: Pure functions over filtered UsageRecord rows; the DAO bounds the row count. Served by GET /api/v1/model-service/admin/usage/analytics (usage:report:read); the browser page renders totals/pies/bar/per-group charts from it.
-- Examples: [llm_d_bench/model_service/service.py](../llm_d_bench/model_service/service.py), [llm_d_bench/model_service/router.py](../llm_d_bench/model_service/router.py)
-- Tests: [llm_d_bench/model_service/test_model_service.py](../llm_d_bench/model_service/test_model_service.py)
+- Examples: [apps/backend/src/llm_d_lens/model_service/service.py](../apps/backend/src/llm_d_lens/model_service/service.py), [apps/backend/src/llm_d_lens/model_service/router.py](../apps/backend/src/llm_d_lens/model_service/router.py)
+- Tests: [apps/backend/tests/unit/model_service/test_model_service.py](../apps/backend/tests/unit/model_service/test_model_service.py)
 
 ## kubernetes-proxy-bypass
 
 Make the Kubernetes SDK bypass the ambient HTTP(S) proxy for a cluster's own API server, which Python's CIDR-unaware NO_PROXY matching otherwise routes through the proxy.
 
-- Entry point: [llm_d_bench/utils/kubernetes_proxy.py](../llm_d_bench/utils/kubernetes_proxy.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/proxy.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/proxy.py)
 - Symbols: `api_server_host`, `server_host`, `ensure_api_server_proxy_bypass`
 - Boundaries: Shared utility. Adds the selected API-server host additively to process NO_PROXY/no_proxy; never removes existing entries and skips when no proxy is configured or the kubeconfig sets an explicit proxy-url. Called by kubernetes_auth.load_configuration (SDK transport) and evaluate/router.py's harness subprocess environment. Not a general proxy client.
-- Examples: [llm_d_bench/utils/kubernetes_auth.py](../llm_d_bench/utils/kubernetes_auth.py), [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
-- Tests: [llm_d_bench/utils/test_kubernetes_proxy.py](../llm_d_bench/utils/test_kubernetes_proxy.py)
+- Examples: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/auth.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/auth.py), [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_proxy.py](../apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_proxy.py)
 
 ## sse-stream-client
 
 Browser client for POST-based Server-Sent-Events endpoints (JSON body + CSRF header), parsing event:/data: frames out of a streamed fetch response body.
 
-- Entry point: [src/api/sse.js](../src/api/sse.js)
+- Entry point: [apps/frontend/src/shared/api/sse.js](../apps/frontend/src/shared/api/sse.js)
 - Symbols: `streamSseRequest`
 - Boundaries: Frontend only; pairs with FastAPI StreamingResponse(media_type="text/event-stream") endpoints that emit named events. Not native EventSource (which cannot POST or send custom headers). Caller supplies the path, JSON payload and an onEvent(type, data) callback; this module owns chunk buffering/frame parsing only, not reconnection or backoff.
-- Examples: [src/components/agenticDeploymentBackend.js](../src/components/agenticDeploymentBackend.js), [src/components/ModelService/modelServiceBackend.js](../src/components/ModelService/modelServiceBackend.js)
-- Tests: [src/components/agenticDeploymentBackend.test.js](../src/components/agenticDeploymentBackend.test.js)
+- Examples: [apps/frontend/src/pages/deployment/api/agenticDeploymentBackend.js](../apps/frontend/src/pages/deployment/api/agenticDeploymentBackend.js), [apps/frontend/src/pages/model-service/ui/ModelService/modelServiceBackend.js](../apps/frontend/src/pages/model-service/ui/ModelService/modelServiceBackend.js)
+- Tests: [apps/frontend/src/pages/deployment/api/agenticDeploymentBackend.test.js](../apps/frontend/src/pages/deployment/api/agenticDeploymentBackend.test.js)
 
 ## multi-select-dropdown
 
 Searchable multi-select dropdown (checkbox list + optional per-option counts) for facet-style filter bars.
 
-- Entry point: [src/components/common/MultiSelectDropdown.jsx](../src/components/common/MultiSelectDropdown.jsx)
+- Entry point: [apps/frontend/src/shared/ui/MultiSelectDropdown.jsx](../apps/frontend/src/shared/ui/MultiSelectDropdown.jsx)
 - Symbols: `MultiSelectDropdown`
 - Boundaries: Frontend only. Options are plain string keys; pass formatLabel to render a different display label (e.g. id -> human name). onChange receives a single toggled value ('' clears the selection); the caller owns the selected Set and any cascading between filters (e.g. re-fetching dependent facets when one dimension changes). searchable=true adds a text filter box scoped to the option list only.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/ModelService/ModelUsagePage.jsx](../src/components/ModelService/ModelUsagePage.jsx)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/model-service/ui/ModelService/ModelUsagePage.jsx](../apps/frontend/src/pages/model-service/ui/ModelService/ModelUsagePage.jsx)
 - Tests: UI-only presentational dropdown with no domain logic; covered indirectly via existing callers' build/eslint checks and manual verification in ModelUsagePage.
 
 ## llm-d-gateway-render
 
 Render llm-d Gateway Mode resources: cluster-shared Gateway (istio/gke/agentgateway/envoy-ai-gateway providers) and per-model HTTPRoute → InferencePool plus IPP model mapping. Also render provider-specific ext_authz resources (SecurityPolicy/AuthorizationPolicy/AgentgatewayPolicy and lens-authz Service/Endpoints) to inject caller identity headers.
 
-- Entry point: [llm_d_bench/model_service/gateway_providers.py](../llm_d_bench/model_service/gateway_providers.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_service/gateway_providers.py](../apps/backend/src/llm_d_lens/model_service/gateway_providers.py)
 - Symbols: `ProviderSpec`, `provider_spec`, `available_providers`, `render_inference_gateway`, `render_gateway_ext_auth`, `istio_authz_overlay`, `render_model_route`, `PoolBinding`, `qualified_pool_name`, `split_pool_name`, `render_node_inotify_daemonset`
 - Boundaries: Pure YAML rendering only; applying/waiting is gateway_ops' responsibility. Pools/EPP are owned by deployments; this module never selects endpoints or splits traffic (weight is passed through to HTTPRoute.backendRefs). Provider install commands mirror the official llm-d gateway recipes. ext_authz rendering is opt-in (authz_host) and HTTP-only; gke has no Gateway-API ext_authz hook. Pool defaults are stored namespace-qualified (qualified_pool_name/split_pool_name) so members in different namespaces stay unique.
-- Examples: [llm_d_bench/model_service/gateway_ops.py](../llm_d_bench/model_service/gateway_ops.py)
-- Tests: [llm_d_bench/model_service/test_gateway_providers.py](../llm_d_bench/model_service/test_gateway_providers.py)
+- Examples: [apps/backend/src/llm_d_lens/model_service/gateway_ops.py](../apps/backend/src/llm_d_lens/model_service/gateway_ops.py)
+- Tests: [apps/backend/tests/unit/model_service/test_gateway_providers.py](../apps/backend/tests/unit/model_service/test_gateway_providers.py)
 
 ## deployment-orphan-namespaces
 
 Find and clean deployment namespaces matching LLM_D_BENCH_NAMESPACE_PREFIX that no longer have Lens execution records.
 
-- Entry point: [llm_d_bench/deploy/orphans.py](../llm_d_bench/deploy/orphans.py)
+- Entry point: [apps/backend/src/llm_d_lens/deploy/orphans.py](../apps/backend/src/llm_d_lens/deploy/orphans.py)
 - Symbols: `scan_orphan_namespaces`, `clean_orphan_namespaces`
 - Boundaries: Only namespaces under the configured prefix and absent from every execution record are candidates; names still referenced by a Lens record are refused. Reuses scoped_runner. Served by GET /api/v1/deployments/orphans and POST /api/v1/deployments/orphans/clean (destructive).
-- Examples: [llm_d_bench/deploy/router.py](../llm_d_bench/deploy/router.py)
-- Tests: [llm_d_bench/deploy/test_orphans.py](../llm_d_bench/deploy/test_orphans.py)
+- Examples: [apps/backend/src/llm_d_lens/deploy/router.py](../apps/backend/src/llm_d_lens/deploy/router.py)
+- Tests: [apps/backend/tests/unit/deploy/test_orphans.py](../apps/backend/tests/unit/deploy/test_orphans.py)
 
 ## epp-token-usage-source
 
 Parse llm-d EPP input/output/cached/request token counters from Prometheus instant-query results, grouped by model_name and fairness_id.
 
-- Entry point: [llm_d_bench/model_service/usage_metrics.py](../llm_d_bench/model_service/usage_metrics.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_service/usage_metrics.py](../apps/backend/src/llm_d_lens/model_service/usage_metrics.py)
 - Symbols: `parse_token_query_results`, `EppTokenUsage`
 - Boundaries: Pure functions over Prometheus result series; PromQL lives in TOKEN_QUERIES. Counters are cumulative (diff via usage_sync). fairness_id comes from the Gateway-injected x-llm-d-inference-fairness-id header; missing labels default to default-flow. No I/O.
-- Examples: [llm_d_bench/model_service/usage_sync.py](../llm_d_bench/model_service/usage_sync.py)
-- Tests: [llm_d_bench/model_service/test_usage_metrics.py](../llm_d_bench/model_service/test_usage_metrics.py)
+- Examples: [apps/backend/src/llm_d_lens/model_service/usage_sync.py](../apps/backend/src/llm_d_lens/model_service/usage_sync.py)
+- Tests: [apps/backend/tests/unit/model_service/test_usage_metrics.py](../apps/backend/tests/unit/model_service/test_usage_metrics.py)
 
 ## gateway-usage-sync
 
 Diff cumulative EPP token counters per cluster into usage_records ledger deltas, attributing usage through fairness_id to tokens/users.
 
-- Entry point: [llm_d_bench/model_service/usage_sync.py](../llm_d_bench/model_service/usage_sync.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_service/usage_sync.py](../apps/backend/src/llm_d_lens/model_service/usage_sync.py)
 - Symbols: `GatewayUsageSync`, `diff_counters`
 - Boundaries: Reads counters from each active member cluster's Prometheus via a SeriesFetcher (default query_prometheus); keeps the last counters in model_service_usage_snapshots, treats counter drops as resets, and is idempotent via deterministic request ids. Writes one aggregate row per (model, identity) with a requests count. Served by POST /api/v1/model-service/admin/gateway/usage/sync and the LENS_GATEWAY_USAGE_INTERVAL_SECONDS task.
-- Examples: [llm_d_bench/model_service/router.py](../llm_d_bench/model_service/router.py), [llm_d_bench/api/main.py](../llm_d_bench/api/main.py)
-- Tests: [llm_d_bench/model_service/test_usage_sync.py](../llm_d_bench/model_service/test_usage_sync.py)
+- Examples: [apps/backend/src/llm_d_lens/model_service/router.py](../apps/backend/src/llm_d_lens/model_service/router.py), [apps/backend/src/llm_d_lens/api/main.py](../apps/backend/src/llm_d_lens/api/main.py)
+- Tests: [apps/backend/tests/unit/model_service/test_usage_sync.py](../apps/backend/tests/unit/model_service/test_usage_sync.py)
 
 ## prometheus-query
 
 Run instant PromQL queries against a cluster's central Prometheus through an existing port-forward tunnel.
 
-- Entry point: [llm_d_bench/monitoring/profiling/service.py](../llm_d_bench/monitoring/profiling/service.py)
+- Entry point: [apps/backend/src/llm_d_lens/monitoring/profiling/service.py](../apps/backend/src/llm_d_lens/monitoring/profiling/service.py)
 - Symbols: `query_prometheus`
 - Boundaries: Opens/reuses the tunnel to the <release>-prometheus Service and returns raw result series; [] when Prometheus is unreachable or the query fails. Shared by the profiling flow map and the model-service usage sync; not a general Prometheus client.
-- Examples: [llm_d_bench/model_service/usage_sync.py](../llm_d_bench/model_service/usage_sync.py)
+- Examples: [apps/backend/src/llm_d_lens/model_service/usage_sync.py](../apps/backend/src/llm_d_lens/model_service/usage_sync.py)
 - Tests: Exercised indirectly through the profiling flow map and the model-service usage sync (fake fetcher); no isolated unit test for the tunnel startup path.
 
 ## monitoring-operation-runtime
 
 monitoring operation runtime
 
-- Entry point: [llm_d_bench/monitoring/operation_runtime.py](../llm_d_bench/monitoring/operation_runtime.py)
+- Entry point: [apps/backend/src/llm_d_lens/monitoring/operation_runtime.py](../apps/backend/src/llm_d_lens/monitoring/operation_runtime.py)
 - Symbols: `MonitoringOperationManager`, `installation_environment`, `run_install_command`
 - Boundaries: Registration/idempotency, bounded redacted logs and subprocess stream/timeout mechanics. Domain command phases, errors, readiness, post-install and DAO ownership remain separate.
-- Examples: [llm_d_bench/monitoring/accelerator/operations.py](../llm_d_bench/monitoring/accelerator/operations.py), [llm_d_bench/monitoring/cluster_stack/operations.py](../llm_d_bench/monitoring/cluster_stack/operations.py)
-- Tests: [llm_d_bench/monitoring/test_shared_mechanics.py](../llm_d_bench/monitoring/test_shared_mechanics.py)
+- Examples: [apps/backend/src/llm_d_lens/monitoring/accelerator/operations.py](../apps/backend/src/llm_d_lens/monitoring/accelerator/operations.py), [apps/backend/src/llm_d_lens/monitoring/cluster_stack/operations.py](../apps/backend/src/llm_d_lens/monitoring/cluster_stack/operations.py)
+- Tests: [apps/backend/tests/unit/monitoring/test_shared_mechanics.py](../apps/backend/tests/unit/monitoring/test_shared_mechanics.py)
 
 ## monitoring-service-lookup
 
 monitoring service lookup
 
-- Entry point: [llm_d_bench/monitoring/service_links.py](../llm_d_bench/monitoring/service_links.py)
+- Entry point: [apps/backend/src/llm_d_lens/monitoring/service_links.py](../apps/backend/src/llm_d_lens/monitoring/service_links.py)
 - Symbols: `service_name`, `service_port`, `find_service`
 - Boundaries: Service name normalization, ordered port fallback and predicate lookup only; no tunnel or installation policy.
-- Examples: [llm_d_bench/monitoring/accelerator/service.py](../llm_d_bench/monitoring/accelerator/service.py), [llm_d_bench/monitoring/cluster_stack/service.py](../llm_d_bench/monitoring/cluster_stack/service.py)
-- Tests: [llm_d_bench/monitoring/test_shared_mechanics.py](../llm_d_bench/monitoring/test_shared_mechanics.py)
+- Examples: [apps/backend/src/llm_d_lens/monitoring/accelerator/service.py](../apps/backend/src/llm_d_lens/monitoring/accelerator/service.py), [apps/backend/src/llm_d_lens/monitoring/cluster_stack/service.py](../apps/backend/src/llm_d_lens/monitoring/cluster_stack/service.py)
+- Tests: [apps/backend/tests/unit/monitoring/test_shared_mechanics.py](../apps/backend/tests/unit/monitoring/test_shared_mechanics.py)
 
 ## monitoring-command-json
 
 monitoring command json
 
-- Entry point: [llm_d_bench/monitoring/command_output.py](../llm_d_bench/monitoring/command_output.py)
+- Entry point: [apps/backend/src/llm_d_lens/monitoring/command_output.py](../apps/backend/src/llm_d_lens/monitoring/command_output.py)
 - Symbols: `parse_command_json`
 - Boundaries: Retain nonzero/empty defaults and injected domain-specific malformed-JSON errors.
-- Examples: [llm_d_bench/monitoring/accelerator/intel_gpu.py](../llm_d_bench/monitoring/accelerator/intel_gpu.py), [llm_d_bench/monitoring/cluster_stack/discovery.py](../llm_d_bench/monitoring/cluster_stack/discovery.py)
-- Tests: [llm_d_bench/monitoring/test_shared_mechanics.py](../llm_d_bench/monitoring/test_shared_mechanics.py)
+- Examples: [apps/backend/src/llm_d_lens/monitoring/accelerator/intel_gpu.py](../apps/backend/src/llm_d_lens/monitoring/accelerator/intel_gpu.py), [apps/backend/src/llm_d_lens/monitoring/cluster_stack/discovery.py](../apps/backend/src/llm_d_lens/monitoring/cluster_stack/discovery.py)
+- Tests: [apps/backend/tests/unit/monitoring/test_shared_mechanics.py](../apps/backend/tests/unit/monitoring/test_shared_mechanics.py)
 
 ## monitoring-query-vector
 
 monitoring query vector
 
-- Entry point: [llm_d_bench/monitoring/prometheus.py](../llm_d_bench/monitoring/prometheus.py)
+- Entry point: [apps/backend/src/llm_d_lens/monitoring/prometheus.py](../apps/backend/src/llm_d_lens/monitoring/prometheus.py)
 - Symbols: `query_vector`
 - Boundaries: Retain HTTP/parse/non-success empty fallback; caller supplies client, timeout and PromQL aggregation.
-- Examples: [llm_d_bench/cluster/service.py](../llm_d_bench/cluster/service.py), [llm_d_bench/monitoring/profiling/service.py](../llm_d_bench/monitoring/profiling/service.py)
-- Tests: [llm_d_bench/monitoring/test_shared_mechanics.py](../llm_d_bench/monitoring/test_shared_mechanics.py)
+- Examples: [apps/backend/src/llm_d_lens/cluster/service.py](../apps/backend/src/llm_d_lens/cluster/service.py), [apps/backend/src/llm_d_lens/monitoring/profiling/service.py](../apps/backend/src/llm_d_lens/monitoring/profiling/service.py)
+- Tests: [apps/backend/tests/unit/monitoring/test_shared_mechanics.py](../apps/backend/tests/unit/monitoring/test_shared_mechanics.py)
 
 ## monitoring-install-form
 
 monitoring install form
 
-- Entry point: [src/components/ClusterMonitoringStack/useMonitoringInstall.js](../src/components/ClusterMonitoringStack/useMonitoringInstall.js)
+- Entry point: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/useMonitoringInstall.js](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/useMonitoringInstall.js)
 - Symbols: `useMonitoringInstall`
 - Boundaries: Shared preflight key and request lifecycle; caller owns fields, reset triggers and reinstall consent.
-- Examples: [src/components/ClusterMonitoringStack/InstallAcceleratorModal.jsx](../src/components/ClusterMonitoringStack/InstallAcceleratorModal.jsx), [src/components/ClusterMonitoringStack/InstallClusterStackModal.jsx](../src/components/ClusterMonitoringStack/InstallClusterStackModal.jsx)
+- Examples: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/InstallAcceleratorModal.jsx](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/InstallAcceleratorModal.jsx), [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/InstallClusterStackModal.jsx](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/InstallClusterStackModal.jsx)
 - Tests: Caller build and existing monitoring client tests; browser interaction acceptance remains separate.
 
 ## monitoring-operation-polling
 
 monitoring operation polling
 
-- Entry point: [src/components/ClusterMonitoringStack/useMonitoringOperation.js](../src/components/ClusterMonitoringStack/useMonitoringOperation.js)
+- Entry point: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/useMonitoringOperation.js](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/useMonitoringOperation.js)
 - Symbols: `useMonitoringOperation`
 - Boundaries: Visibility-aware operation polling, terminal success/failure and cancellation cleanup; caller owns snapshot and namespace policies.
-- Examples: [src/components/ClusterMonitoringStack/AcceleratorObservabilityPanel.jsx](../src/components/ClusterMonitoringStack/AcceleratorObservabilityPanel.jsx), [src/components/ClusterMonitoringStack/ClusterMonitoringStackDashboard.jsx](../src/components/ClusterMonitoringStack/ClusterMonitoringStackDashboard.jsx)
+- Examples: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/AcceleratorObservabilityPanel.jsx](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/AcceleratorObservabilityPanel.jsx), [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/ClusterMonitoringStackDashboard.jsx](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/ClusterMonitoringStackDashboard.jsx)
 - Tests: Caller build and existing monitoring client tests; browser interaction acceptance remains separate.
 
 ## monitoring-link-actions
 
 monitoring link actions
 
-- Entry point: [src/components/ClusterMonitoringStack/monitoringLinks.js](../src/components/ClusterMonitoringStack/monitoringLinks.js)
+- Entry point: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/monitoringLinks.js](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/monitoringLinks.js)
 - Symbols: `monitoringLinkTarget`, `openMonitoringLink`
 - Boundaries: Use browser host plus service tunnel port/path; caller retains loading and errors.
-- Examples: [src/components/ClusterMonitoringStack/AcceleratorObservabilityPanel.jsx](../src/components/ClusterMonitoringStack/AcceleratorObservabilityPanel.jsx), [src/components/ClusterMonitoringStack/ClusterMonitoringStackDashboard.jsx](../src/components/ClusterMonitoringStack/ClusterMonitoringStackDashboard.jsx)
-- Tests: [src/components/ClusterMonitoringStack/monitoringLinks.test.js](../src/components/ClusterMonitoringStack/monitoringLinks.test.js)
+- Examples: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/AcceleratorObservabilityPanel.jsx](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/AcceleratorObservabilityPanel.jsx), [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/ClusterMonitoringStackDashboard.jsx](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/ClusterMonitoringStackDashboard.jsx)
+- Tests: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/monitoringLinks.test.js](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/monitoringLinks.test.js)
 
 ## monitoring-preflight-presentation
 
 monitoring preflight presentation
 
-- Entry point: [src/components/ClusterMonitoringStack/preflightPresentation.js](../src/components/ClusterMonitoringStack/preflightPresentation.js)
+- Entry point: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/preflightPresentation.js](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/preflightPresentation.js)
 - Symbols: `checkPassed`, `checkTone`, `checkLabel`
 - Boundaries: Preserve passed aliases and advisory versus blocking failure display.
-- Examples: [src/components/ClusterMonitoringStack/InstallAcceleratorModal.jsx](../src/components/ClusterMonitoringStack/InstallAcceleratorModal.jsx), [src/components/ClusterMonitoringStack/InstallClusterStackModal.jsx](../src/components/ClusterMonitoringStack/InstallClusterStackModal.jsx)
-- Tests: [src/components/ClusterMonitoringStack/monitoringLinks.test.js](../src/components/ClusterMonitoringStack/monitoringLinks.test.js)
+- Examples: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/InstallAcceleratorModal.jsx](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/InstallAcceleratorModal.jsx), [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/InstallClusterStackModal.jsx](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/InstallClusterStackModal.jsx)
+- Tests: [apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/monitoringLinks.test.js](../apps/frontend/src/pages/clusters/ui/ClusterMonitoringStack/monitoringLinks.test.js)
 
 ## local-host-addresses
 
 Enumerate local candidate IPs/hostnames for the per-cluster gateway_authz_host setting so cluster Pods can reach Lens ext_authz.
 
-- Entry point: [llm_d_bench/utils/hostinfo.py](../llm_d_bench/utils/hostinfo.py)
+- Entry point: [apps/backend/src/llm_d_lens/infrastructure/network/hostinfo.py](../apps/backend/src/llm_d_lens/infrastructure/network/hostinfo.py)
 - Symbols: `local_host_addresses`, `local_outbound_ip`
 - Boundaries: Pure stdlib socket introspection; ordered, de-duplicated, loopback excluded. Served by GET /api/cluster/lens-hosts and offered in the cluster create/edit form; not a network-reachability probe.
-- Examples: [llm_d_bench/cluster/router.py](../llm_d_bench/cluster/router.py), [src/components/CreateClusterWizard.jsx](../src/components/CreateClusterWizard.jsx)
-- Tests: [llm_d_bench/utils/test_hostinfo.py](../llm_d_bench/utils/test_hostinfo.py)
+- Examples: [apps/backend/src/llm_d_lens/cluster/router.py](../apps/backend/src/llm_d_lens/cluster/router.py), [apps/frontend/src/pages/clusters/ui/CreateClusterWizard.jsx](../apps/frontend/src/pages/clusters/ui/CreateClusterWizard.jsx)
+- Tests: [apps/backend/tests/unit/infrastructure/network/test_hostinfo.py](../apps/backend/tests/unit/infrastructure/network/test_hostinfo.py)
 
 ## configuration-manifest-facts
 
 Prove explicit saved Configuration facts against rendered modelserver deployments.
 
-- Entry point: [llm_d_bench/configuration/manifest_facts.py](../llm_d_bench/configuration/manifest_facts.py)
+- Entry point: [apps/backend/src/llm_d_lens/configuration/manifest_facts.py](../apps/backend/src/llm_d_lens/configuration/manifest_facts.py)
 - Symbols: `validate_manifest_facts`
 - Boundaries: Configuration-domain proof rules retain shell recognizability, model/role/storage/runtime validation. Private shared CLI traversal keeps strict option versus boolean argument missing-value policies and conflict behavior.
-- Examples: [llm_d_bench/configuration/service.py](../llm_d_bench/configuration/service.py), [llm_d_bench/utils/artifacts.py](../llm_d_bench/utils/artifacts.py)
-- Tests: [llm_d_bench/configuration/test_manifest_facts.py](../llm_d_bench/configuration/test_manifest_facts.py)
+- Examples: [apps/backend/src/llm_d_lens/configuration/service.py](../apps/backend/src/llm_d_lens/configuration/service.py), [apps/backend/src/llm_d_lens/infrastructure/artifacts/manifests.py](../apps/backend/src/llm_d_lens/infrastructure/artifacts/manifests.py)
+- Tests: [apps/backend/tests/unit/configuration/test_manifest_facts.py](../apps/backend/tests/unit/configuration/test_manifest_facts.py)
 
 ## latest-resource-request
 
 Per-consumer abortable latest request with late-result suppression and quiet overlap prevention.
 
-- Entry point: [src/utils/resourceLoader.js](../src/utils/resourceLoader.js)
+- Entry point: [apps/frontend/src/shared/lib/resourceLoader.js](../apps/frontend/src/shared/lib/resourceLoader.js)
 - Symbols: `createLatestResourceRequest`
 - Boundaries: Separate from TTL caching. cancel invalidates both success and failure; signal-ignoring loaders cannot publish after supersession. Handlers run only for current request.
-- Examples: [src/hooks/useResourceList.js](../src/hooks/useResourceList.js)
-- Tests: [src/utils/resourceLoader.test.js](../src/utils/resourceLoader.test.js)
+- Examples: [apps/frontend/src/shared/lib/useResourceList.js](../apps/frontend/src/shared/lib/useResourceList.js)
+- Tests: [apps/frontend/src/shared/lib/resourceLoader.test.js](../apps/frontend/src/shared/lib/resourceLoader.test.js)
 
 ## resource-list-state
 
 Shared list-request, loading, refresh, cancellation, and failure-retry state.
 
-- Entry point: [src/hooks/useResourceList.js](../src/hooks/useResourceList.js)
+- Entry point: [apps/frontend/src/shared/lib/useResourceList.js](../apps/frontend/src/shared/lib/useResourceList.js)
 - Symbols: `useResourceList`
 - Boundaries: Caller memoizes loadResource/onLoaded and owns filters, domain transformations, polling and row-retention choice. Quiet loads skip active requests. Effect cleanup invalidates old results. Exposes setters for existing domain mutation callbacks.
-- Examples: [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx), [src/components/StorageManagement/StorageManagementPage.jsx](../src/components/StorageManagement/StorageManagementPage.jsx), [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx), [src/components/AIProviders/AIProvidersPage.jsx](../src/components/AIProviders/AIProvidersPage.jsx)
-- Tests: [src/utils/resourceLoader.test.js](../src/utils/resourceLoader.test.js)
+- Examples: [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx), [apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx](../apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx)
+- Tests: [apps/frontend/src/shared/lib/resourceLoader.test.js](../apps/frontend/src/shared/lib/resourceLoader.test.js)
 
 ## cluster-name-lookup
 
 Resource pages share cluster rows and id-to-name lookup through the existing cluster client.
 
-- Entry point: [src/components/OptimizationWorkspace/useClusterNames.js](../src/components/OptimizationWorkspace/useClusterNames.js)
+- Entry point: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/useClusterNames.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/useClusterNames.js)
 - Symbols: `useClusterNames`
 - Boundaries: Per-mount resource, no process-global authenticated cache. Invalid/missing items yield empty rows; errors leave raw-ID fallback in caller. refresh explicitly retries.
-- Examples: [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx), [src/components/StorageManagement/StorageManagementPage.jsx](../src/components/StorageManagement/StorageManagementPage.jsx), [src/components/ModelCache/ModelCachePage.jsx](../src/components/ModelCache/ModelCachePage.jsx)
-- Tests: [src/components/OptimizationWorkspace/clusterBackend.test.js](../src/components/OptimizationWorkspace/clusterBackend.test.js), [src/utils/resourceLoader.test.js](../src/utils/resourceLoader.test.js)
+- Examples: [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx)
+- Tests: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.test.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.test.js), [apps/frontend/src/shared/lib/resourceLoader.test.js](../apps/frontend/src/shared/lib/resourceLoader.test.js)
 
 ## delete-confirmation
 
 Shared delete confirmation layout for consent and asynchronous resource forms.
 
-- Entry point: [src/components/ui/DeleteConfirmation.jsx](../src/components/ui/DeleteConfirmation.jsx)
+- Entry point: [apps/frontend/src/shared/ui/DeleteConfirmation.jsx](../apps/frontend/src/shared/ui/DeleteConfirmation.jsx)
 - Symbols: `DeleteConfirmation`
 - Boundaries: Legacy description/onDecision remains supported. Controlled formId/onSubmit/pending/error props lock close and submit; caller owns useSubmission, typed phrase, warnings, keep-files choice and optional custom footer.
-- Examples: [src/components/AIProviders/DeleteAIProviderModal.jsx](../src/components/AIProviders/DeleteAIProviderModal.jsx), [src/components/ModelCache/DeleteModelCacheModal.jsx](../src/components/ModelCache/DeleteModelCacheModal.jsx), [src/components/StorageManagement/DeleteStorageVolumeModal.jsx](../src/components/StorageManagement/DeleteStorageVolumeModal.jsx), [src/components/DeploymentManagement/DeleteDeploymentModal.jsx](../src/components/DeploymentManagement/DeleteDeploymentModal.jsx)
-- Tests: [src/components/ui/DeleteConfirmation.test.jsx](../src/components/ui/DeleteConfirmation.test.jsx)
+- Examples: [apps/frontend/src/pages/ai-providers/ui/DeleteAIProviderModal.jsx](../apps/frontend/src/pages/ai-providers/ui/DeleteAIProviderModal.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/DeleteModelCacheModal.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/DeleteModelCacheModal.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/DeleteStorageVolumeModal.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/DeleteStorageVolumeModal.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeleteDeploymentModal.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeleteDeploymentModal.jsx)
+- Tests: [apps/frontend/src/app/DeleteConfirmation.test.jsx](../apps/frontend/src/app/DeleteConfirmation.test.jsx)
 
 ## cluster-catalog-client
 
 Read registered cluster rows via the browser JSON client.
 
-- Entry point: [src/components/OptimizationWorkspace/clusterBackend.js](../src/components/OptimizationWorkspace/clusterBackend.js)
+- Entry point: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.js)
 - Symbols: `loadClusters`
 - Boundaries: Optional AbortSignal forwarded unchanged; returns original payload. No cache or session switching.
-- Examples: [src/components/OptimizationWorkspace/useClusterNames.js](../src/components/OptimizationWorkspace/useClusterNames.js), [src/components/ModelMarketPage.jsx](../src/components/ModelMarketPage.jsx)
-- Tests: [src/components/OptimizationWorkspace/clusterBackend.test.js](../src/components/OptimizationWorkspace/clusterBackend.test.js)
+- Examples: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/useClusterNames.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/useClusterNames.js), [apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx](../apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx)
+- Tests: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.test.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/clusterBackend.test.js)
 
 ## deployment-run-search
 
 Search saved deployment runs for pages and pending deployment projection.
 
-- Entry point: [src/components/OptimizationWorkspace/remoteDeployBackend.js](../src/components/OptimizationWorkspace/remoteDeployBackend.js)
+- Entry point: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.js)
 - Symbols: `searchLocalDeploymentRuns`
 - Boundaries: Preserves query encoding, array response validation and JSON failure semantics. Optional signal lets page lifecycle cancel the second stage of deployment loading.
-- Examples: [src/components/DeploymentManagement/DeploymentManagementPage.jsx](../src/components/DeploymentManagement/DeploymentManagementPage.jsx)
-- Tests: [src/components/OptimizationWorkspace/remoteDeployBackend.test.js](../src/components/OptimizationWorkspace/remoteDeployBackend.test.js)
+- Examples: [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx)
+- Tests: [apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.test.js](../apps/frontend/src/pages/optimization/ui/OptimizationWorkspace/remoteDeployBackend.test.js)
 
 ## evaluation-comparison
 
 Evaluation matrix and rate comparisons for matching workloads, with shared ratio and aggregate calculations.
 
-- Entry point: [llm_d_bench/evaluate/comparison.py](../llm_d_bench/evaluate/comparison.py)
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/comparison.py](../apps/backend/src/llm_d_lens/evaluation/comparison.py)
 - Symbols: `matrix_comparison`, `rate_stage_comparison`
 - Boundaries: Join unique finite ISL/OSL/concurrency or rate keys, never array position. Ratios remain guide/baseline; zero numerator is valid, zero denominator/missing values are unavailable. Suite throughput uses complete matched pairs only.
-- Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
-- Tests: [llm_d_bench/evaluate/test_comparison.py](../llm_d_bench/evaluate/test_comparison.py), [llm_d_bench/evaluate/test_matrix.py](../llm_d_bench/evaluate/test_matrix.py), [llm_d_bench/evaluate/test_shared_prefix.py](../llm_d_bench/evaluate/test_shared_prefix.py)
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_comparison.py](../apps/backend/tests/unit/evaluation/test_comparison.py), [apps/backend/tests/unit/evaluation/test_matrix.py](../apps/backend/tests/unit/evaluation/test_matrix.py), [apps/backend/tests/unit/evaluation/test_shared_prefix.py](../apps/backend/tests/unit/evaluation/test_shared_prefix.py)
 
 ## evaluation-case-execution
 
 Evaluation case request construction, submission correlation, and result collection.
 
-- Entry point: [llm_d_bench/evaluate/execution.py](../llm_d_bench/evaluate/execution.py)
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/execution.py](../apps/backend/src/llm_d_lens/evaluation/execution.py)
 - Symbols: `case_benchmark_request`, `execute_case_benchmark`
 - Boundaries: Shared guide and same-pod baseline benchmark step. Orchestrator retains deployment ownership, cleanup and preservation policy. Propagates cancellation and failure after saving evidence.
-- Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
-- Tests: [llm_d_bench/evaluate/test_execution.py](../llm_d_bench/evaluate/test_execution.py), [llm_d_bench/evaluate/test_cancellation.py](../llm_d_bench/evaluate/test_cancellation.py), [llm_d_bench/evaluate/test_kubernetes_service_baseline.py](../llm_d_bench/evaluate/test_kubernetes_service_baseline.py)
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_execution.py](../apps/backend/tests/unit/evaluation/test_execution.py), [apps/backend/tests/unit/evaluation/test_cancellation.py](../apps/backend/tests/unit/evaluation/test_cancellation.py), [apps/backend/tests/unit/evaluation/test_kubernetes_service_baseline.py](../apps/backend/tests/unit/evaluation/test_kubernetes_service_baseline.py)
 
 ## evaluation-target-submission
 
 Evaluation endpoint resolution and domain HTTP submission.
 
-- Entry point: [src/features/evaluation/client.js](../src/features/evaluation/client.js)
+- Entry point: [apps/frontend/src/pages/evaluation/model/client.js](../apps/frontend/src/pages/evaluation/model/client.js)
 - Symbols: `resolveEvaluationTarget`, `evaluationApi`, `createBenchmarkRun`, `createEvaluation`
 - Boundaries: Only discovered deployment execution IDs; URL matches saved or forwarded endpoint. Shared HTTP transport preserves structured errors. Workload plans and lifecycle ownership remain domain decisions.
-- Examples: [src/components/EvaluationDashboard.jsx](../src/components/EvaluationDashboard.jsx), [src/components/EvaluationTaskWizard.jsx](../src/components/EvaluationTaskWizard.jsx), [src/components/OptimizationEvaluationDetails.jsx](../src/components/OptimizationEvaluationDetails.jsx)
-- Tests: [src/features/evaluation/client.test.js](../src/features/evaluation/client.test.js)
+- Examples: [apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx), [apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx](../apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/model/client.test.js](../apps/frontend/src/pages/evaluation/model/client.test.js)
 
 ## evaluation-metric-metadata
 
 Evaluation metric labels, units, and comparison directions.
 
-- Entry point: [src/components/benchmark-results/metricMetadata.js](../src/components/benchmark-results/metricMetadata.js)
+- Entry point: [apps/frontend/src/pages/evaluation/ui/benchmark-results/metricMetadata.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/metricMetadata.js)
 - Symbols: `latencyFamilies`, `clientMetrics`, `telemetryMetrics`, `routerMetrics`, `topologyMetricDefinitions`, `metricDirection`, `metricColumns`
 - Boundaries: Client request statistics, telemetry window means and sampled rolling percentiles remain separate definitions. Presentation-only; never converts missing telemetry into zero.
-- Examples: [src/components/benchmark-results/GuideMetricTable.jsx](../src/components/benchmark-results/GuideMetricTable.jsx), [src/components/benchmark-results/ResultTopology.jsx](../src/components/benchmark-results/ResultTopology.jsx), [src/components/benchmark-results/resultExplorer.js](../src/components/benchmark-results/resultExplorer.js)
-- Tests: [src/components/benchmark-results/resultExplorer.test.js](../src/components/benchmark-results/resultExplorer.test.js), [src/components/benchmark-results/ResultTopology.test.jsx](../src/components/benchmark-results/ResultTopology.test.jsx), [src/components/benchmark-results/GuideCoreMetrics.test.jsx](../src/components/benchmark-results/GuideCoreMetrics.test.jsx)
+- Examples: [apps/frontend/src/pages/evaluation/ui/benchmark-results/GuideMetricTable.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/GuideMetricTable.jsx), [apps/frontend/src/pages/evaluation/ui/benchmark-results/ResultTopology.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/ResultTopology.jsx), [apps/frontend/src/pages/evaluation/ui/benchmark-results/resultExplorer.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/resultExplorer.js)
+- Tests: [apps/frontend/src/pages/evaluation/ui/benchmark-results/resultExplorer.test.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/resultExplorer.test.js), [apps/frontend/src/pages/evaluation/ui/benchmark-results/ResultTopology.test.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/ResultTopology.test.jsx), [apps/frontend/src/pages/evaluation/ui/benchmark-results/GuideCoreMetrics.test.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/GuideCoreMetrics.test.jsx)
 
 ## evaluation-api-contracts
 
 Evaluation response DTOs and existing Problem Details error declarations.
 
-- Entry point: [llm_d_bench/evaluate/api_models.py](../llm_d_bench/evaluate/api_models.py)
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/api_models.py](../apps/backend/src/llm_d_lens/evaluation/api_models.py)
 - Symbols: `EvaluationResponse`, `BenchmarkDefaultsResponse`, `BenchmarkRunResponse`, `EvaluationCaseResponse`, `EvaluationWorkflowResponse`, `BenchmarkRunListResponse`, `EvaluationWorkflowListResponse`, `EvaluationCaseDetailsResponse`, `EvaluationDetailsResponse`, `EvaluationCancelResponse`, `EvaluationProblem`, `evaluation_problem_responses`
 - Boundaries: Preserve existing routes, operation IDs, items envelopes, explicit nulls and legacy extensions. Exclude unset optional fields during serialization. Domain requests remain models.py; DB persistence wrappers are not HTTP DTOs.
-- Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py)
-- Tests: [llm_d_bench/evaluate/test_api_contract.py](../llm_d_bench/evaluate/test_api_contract.py)
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/contract/evaluation/test_api_contract.py](../apps/backend/tests/contract/evaluation/test_api_contract.py)
 
 ## evaluation-lifecycle
 
 Evaluation UI status classification and terminal-state polling rules.
 
-- Entry point: [src/features/evaluation/domain.js](../src/features/evaluation/domain.js)
+- Entry point: [apps/frontend/src/pages/evaluation/model/domain.js](../apps/frontend/src/pages/evaluation/model/domain.js)
 - Symbols: `EVALUATION_STATUS`, `ACTIVE_EVALUATION_STATUSES`, `TERMINAL_EVALUATION_STATUSES`, `isTerminalEvaluationStatus`, `evaluationStatusTone`
 - Boundaries: Cancelling remains active until cleanup completes. Deployment ready is not benchmark succeeded. Server remains lifecycle authority.
-- Examples: [src/components/EvaluationDashboard.jsx](../src/components/EvaluationDashboard.jsx), [src/components/OptimizationEvaluationDetails.jsx](../src/components/OptimizationEvaluationDetails.jsx)
-- Tests: [src/features/evaluation/domain.test.js](../src/features/evaluation/domain.test.js)
+- Examples: [apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx), [apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx](../apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/model/domain.test.js](../apps/frontend/src/pages/evaluation/model/domain.test.js)
 
 ## evaluation-edited-configuration
 
 Construct immutable edited Evaluation YAML configurations, provenance, and both checksums.
 
-- Entry point: [src/features/evaluation/configuration.js](../src/features/evaluation/configuration.js)
+- Entry point: [apps/frontend/src/pages/evaluation/model/configuration.js](../apps/frontend/src/pages/evaluation/model/configuration.js)
 - Symbols: `editedEvaluationConfiguration`
 - Boundaries: Builds a new configuration without saving or mutating the original. Uses the existing sha256 and canonical configurationChecksum; each caller retains its filename, selection and error behavior.
-- Examples: [src/components/EvaluationDashboard.jsx](../src/components/EvaluationDashboard.jsx), [src/components/EvaluationTaskWizard.jsx](../src/components/EvaluationTaskWizard.jsx)
-- Tests: [src/features/evaluation/configuration.test.js](../src/features/evaluation/configuration.test.js)
+- Examples: [apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/model/configuration.test.js](../apps/frontend/src/pages/evaluation/model/configuration.test.js)
 
 ## evaluation-request-contracts
 
 Evaluation requests for standalone benchmarks, simple workflows, and multi-configuration evaluations.
 
-- Entry point: [llm_d_bench/evaluate/models.py](../llm_d_bench/evaluate/models.py)
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/models.py](../apps/backend/src/llm_d_lens/evaluation/models.py)
 - Symbols: `EvaluateRunRequest`, `EvaluateWorkflowRequest`, `EvaluationCreateRequest`
 - Boundaries: Separate operation semantics; preserve existing defaults, validation and API operation IDs. Router re-exports legacy imports.
-- Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py), [llm_d_bench/evaluate/execution.py](../llm_d_bench/evaluate/execution.py)
-- Tests: [llm_d_bench/evaluate/test_models.py](../llm_d_bench/evaluate/test_models.py), [llm_d_bench/evaluate/test_execution.py](../llm_d_bench/evaluate/test_execution.py), [llm_d_bench/evaluate/test_api_contract.py](../llm_d_bench/evaluate/test_api_contract.py)
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py), [apps/backend/src/llm_d_lens/evaluation/execution.py](../apps/backend/src/llm_d_lens/evaluation/execution.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_models.py](../apps/backend/tests/unit/evaluation/test_models.py), [apps/backend/tests/unit/evaluation/test_execution.py](../apps/backend/tests/unit/evaluation/test_execution.py), [apps/backend/tests/contract/evaluation/test_api_contract.py](../apps/backend/tests/contract/evaluation/test_api_contract.py)
 
 ## simulation-presentation
 
 Simulation presentation shared by task listing and task details.
 
-- Entry point: [src/features/simulation/presentation.js](../src/features/simulation/presentation.js)
+- Entry point: [apps/frontend/src/pages/simulation/model/presentation.js](../apps/frontend/src/pages/simulation/model/presentation.js)
 - Symbols: `FALLBACK_SCENARIOS`, `RESPONSE_CODE_ISSUE_PAGE_SIZE`, `SCENARIO_LABELS`, `TERMINAL_STATUSES`, `RUNNING_STATUSES`, `STOPPABLE_STATUSES`, `arrayFrom`, `scenarioOptions`, `unwrapTask`, `numberAt`, `formatNumber`, `formatMilliseconds`, `formatCount`, `formatBytes`, `displayName`, `taskBackend`, `taskDataset`, `taskStatusChip`, `taskMetrics`, `findNamedSection`, `formatDurationSeconds`, `formatDuration`, `metricDistribution`, `scenarioDisplayName`, `backendOptionLabel`, `backendOptionValue`, `responseStatusGuidance`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/SimulationTaskDetails.jsx](../src/components/SimulationTaskDetails.jsx)
-- Tests: [src/features/simulation/presentation.test.js](../src/features/simulation/presentation.test.js)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx](../apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx)
+- Tests: [apps/frontend/src/pages/simulation/model/presentation.test.js](../apps/frontend/src/pages/simulation/model/presentation.test.js)
 
 ## simulation-client
 
 Simulation client shared by task listing and task details.
 
-- Entry point: [src/features/simulation/client.js](../src/features/simulation/client.js)
+- Entry point: [apps/frontend/src/pages/simulation/model/client.js](../apps/frontend/src/pages/simulation/model/client.js)
 - Symbols: `requestJson`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/SimulationTaskDetails.jsx](../src/components/SimulationTaskDetails.jsx)
-- Tests: [src/features/simulation/presentation.test.js](../src/features/simulation/presentation.test.js)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx](../apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx)
+- Tests: [apps/frontend/src/pages/simulation/model/presentation.test.js](../apps/frontend/src/pages/simulation/model/presentation.test.js)
 
 ## simulation-tooltip
 
 Simulation SimulationTooltip shared by task listing and task details.
 
-- Entry point: [src/components/Simulation/SimulationTooltip.jsx](../src/components/Simulation/SimulationTooltip.jsx)
+- Entry point: [apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.jsx)
 - Symbols: `SimulationTooltip`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/Simulation/LatencyMetricTimeline.jsx](../src/components/Simulation/LatencyMetricTimeline.jsx)
-- Tests: [src/components/Simulation/SimulationTooltip.test.jsx](../src/components/Simulation/SimulationTooltip.test.jsx)
+- Examples: [apps/frontend/src/pages/simulation/ui/Simulation/LatencyMetricTimeline.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/LatencyMetricTimeline.jsx)
+- Tests: [apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx)
 
 ## simulation-metric-bars
 
 Simulation MetricBars shared by task listing and task details.
 
-- Entry point: [src/components/Simulation/MetricBars.jsx](../src/components/Simulation/MetricBars.jsx)
+- Entry point: [apps/frontend/src/pages/simulation/ui/Simulation/MetricBars.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/MetricBars.jsx)
 - Symbols: `MetricBars`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/SimulationTaskDetails.jsx](../src/components/SimulationTaskDetails.jsx)
-- Tests: [src/components/Simulation/SimulationTooltip.test.jsx](../src/components/Simulation/SimulationTooltip.test.jsx)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx](../apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx)
+- Tests: [apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx)
 
 ## simulation-json-block
 
 Simulation JsonBlock shared by task listing and task details.
 
-- Entry point: [src/components/Simulation/JsonBlock.jsx](../src/components/Simulation/JsonBlock.jsx)
+- Entry point: [apps/frontend/src/pages/simulation/ui/Simulation/JsonBlock.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/JsonBlock.jsx)
 - Symbols: `JsonBlock`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/SimulationTaskDetails.jsx](../src/components/SimulationTaskDetails.jsx)
-- Tests: [src/components/Simulation/SimulationTooltip.test.jsx](../src/components/Simulation/SimulationTooltip.test.jsx)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx](../apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx)
+- Tests: [apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx)
 
 ## simulation-latency-metric-timeline
 
 Simulation LatencyMetricTimeline shared by task listing and task details.
 
-- Entry point: [src/components/Simulation/LatencyMetricTimeline.jsx](../src/components/Simulation/LatencyMetricTimeline.jsx)
+- Entry point: [apps/frontend/src/pages/simulation/ui/Simulation/LatencyMetricTimeline.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/LatencyMetricTimeline.jsx)
 - Symbols: `LatencyMetricTimeline`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/SimulationTaskDetails.jsx](../src/components/SimulationTaskDetails.jsx)
-- Tests: [src/components/Simulation/SimulationTooltip.test.jsx](../src/components/Simulation/SimulationTooltip.test.jsx)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx](../apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx)
+- Tests: [apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx)
 
 ## simulation-configuration-group
 
 Simulation ConfigurationGroup shared by task listing and task details.
 
-- Entry point: [src/components/Simulation/ConfigurationGroup.jsx](../src/components/Simulation/ConfigurationGroup.jsx)
+- Entry point: [apps/frontend/src/pages/simulation/ui/Simulation/ConfigurationGroup.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/ConfigurationGroup.jsx)
 - Symbols: `ConfigurationGroup`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/SimulationTaskDetails.jsx](../src/components/SimulationTaskDetails.jsx)
-- Tests: [src/components/Simulation/SimulationTooltip.test.jsx](../src/components/Simulation/SimulationTooltip.test.jsx)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx](../apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx)
+- Tests: [apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx)
 
 ## simulation-statistics-panel
 
 Simulation StatisticsPanel shared by task listing and task details.
 
-- Entry point: [src/components/Simulation/StatisticsPanel.jsx](../src/components/Simulation/StatisticsPanel.jsx)
+- Entry point: [apps/frontend/src/pages/simulation/ui/Simulation/StatisticsPanel.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/StatisticsPanel.jsx)
 - Symbols: `StatisticsPanel`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/SimulationTaskDetails.jsx](../src/components/SimulationTaskDetails.jsx)
-- Tests: [src/components/Simulation/SimulationTooltip.test.jsx](../src/components/Simulation/SimulationTooltip.test.jsx)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx](../apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx)
+- Tests: [apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx)
 
 ## simulation-latency-heatmap
 
 Simulation LatencyHeatmap shared by task listing and task details.
 
-- Entry point: [src/components/Simulation/LatencyHeatmap.jsx](../src/components/Simulation/LatencyHeatmap.jsx)
+- Entry point: [apps/frontend/src/pages/simulation/ui/Simulation/LatencyHeatmap.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/LatencyHeatmap.jsx)
 - Symbols: `LatencyHeatmap`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/SimulationTaskDetails.jsx](../src/components/SimulationTaskDetails.jsx)
-- Tests: [src/components/Simulation/SimulationTooltip.test.jsx](../src/components/Simulation/SimulationTooltip.test.jsx)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx](../apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx)
+- Tests: [apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx)
 
 ## simulation-detail-card
 
 Simulation DetailCard shared by task listing and task details.
 
-- Entry point: [src/components/Simulation/DetailCard.jsx](../src/components/Simulation/DetailCard.jsx)
+- Entry point: [apps/frontend/src/pages/simulation/ui/Simulation/DetailCard.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/DetailCard.jsx)
 - Symbols: `DetailCard`
 - Boundaries: Domain presentation and units only; no dependency on dashboard pages. Task lifecycle and navigation remain in callers.
-- Examples: [src/components/SimulationDashboard.jsx](../src/components/SimulationDashboard.jsx), [src/components/SimulationTaskDetails.jsx](../src/components/SimulationTaskDetails.jsx)
-- Tests: [src/components/Simulation/SimulationTooltip.test.jsx](../src/components/Simulation/SimulationTooltip.test.jsx)
+- Examples: [apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx](../apps/frontend/src/pages/simulation/ui/SimulationDashboard.jsx), [apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx](../apps/frontend/src/pages/simulation/ui/SimulationTaskDetails.jsx)
+- Tests: [apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx](../apps/frontend/src/pages/simulation/ui/Simulation/SimulationTooltip.test.jsx)
 
 ## repository-english-check
 
@@ -1461,88 +1471,88 @@ Check all Git-visible repository text and optional PR metadata for Chinese chara
 
 Report completed Simulation requests from local or Pod execution.
 
-- Entry point: [llm_d_bench/simulation/progress.py](../llm_d_bench/simulation/progress.py)
+- Entry point: [apps/backend/src/llm_d_lens/simulation/progress.py](../apps/backend/src/llm_d_lens/simulation/progress.py)
 - Symbols: `report_request_progress`
 - Boundaries: Caller supplies request-count reader and owns cancellation. Pod callers gate reporting on readiness; local callers supply their original monotonic clock. Unknown totals stay at zero; completion stays below 100 until task finalization.
-- Examples: [llm_d_bench/simulation/process.py](../llm_d_bench/simulation/process.py), [llm_d_bench/simulation/incluster.py](../llm_d_bench/simulation/incluster.py)
-- Tests: [llm_d_bench/simulation/test_progress.py](../llm_d_bench/simulation/test_progress.py)
+- Examples: [apps/backend/src/llm_d_lens/simulation/process.py](../apps/backend/src/llm_d_lens/simulation/process.py), [apps/backend/src/llm_d_lens/simulation/incluster.py](../apps/backend/src/llm_d_lens/simulation/incluster.py)
+- Tests: [apps/backend/tests/unit/simulation/test_progress.py](../apps/backend/tests/unit/simulation/test_progress.py)
 
 ## simulation-artifact-errors
 
 Format error values from Simulation tool artifacts.
 
-- Entry point: [llm_d_bench/simulation/backends/analytics.py](../llm_d_bench/simulation/backends/analytics.py)
+- Entry point: [apps/backend/src/llm_d_lens/simulation/backends/analytics.py](../apps/backend/src/llm_d_lens/simulation/backends/analytics.py)
 - Symbols: `artifact_error_message`
 - Boundaries: Tool adapters choose the source field and timeout precedence. Shared fallback fields, structured-message precedence and 1000-character truncation remain unchanged. Status codes and latency units remain tool-specific.
-- Examples: [llm_d_bench/simulation/backends/aiperf.py](../llm_d_bench/simulation/backends/aiperf.py), [llm_d_bench/simulation/backends/trace_replayer.py](../llm_d_bench/simulation/backends/trace_replayer.py)
-- Tests: [llm_d_bench/simulation/test_progress.py](../llm_d_bench/simulation/test_progress.py)
+- Examples: [apps/backend/src/llm_d_lens/simulation/backends/aiperf.py](../apps/backend/src/llm_d_lens/simulation/backends/aiperf.py), [apps/backend/src/llm_d_lens/simulation/backends/trace_replayer.py](../apps/backend/src/llm_d_lens/simulation/backends/trace_replayer.py)
+- Tests: [apps/backend/tests/unit/simulation/test_progress.py](../apps/backend/tests/unit/simulation/test_progress.py)
 
 ## agentic-planning-stream
 
 Deliver Agentic planning/refinement progress and terminal SSE events.
 
-- Entry point: [llm_d_bench/agentic/streaming.py](../llm_d_bench/agentic/streaming.py)
+- Entry point: [apps/backend/src/llm_d_lens/agentic/streaming.py](../apps/backend/src/llm_d_lens/agentic/streaming.py)
 - Symbols: `planning_stream_response`
 - Boundaries: Routes retain their own expected exceptions, generic messages, logging and principal resolution. Closing the stream cancels and awaits unfinished planning. Gateway log streams keep their distinct domain contract.
-- Examples: [llm_d_bench/agentic/router.py](../llm_d_bench/agentic/router.py)
-- Tests: [llm_d_bench/agentic/test_streaming.py](../llm_d_bench/agentic/test_streaming.py)
+- Examples: [apps/backend/src/llm_d_lens/agentic/router.py](../apps/backend/src/llm_d_lens/agentic/router.py)
+- Tests: [apps/backend/tests/unit/agentic/test_streaming.py](../apps/backend/tests/unit/agentic/test_streaming.py)
 
 ## auth-master-key
 
 Own the LENS_SECRET_KEY lifecycle for stored provider secrets: resolve the effective key from the environment or the mode-600 credentials file, auto-generate one at startup, and rotate it by re-encrypting stored provider secrets while keeping previous keys as decryption fallback.
 
-- Entry point: [llm_d_bench/auth/master_key.py](../llm_d_bench/auth/master_key.py)
+- Entry point: [apps/backend/src/llm_d_lens/auth/master_key.py](../apps/backend/src/llm_d_lens/auth/master_key.py)
 - Symbols: `ensure_master_key`, `resolve_master_key`, `rotate_master_key`, `clear_old_keys`, `status`, `generate_key`, `master_key_path`, `fingerprint`, `MasterKey`
 - Boundaries: Auth domain only. Encrypts external-provider secrets through SecretCipher; it does not encrypt session tokens or sign Node->Python assertions (those use LENS_INTERNAL_AUTH_SECRET). The environment key always overrides the stored key, which makes rotation through the API read-only. Rotation re-encrypts each provider secret before the operator clears the retained fallback keys.
-- Examples: [llm_d_bench/auth/router.py](../llm_d_bench/auth/router.py), [llm_d_bench/auth/service.py](../llm_d_bench/auth/service.py), [llm_d_bench/api/main.py](../llm_d_bench/api/main.py)
-- Tests: [llm_d_bench/auth/test_master_key.py](../llm_d_bench/auth/test_master_key.py), [llm_d_bench/auth/test_api.py](../llm_d_bench/auth/test_api.py)
+- Examples: [apps/backend/src/llm_d_lens/auth/router.py](../apps/backend/src/llm_d_lens/auth/router.py), [apps/backend/src/llm_d_lens/auth/service.py](../apps/backend/src/llm_d_lens/auth/service.py), [apps/backend/src/llm_d_lens/api/main.py](../apps/backend/src/llm_d_lens/api/main.py)
+- Tests: [apps/backend/tests/unit/auth/test_master_key.py](../apps/backend/tests/unit/auth/test_master_key.py), [apps/backend/tests/unit/auth/test_api.py](../apps/backend/tests/unit/auth/test_api.py)
 
 ## admin-master-key-page
 
 Administration page to view stored-secret master key status and rotate the key or clear previous keys, honouring the environment-locked read-only state.
 
-- Entry point: [src/components/Administration/SecretKeyPage.jsx](../src/components/Administration/SecretKeyPage.jsx)
+- Entry point: [apps/frontend/src/pages/administration/ui/SecretKeyPage.jsx](../apps/frontend/src/pages/administration/ui/SecretKeyPage.jsx)
 - Symbols: `SecretKeyPage`
 - Boundaries: Administration UI only; it calls the /api/v1/system/secret-key endpoints through the shared admin client and never receives the key value. The view is gated by system:secret:read and mutations by system:secret:manage.
-- Examples: [src/App.jsx](../src/App.jsx), [src/components/LeftNavigation.jsx](../src/components/LeftNavigation.jsx), [src/features/auth/adminClient.js](../src/features/auth/adminClient.js)
+- Examples: [apps/frontend/src/app/App.jsx](../apps/frontend/src/app/App.jsx), [apps/frontend/src/app/ui/LeftNavigation.jsx](../apps/frontend/src/app/ui/LeftNavigation.jsx), [apps/frontend/src/pages/auth/adminClient.js](../apps/frontend/src/pages/auth/adminClient.js)
 - Tests: Presentation-only; covered by npm run build, eslint and the backend master-key API tests.
 
 ## model-cache-offline-serving-environment
 
 Return the Hugging Face environment that makes a cache-backed model server load from the mounted Model Cache without contacting huggingface.co at startup.
 
-- Entry point: [llm_d_bench/deploy/providers/model_cache_environment.py](../llm_d_bench/deploy/providers/model_cache_environment.py)
+- Entry point: [apps/backend/src/llm_d_lens/deploy/providers/model_cache_environment.py](../apps/backend/src/llm_d_lens/deploy/providers/model_cache_environment.py)
 - Symbols: `model_cache_environment`
 - Boundaries: Deploy providers only. auto-cache gets HF_HOME=/model-cache plus HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1; any other source goes offline only when cache_mounted is true (shared-path, ad-hoc mountPath, including P/D disaggregation, precise-prefix-cache-routing and tiered-prefix-cache). A source with no cache mount stays online so it can download. Requires the cache to be complete for the served model revision because offline startup cannot fall back to a download.
-- Examples: [llm_d_bench/deploy/providers/optimized_baseline.py](../llm_d_bench/deploy/providers/optimized_baseline.py), [llm_d_bench/deploy/providers/baseline_vllm.py](../llm_d_bench/deploy/providers/baseline_vllm.py), [llm_d_bench/deploy/providers/pd_disaggregation.py](../llm_d_bench/deploy/providers/pd_disaggregation.py), [llm_d_bench/deploy/providers/precise_prefix_cache_routing.py](../llm_d_bench/deploy/providers/precise_prefix_cache_routing.py), [llm_d_bench/deploy/providers/helm_kustomize.py](../llm_d_bench/deploy/providers/helm_kustomize.py)
-- Tests: [llm_d_bench/deploy/providers/test_model_cache_environment.py](../llm_d_bench/deploy/providers/test_model_cache_environment.py), [llm_d_bench/deploy/providers/test_baseline_vllm.py](../llm_d_bench/deploy/providers/test_baseline_vllm.py), [llm_d_bench/deploy/providers/test_optimized_baseline_profiles.py](../llm_d_bench/deploy/providers/test_optimized_baseline_profiles.py), [llm_d_bench/deploy/providers/test_precise_prefix_cache_routing.py](../llm_d_bench/deploy/providers/test_precise_prefix_cache_routing.py), [llm_d_bench/deploy/providers/test_helm_kustomize.py](../llm_d_bench/deploy/providers/test_helm_kustomize.py)
+- Examples: [apps/backend/src/llm_d_lens/deploy/providers/optimized_baseline.py](../apps/backend/src/llm_d_lens/deploy/providers/optimized_baseline.py), [apps/backend/src/llm_d_lens/deploy/providers/baseline_vllm.py](../apps/backend/src/llm_d_lens/deploy/providers/baseline_vllm.py), [apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py](../apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py), [apps/backend/src/llm_d_lens/deploy/providers/precise_prefix_cache_routing.py](../apps/backend/src/llm_d_lens/deploy/providers/precise_prefix_cache_routing.py), [apps/backend/src/llm_d_lens/deploy/providers/helm_kustomize.py](../apps/backend/src/llm_d_lens/deploy/providers/helm_kustomize.py)
+- Tests: [apps/backend/tests/unit/deploy/providers/test_model_cache_environment.py](../apps/backend/tests/unit/deploy/providers/test_model_cache_environment.py), [apps/backend/tests/unit/deploy/providers/test_baseline_vllm.py](../apps/backend/tests/unit/deploy/providers/test_baseline_vllm.py), [apps/backend/tests/unit/deploy/providers/test_optimized_baseline_profiles.py](../apps/backend/tests/unit/deploy/providers/test_optimized_baseline_profiles.py), [apps/backend/tests/unit/deploy/providers/test_precise_prefix_cache_routing.py](../apps/backend/tests/unit/deploy/providers/test_precise_prefix_cache_routing.py), [apps/backend/tests/unit/deploy/providers/test_helm_kustomize.py](../apps/backend/tests/unit/deploy/providers/test_helm_kustomize.py)
 
 ## admin-managed-hugging-face-environment
 
 Reject user-supplied Hugging Face environment variables in deployment runtime overrides because the platform administrator manages them.
 
-- Entry point: [llm_d_bench/configuration/managed_environment.py](../llm_d_bench/configuration/managed_environment.py)
+- Entry point: [apps/backend/src/llm_d_lens/configuration/managed_environment.py](../apps/backend/src/llm_d_lens/configuration/managed_environment.py)
 - Symbols: `is_admin_managed_environment_variable`, `admin_managed_environment_names`, `admin_managed_environment_error`
 - Boundaries: Deployment configuration policy. Matches HF_, HUGGING and TRANSFORMERS_ prefixes case-insensitively for customParameters environment entries and runtime bindings. Does not constrain administrator-injected runtime.environment values such as the cluster proxy's HF_ENDPOINT. Mirrored for the browser and Node planning API in src/features/evaluation/managedEnvironment.js.
-- Examples: [llm_d_bench/configuration/validators.py](../llm_d_bench/configuration/validators.py), [llm_d_bench/configuration/manifest_facts.py](../llm_d_bench/configuration/manifest_facts.py), [llm_d_bench/deploy/plan_service.py](../llm_d_bench/deploy/plan_service.py), [src/features/evaluation/managedEnvironment.js](../src/features/evaluation/managedEnvironment.js), [server/configurationOverrides.ts](../server/configurationOverrides.ts)
-- Tests: [llm_d_bench/configuration/test_managed_environment.py](../llm_d_bench/configuration/test_managed_environment.py), [src/features/evaluation/configurationValidation.test.js](../src/features/evaluation/configurationValidation.test.js), [server/configurationOverrides.test.ts](../server/configurationOverrides.test.ts)
+- Examples: [apps/backend/src/llm_d_lens/configuration/validators.py](../apps/backend/src/llm_d_lens/configuration/validators.py), [apps/backend/src/llm_d_lens/configuration/manifest_facts.py](../apps/backend/src/llm_d_lens/configuration/manifest_facts.py), [apps/backend/src/llm_d_lens/deploy/plan_service.py](../apps/backend/src/llm_d_lens/deploy/plan_service.py), [packages/shared/src/evaluation/managedEnvironment.js](../packages/shared/src/evaluation/managedEnvironment.js), [apps/server/src/services/configurationOverrides.ts](../apps/server/src/services/configurationOverrides.ts)
+- Tests: [apps/backend/tests/unit/configuration/test_managed_environment.py](../apps/backend/tests/unit/configuration/test_managed_environment.py), [apps/frontend/src/pages/evaluation/model/configurationValidation.test.js](../apps/frontend/src/pages/evaluation/model/configurationValidation.test.js), [apps/server/testing/services/configurationOverrides.test.ts](../apps/server/testing/services/configurationOverrides.test.ts)
 
 ## admin-managed-hugging-face-environment-browser
 
 Browser and Node copy of the administrator-managed Hugging Face environment policy used by the deployment editor and the guide-planning API.
 
-- Entry point: [src/features/evaluation/managedEnvironment.js](../src/features/evaluation/managedEnvironment.js)
+- Entry point: [packages/shared/src/evaluation/managedEnvironment.js](../packages/shared/src/evaluation/managedEnvironment.js)
 - Symbols: `isAdminManagedEnvironmentVariable`, `adminManagedEnvironmentMessage`, `ADMIN_MANAGED_ENVIRONMENT_PREFIXES`
-- Boundaries: Mirrors llm_d_bench/configuration/managed_environment.py: matches HF_, HUGGING and TRANSFORMERS_ prefixes case-insensitively. Presentation-safe and React-free so both the browser validator and server/configurationOverrides.ts can import it.
-- Examples: [src/features/evaluation/configurationValidation.js](../src/features/evaluation/configurationValidation.js), [server/configurationOverrides.ts](../server/configurationOverrides.ts)
-- Tests: [src/features/evaluation/configurationValidation.test.js](../src/features/evaluation/configurationValidation.test.js), [server/configurationOverrides.test.ts](../server/configurationOverrides.test.ts)
+- Boundaries: Mirrors llm_d_lens/configuration/managed_environment.py: matches HF_, HUGGING and TRANSFORMERS_ prefixes case-insensitively. Presentation-safe and React-free so both the browser validator and server/configurationOverrides.ts can import it.
+- Examples: [apps/frontend/src/pages/evaluation/model/configurationValidation.js](../apps/frontend/src/pages/evaluation/model/configurationValidation.js), [apps/server/src/services/configurationOverrides.ts](../apps/server/src/services/configurationOverrides.ts)
+- Tests: [apps/frontend/src/pages/evaluation/model/configurationValidation.test.js](../apps/frontend/src/pages/evaluation/model/configurationValidation.test.js), [apps/server/testing/services/configurationOverrides.test.ts](../apps/server/testing/services/configurationOverrides.test.ts)
 
 ## model-service-target-resolution
 
 Resolve a Model Service group id to the deployment execution id and published model name of its currently active (health-probed) member, so callers benchmark/simulate an already-published, continuously liveness-checked endpoint instead of a raw deployment execution with no live health signal.
 
-- Entry point: [llm_d_bench/model_service/resolution.py](../llm_d_bench/model_service/resolution.py)
+- Entry point: [apps/backend/src/llm_d_lens/model_service/resolution.py](../apps/backend/src/llm_d_lens/model_service/resolution.py)
 - Symbols: `resolve_model_service_target`
 - Boundaries: Model Service domain only; raises on missing/unauthorized groups or groups with no active member. Does not perform HTTP routing itself — callers (Evaluation, Simulation) still resolve the execution through their own existing deployment-mode endpoint logic using the returned execution id.
-- Examples: [llm_d_bench/evaluate/router.py](../llm_d_bench/evaluate/router.py), [llm_d_bench/simulation/service.py](../llm_d_bench/simulation/service.py)
-- Tests: [llm_d_bench/model_service/test_resolution.py](../llm_d_bench/model_service/test_resolution.py)
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py), [apps/backend/src/llm_d_lens/simulation/service.py](../apps/backend/src/llm_d_lens/simulation/service.py)
+- Tests: [apps/backend/tests/unit/model_service/test_resolution.py](../apps/backend/tests/unit/model_service/test_resolution.py)

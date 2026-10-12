@@ -78,7 +78,7 @@ metadata for every target Kubernetes cluster that Lens has onboarded / is managi
 It is the root table under which almost all other business tables are associated
 by `cluster_id`.
 
-Corresponds to `llm_d_bench.cluster.registry.Cluster` (actual implemented fields,
+Corresponds to `llm_d_lens.cluster.registry.Cluster` (actual implemented fields,
 not a draft).
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default value | Notes (source field) |
@@ -99,9 +99,9 @@ not a draft).
 | `proxy_detected_at` | DateTime(timezone=True) | NULL |  |  | - | same as above |
 | `proxy_detection_error` | Text | NULL |  |  | - | same as above |
 | `llm_d_ref` | String(128) | NULL |  |  | - | `llm_d_ref` |
-| `llm_d_benchmark_ref` | String(128) | NULL |  |  | - | `llm_d_benchmark_ref` |
+| `llm_d_lensmark_ref` | String(128) | NULL |  |  | - | `llm_d_lensmark_ref` |
 | `llm_d_repo_path` | Text | NULL |  |  | - | `llm_d_repo_path` |
-| `llm_d_benchmark_repo_path` | Text | NULL |  |  | - | `llm_d_benchmark_repo_path` |
+| `llm_d_lensmark_repo_path` | Text | NULL |  |  | - | `llm_d_lensmark_repo_path` |
 | `created_at` | DateTime(timezone=True) | NOT NULL |  |  | `func.now()` |  |
 | `updated_at` | DateTime(timezone=True) | NOT NULL |  |  | `func.now()` | `onupdate=func.now()` |
 | `version_id` | Integer | NOT NULL |  |  | `1` | optimistic-lock version number (SQLAlchemy `version_id_col`); concurrent dirty-write prevention is described in §6.7 |
@@ -115,7 +115,7 @@ the §1.1 diagram (including the newly added `simulation_tasks.endpoint_cluster_
 **Purpose:** record the persistent storage volumes (local disk / NFS / dynamic PVC)
 registered by the user for a cluster, for use by modules such as Model Cache.
 
-Corresponds to `llm_d_bench.storage.contracts.StorageVolume`. The three mutually
+Corresponds to `llm_d_lens.storage.contracts.StorageVolume`. The three mutually
 exclusive one-to-one submodels `local_disk` / `nfs` / `dynamic_pvc` are expanded
 into prefixed columns according to rule 2; the application layer (continuing to
 use the existing Pydantic `model_validator`) guarantees that within one row, only
@@ -155,7 +155,7 @@ Unique constraint: `uq_storage_volumes_name(name)`. Indexes: `(cluster_id)`,
 storage volume, along with per-node download progress, to avoid downloading the
 same model repeatedly.
 
-Corresponds to `llm_d_bench.model_cache.contracts.ModelCacheEntry`. `source`
+Corresponds to `llm_d_lens.model_cache.contracts.ModelCacheEntry`. `source`
 (`ModelSource`) and `token_source` (`TokenSource`) are expanded according to rule
 2; `node_progress: list[NodeDownloadStatus]` falls under rule 6 (detail snapshot,
 not split into a separate table).
@@ -193,7 +193,7 @@ full-table-scan dedup in `find_by_volume_and_source`). Indexes: `(cluster_id)`,
 (OpenAI/Anthropic-compatible APIs), used by modules such as Agentic that need to
 call large-model capabilities.
 
-Corresponds to `llm_d_bench.ai_providers.contracts.AIProvider`. This is global
+Corresponds to `llm_d_lens.ai_providers.contracts.AIProvider`. This is global
 configuration with no `cluster_id`; almost all fields are scalars.
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default value | Notes |
@@ -217,7 +217,7 @@ Unique constraint: `uq_ai_providers_name(name)`.
 "published" by the Configuration module (rendered content + checksum + provenance),
 for consumption by Deploy.
 
-Corresponds to `llm_d_bench.configuration.models.ConfigurationArtifactRecord`.
+Corresponds to `llm_d_lens.configuration.models.ConfigurationArtifactRecord`.
 `deployable_configuration` (`DeployableConfiguration`) and `configuration_file`
 (`ConfigurationFile`) are expanded according to rule 2, with prefixes `dc_` /
 `cf_` respectively; `cluster_id` / `edited_from_artifact_id` are queryable columns
@@ -254,7 +254,7 @@ Indexes: `(cluster_id)`, `(created_at)`.
 deployment launched from several configurations" (see the explanation above about
 responsibility differences among the three deployment tables).
 
-Corresponds to `llm_d_bench.deploy.contracts.DeploymentRun` (excluding `cases`; see
+Corresponds to `llm_d_lens.deploy.contracts.DeploymentRun` (excluding `cases`; see
 §6.5). The table is named `deployment_batches` (batches) rather than reusing the
 DTO class name `DeploymentRun`; see the naming note below the §1.1 diagram.
 
@@ -280,7 +280,7 @@ which can be independently scheduled / retried (corresponding to a
 provider_ref + component combination, supporting dependency ordering and retry
 chains).
 
-Corresponds to `llm_d_bench.deploy.contracts.DeploymentCase` (split from the
+Corresponds to `llm_d_lens.deploy.contracts.DeploymentCase` (split from the
 `DeploymentRun.cases` array, rule 5). The table is named `deployment_jobs`
 (schedulable work items split from a batch, supporting retry/dependency) rather
 than reusing the DTO class name `DeploymentCase`. `create_request`
@@ -328,7 +328,7 @@ Indexes: `(batch_id)`, `(evidence_id)`, `(status)`.
 deployment work item (rendered manifest, available service endpoints, resource
 snapshot), for later reference by Benchmark / Evaluate / auditing.
 
-Corresponds to `llm_d_bench.deploy.contracts.DeploymentExecution`. This is one of
+Corresponds to `llm_d_lens.deploy.contracts.DeploymentExecution`. This is one of
 the 15 tables with many fields. The table is named `deployment_evidences`
 (immutable evidence) rather than reusing the DTO class name
 `DeploymentExecution`, emphasizing that this table is append-only. `artifact`
@@ -458,7 +458,7 @@ configuration / metrics for every benchmark execution in append-only form, for
 later retrieval of historical benchmark data (for example for Agentic intelligent
 configuration recommendations).
 
-Corresponds to `llm_d_bench.agentic.benchmark_evidence.BenchmarkRecord`. All six
+Corresponds to `llm_d_lens.agentic.benchmark_evidence.BenchmarkRecord`. All six
 nested submodels (`model` / `hardware` / `runtime` / `workload` /
 `configuration` / `metrics`) are expanded according to rule 2. This is one of the
 15 tables with many fields (the table with the most columns is the newly added
@@ -517,7 +517,7 @@ access modes) driver/plugin for the target cluster"—this is an audit table for
 operation lifecycle, not an inventory table of accelerator resources.
 
 Corresponds to
-`llm_d_bench.monitoring.accelerator.models.AcceleratorOperationResponse`.
+`llm_d_lens.monitoring.accelerator.models.AcceleratorOperationResponse`.
 `logs: list[OperationLogEntry]` falls under rule 6 (structured log details, not
 split into a table, using a JSONVariant array to preserve order/level); `error:
 OperationError | None` is expanded according to rule 2.
@@ -553,7 +553,7 @@ the object differs: the former is "install GPU drivers", the latter is "install
 the llm-d platform itself".
 
 Corresponds to
-`llm_d_bench.monitoring.cluster_stack.models.ClusterStackOperationResponse`. Its
+`llm_d_lens.monitoring.cluster_stack.models.ClusterStackOperationResponse`. Its
 field structure is almost identical to `monitoring_accelerator_operations`
 (reusing `OperationLogEntry` / `OperationError` in the same way), except that it
 lacks `accelerator` / `access_mode` (cluster stack install operations do not vary
@@ -582,7 +582,7 @@ Indexes: `(cluster_id)`, `(status)`.
 
 **Purpose:** record configuration, progress, and results for a traffic replay/load-test task against a ready deployment endpoint.
 
-Corresponds to `llm_d_bench.simulation.models.SimulationTask`. The table retains the module name "Simulation" to avoid confusion with deployment run/case/execution terminology. Expand `simulation` (`SimulationConfig`), `prompt` (`SimulationPrompt`, containing `dataset: SimulationDataset` and `trace: SimulationTrace`), and `result` (`SimulationResult | None`) recursively under rule 2 into `simulation_*`/`prompt_dataset_*`/`prompt_trace_*`/`result_*` columns.
+Corresponds to `llm_d_lens.simulation.models.SimulationTask`. The table retains the module name "Simulation" to avoid confusion with deployment run/case/execution terminology. Expand `simulation` (`SimulationConfig`), `prompt` (`SimulationPrompt`, containing `dataset: SimulationDataset` and `trace: SimulationTrace`), and `result` (`SimulationResult | None`) recursively under rule 2 into `simulation_*`/`prompt_dataset_*`/`prompt_trace_*`/`result_*` columns.
 
 `result.per_request: list[SimulationRequestResult]` contains one entry per load-test request and may reach tens of thousands of entries. It does not meet rule 6's bounded-snapshot condition: storing the entire array in JSONVariant would enlarge each row and move all details even when reading only `summary`. Store these details in a separate file and retain only `result_per_request_ref` in the database, following the same policy as Evaluate harness artifacts (§9). Frequently read aggregate metrics in `task.result.summary` remain a JSONVariant column under rule 3.
 
@@ -656,12 +656,12 @@ Indexes: `(status)`, `(endpoint_cluster_id)`, `(created_at)`. The three fields `
 ~/.llm-d-bench/model-cache/entries/*.json
 ~/.llm-d-bench/agentic/benchmarks/*.json
 ~/.llm-d-bench/monitoring/operations/*.json         # accelerator
-~/.llm_d_bench/run_store/evaluate/{runs,workflows}/*.json
+~/.llm_d_lens/run_store/evaluate/{runs,workflows}/*.json
 ~/.cache/llm-d-bench/simulations/<id>/task.json
 ```
 
 (Historical residue: the path prefixes are inconsistent across
-`~/.cache/llm-d-bench`, `~/.llm-d-bench`, and `~/.llm_d_bench`, due to each
+`~/.cache/llm-d-bench`, `~/.llm-d-bench`, and `~/.llm_d_lens`, due to each
 module evolving independently. After this migration, everything is uniformly
 carried by `DATABASE_URL` / the embedded database data directory, so those path
 differences no longer need to matter.)

@@ -25,12 +25,12 @@ build: ## Build the frontend
 test: test-js test-python ## Run Node and Python tests
 
 test-js: ## Run frontend and Node API unit tests
-	node --import tsx --test $$(find src server -type f \( -name '*.test.js' -o -name '*.test.jsx' -o -name '*.test.ts' \))
+	node --import tsx --test $$(find apps/frontend/src apps/server/testing packages/shared/src -type f \( -name '*.test.js' -o -name '*.test.jsx' -o -name '*.test.ts' \))
 	npm run reuse:test
 
 PYTHON ?= .venv/bin/python
 test-python: ## Run Python backend tests
-	$(PYTHON) -m pytest tests llm_d_bench
+	$(PYTHON) -m pytest apps/backend/tests
 
 .PHONY: lint lint-js lint-python
 lint: lint-js lint-python ## Run JavaScript and Python linters
@@ -39,12 +39,12 @@ lint-js:
 	npm run lint
 
 lint-python:
-	ruff check llm_d_bench tests
-	ruff format --check llm_d_bench tests
+	ruff check apps/backend/src apps/backend/tests
+	ruff format --check apps/backend/src apps/backend/tests
 
 .PHONY: fmt
 fmt: ## Format Python code
-	ruff format llm_d_bench tests
+	ruff format apps/backend/src apps/backend/tests
 
 .PHONY: pre-commit
 pre-commit: ## Run pre-commit hooks on all files

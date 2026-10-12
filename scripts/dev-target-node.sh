@@ -22,7 +22,7 @@ esac
 if [[ ! -f "$CONFIG_FILE" ]]; then
     cat >&2 <<EOF
 Target-node config not found: $CONFIG_FILE
-Create it from .dev-target-node.env.example, then retry.
+Create it from config/examples/dev-target-node.env.example, then retry.
 EOF
     exit 1
 fi

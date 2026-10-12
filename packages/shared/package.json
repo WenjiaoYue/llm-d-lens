@@ -1,0 +1,14 @@
+{
+  "name": "@repo/shared",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/evaluation/*.test.js"
+  },
+  "exports": {
+    "./catalog": "./src/catalog/modelCatalog.js",
+    "./evaluation/guide-settings": "./src/evaluation/guideSettings.js",
+    "./evaluation/managed-environment": "./src/evaluation/managedEnvironment.js"
+  }
+}

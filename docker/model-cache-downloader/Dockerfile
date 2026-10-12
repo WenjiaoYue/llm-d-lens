@@ -1,4 +1,4 @@
-# Optional, prebuilt image for llm_d_bench.model_cache's download/delete
+# Optional, prebuilt image for llm_d_lens.model_cache's download/delete
 # Kubernetes Jobs (see specs/changes/model-cache-design.md section 5).
 #
 # By default those Jobs run on plain `python:3.12-slim` (always pullable, no
@@ -18,4 +18,4 @@ RUN pip install --no-cache-dir "huggingface_hub[cli,hf_transfer]"
 
 # The container just runs `hf download ...` or `rm -rf ...`;
 # the actual command/args are supplied by the Job manifest (see
-# llm_d_bench/model_cache/jobs.py), so no ENTRYPOINT/CMD is needed here.
+# llm_d_lens/model_cache/jobs.py), so no ENTRYPOINT/CMD is needed here.

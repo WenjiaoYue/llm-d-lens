@@ -5,11 +5,11 @@
 - **Reference architecture:**
   - Frontend: `src/components/CreateClusterWizard.jsx` (the existing multi-step “Create Cluster” wizard,
     see `cluster-creation-wizard-design.md`).
-  - Backend: `llm_d_bench/cluster/` (registry/service/router, which manages metadata for registered
-    clusters), `llm_d_bench/deploy/runtime/composition.py` (the “optional external executable”
+  - Backend: `llm_d_lens/cluster/` (registry/service/router, which manages metadata for registered
+    clusters), `llm_d_lens/deploy/runtime/composition.py` (the “optional external executable”
     resolution pattern in `RuntimeEnvironment`, via `kubectl_path`/`helm_path`/`docker_path`
     — this proposal reuses the same pattern for `ansible-playbook`), and
-    `llm_d_bench/utils/ssh.py` (existing paramiko-based remote execution utilities, currently unused;
+    `llm_d_lens/utils/ssh.py` (existing paramiko-based remote execution utilities, currently unused;
     in this proposal they are downgraded to lightweight preflight connectivity probing, while actual
     deployment work is delegated to the official tools researched below).
 
@@ -46,7 +46,7 @@ official tool already validated at large production scale.
 
 Step 1 (“Basic information”) of `CreateClusterWizard.jsx` assumes the user **already** has a usable
 Kubernetes cluster and already has a `kubeconfig` file in hand. The user uploads it, and only then
-can Lens register the cluster into `llm_d_bench/cluster/registry.py` (writing `<id>.json` +
+can Lens register the cluster into `llm_d_lens/cluster/registry.py` (writing `<id>.json` +
 `<id>.kubeconfig`).
 
 For a benchmark engineer who has just obtained several bare-metal machines (or several VMs that do
@@ -188,7 +188,7 @@ Kubespray's own `bootstrap-os`/`preinstall` roles already include many preflight
 only show up when the playbook actually starts running (possibly after several minutes). To let the
 user know within seconds of finishing the node list that “this machine is unreachable / lacks sudo”,
 clicking “Next” (not “Finish”) first runs a read-only quick check using
-`llm_d_bench/utils/ssh.py::remote_exec`. Only after all checks pass may the user proceed to the next
+`llm_d_lens/utils/ssh.py::remote_exec`. Only after all checks pass may the user proceed to the next
 screen and trigger Kubespray for real:
 
 - SSH reachable + authentication succeeds (`remote_exec(target, "true")`).
@@ -224,11 +224,11 @@ Following the repository's existing two patterns for vendoring external artifact
 the following (implementation can decide later; both are viable):
 
 - **Mode A (recommended; same shape as the llm-d / llm-d-benchmark repo caches):** like
-  `llm_d_bench/monitoring/cluster_stack/repo.py` (clone into `~/.llm-d-bench/llm-d`) and the
+  `llm_d_lens/monitoring/cluster_stack/repo.py` (clone into `~/.llm-d-bench/llm-d`) and the
   Evaluate-side `_managed_benchmark_root()` (cache repo+revision hash into
   `~/.cache/llm-d-bench/backends/<hash>`, then clone → checkout → create venv → `pip install`, with
   a file lock preventing concurrent duplicate installs), add
-  `llm_d_bench/cluster/bootstrap/kubespray_repo.py`: clone
+  `llm_d_lens/cluster/bootstrap/kubespray_repo.py`: clone
   `https://github.com/kubernetes-sigs/kubespray` at a fixed tag (for example `v2.31.0`, the newest
   README-labeled version seen during research) into `~/.cache/llm-d-bench/kubespray/<tag>`, and
   create a dedicated venv using that checkout's `requirements.txt` to install Ansible (Kubespray is
@@ -246,7 +246,7 @@ the following (implementation can decide later; both are viable):
 The **integration shape** for both modes is identical: “take a rendered inventory directory, run a
 subprocess, and produce an `admin.conf`”; the only difference is how that subprocess is invoked.
 At implementation time, use the same “optional external executable path resolution” pattern as
-`RuntimeEnvironment` (`llm_d_bench/deploy/runtime/composition.py`), with an added
+`RuntimeEnvironment` (`llm_d_lens/deploy/runtime/composition.py`), with an added
 `ansible_playbook_path` / `kubespray_docker_image` configuration item.
 
 ### 4.2 Phases (the state machine, much simpler than the previous draft — multi-node join, CNI
@@ -314,7 +314,7 @@ than hand-writing kubeadm orchestration.
 
 ### 4.4 Data model (in-memory only, not persisted to Cluster registry)
 
-A Bootstrap Job is **not** a variant of `llm_d_bench/cluster/registry.py::Cluster`; its lifecycle
+A Bootstrap Job is **not** a variant of `llm_d_lens/cluster/registry.py::Cluster`; its lifecycle
 ends once the kubeconfig string is obtained:
 
 ```python
@@ -339,7 +339,7 @@ class BootstrapJob:
     created_at: str
 ```
 Store it in a pure in-memory `dict[str, BootstrapJob]`, following the pattern of
-`llm_d_bench/cluster/sessions.py::ClusterSession` (lost on process restart — acceptable, because
+`llm_d_lens/cluster/sessions.py::ClusterSession` (lost on process restart — acceptable, because
 Bootstrap is inherently a one-shot operation; if interrupted, the user can just initiate it again).
 `inventory_dir` is cleaned up once the Job reaches a terminal state (`succeeded`/`failed`) and the
 frontend has read the kubeconfig/logs.
@@ -349,7 +349,7 @@ frontend has read the kubeconfig/logs.
 ## 5. API surface
 
 Add a set of endpoints independent from the existing cluster CRUD routes in
-`llm_d_bench/cluster/router.py`:
+`llm_d_lens/cluster/router.py`:
 
 | Method & path | Description |
 |---|---|
@@ -453,7 +453,7 @@ Existing Cluster DTOs such as `ClusterSettingsUpdateRequest` remain **unchanged*
    environment (`http_proxy=http://proxy-ir.intel.com:912`, from the actual environment variables
    found in earlier sessions). This is the **largest unknown risk** in the proposal and must be
    manually proven before writing Lens orchestration code.
-2. **M2 — inventory rendering + backend API:** add the `llm_d_bench/cluster/bootstrap/` module
+2. **M2 — inventory rendering + backend API:** add the `llm_d_lens/cluster/bootstrap/` module
    (`models.py` / `inventory.py` / `service.py` / `router.py`), subprocess management, and log-tail
    truncation. Unit tests should cover correctness of inventory rendering (no real machines needed;
    only verify “given this node list, does the rendered YAML match Kubespray inventory schema”).

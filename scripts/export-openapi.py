@@ -21,7 +21,7 @@ METHODS = {"get", "post", "put", "patch", "delete"}
 
 
 def main() -> int:
-    from llm_d_bench.api.main import app
+    from llm_d_lens.api.main import app
 
     spec = app.openapi()
     paths = spec.get("paths", {})

@@ -35,7 +35,7 @@ current backend is a `CommandBackend` responsible for its additional
 validation, CLI invocation, subprocess execution, and result parsing.
 
 Backend components import the public Python API from
-`llm_d_bench.simulation`. Python calls return typed domain objects where a
+`llm_d_lens.simulation`. Python calls return typed domain objects where a
 model exists and raise `SimulationConfigurationError` for domain errors. REST
 routes translate the same errors into HTTP responses and serialize the objects
 to JSON.
@@ -68,7 +68,7 @@ GET /api/simulation/backends
 #### Python
 
 ```python
-from llm_d_bench.simulation import list_backends
+from llm_d_lens.simulation import list_backends
 
 backends: list[BackendDescriptor] = list_backends()
 ```
@@ -104,7 +104,7 @@ GET /api/simulation/scenarios
 #### Python
 
 ```python
-from llm_d_bench.simulation import list_scenarios
+from llm_d_lens.simulation import list_scenarios
 
 scenarios: list[ScenarioDescriptor] = list_scenarios()
 ```
@@ -132,7 +132,7 @@ GET /api/simulation/trace-datasets
 #### Python
 
 ```python
-from llm_d_bench.simulation import trace_registry
+from llm_d_lens.simulation import trace_registry
 
 catalog: list[dict[str, Any]] = trace_registry.list()
 ```
@@ -166,7 +166,7 @@ POST /api/simulation/trace-datasets/download
 #### Python
 
 ```python
-from llm_d_bench.simulation import BaseTrace
+from llm_d_lens.simulation import BaseTrace
 
 download: dict[str, Any] = await BaseTrace.download(dataset, force=False)
 ```
@@ -192,7 +192,7 @@ GET /api/simulation/trace-datasets/{dataset_name}/timeline
 #### Python
 
 ```python
-from llm_d_bench.simulation import get_trace_timeline
+from llm_d_lens.simulation import get_trace_timeline
 
 timeline: dict[str, Any] = await get_trace_timeline(dataset_name, bins=800)
 ```
@@ -211,7 +211,7 @@ POST /api/simulation/models/discover
 #### Python
 
 ```python
-from llm_d_bench.simulation import discover_models
+from llm_d_lens.simulation import discover_models
 
 models: dict[str, Any] = await discover_models(endpoint_url)
 ```
@@ -239,7 +239,7 @@ POST /api/simulation/tasks
 ### Python
 
 ```python
-from llm_d_bench.simulation import create_task
+from llm_d_lens.simulation import create_task
 
 task: SimulationTask = await create_task(request)
 ```
@@ -309,7 +309,7 @@ POST /api/simulation/tasks/{task_id}/stop
 ### Python
 
 ```python
-from llm_d_bench.simulation import stop_task
+from llm_d_lens.simulation import stop_task
 
 await stop_task(task_id)
 ```
@@ -331,7 +331,7 @@ POST /api/simulation/tasks/{task_id}/rerun
 ### Python
 
 ```python
-from llm_d_bench.simulation import rerun_task
+from llm_d_lens.simulation import rerun_task
 
 task: SimulationTask = await rerun_task(task_id)
 ```
@@ -353,7 +353,7 @@ DELETE /api/simulation/tasks/{task_id}
 ### Python
 
 ```python
-from llm_d_bench.simulation import delete_task
+from llm_d_lens.simulation import delete_task
 
 await delete_task(task_id)
 ```
@@ -374,7 +374,7 @@ GET /api/simulation/tasks/{task_id}
 #### Python
 
 ```python
-from llm_d_bench.simulation import get_task
+from llm_d_lens.simulation import get_task
 
 task: SimulationTask | None = await get_task(task_id)
 ```
@@ -401,7 +401,7 @@ GET /api/simulation/tasks
 #### Python
 
 ```python
-from llm_d_bench.simulation import list_tasks
+from llm_d_lens.simulation import list_tasks
 
 page: SimulationTaskListPage = await list_tasks(
     status=status,
@@ -617,7 +617,7 @@ GET /api/simulation/tasks/{task_id}/response-code-issues
 ### Python
 
 ```python
-from llm_d_bench.simulation import get_response_code_issues
+from llm_d_lens.simulation import get_response_code_issues
 
 page: SimulationResponseCodeIssuePage = await get_response_code_issues(
     task_id,
@@ -668,7 +668,7 @@ cluster state for these deployment execution snapshots.
 ## REST and Python API Compatibility
 
 The Lens dashboard consumes the REST API. Other backend components consume
-the Python API from `llm_d_bench.simulation`. Both surfaces execute the same
+the Python API from `llm_d_lens.simulation`. Both surfaces execute the same
 catalog, lifecycle, observation, and trace functions. REST responses may add a
 transport envelope such as `{"task_id": ..., "status": ..., "task": ...}`;
 the Python API returns the typed domain object directly.
@@ -676,7 +676,7 @@ the Python API returns the typed domain object directly.
 The public Python surface is:
 
 ```python
-from llm_d_bench.simulation import (
+from llm_d_lens.simulation import (
     BaseTrace,
     create_task,
     delete_task,

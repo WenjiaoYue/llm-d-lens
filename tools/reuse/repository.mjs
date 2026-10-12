@@ -4,7 +4,18 @@ import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve, relative, sep } from 'node:path';
 import ts from 'typescript';
 
-export const SOURCE_ROOTS = ['src/', 'server/', 'llm_d_bench/', 'tools/', 'scripts/'];
+export const SOURCE_ROOTS = [
+  'apps/frontend/src/',
+  'apps/server/src/',
+  'apps/backend/src/llm_d_lens/',
+  'packages/shared/src/',
+  // Retained for repository-tool fixtures and historical task baselines.
+  'src/',
+  'server/',
+  'llm_d_lens/',
+  'tools/',
+  'scripts/',
+];
 export const digest = text => createHash('sha256').update(text).digest('hex');
 export const git = (root, args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 

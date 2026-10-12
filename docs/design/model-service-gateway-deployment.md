@@ -12,8 +12,8 @@ The three Gateway Mode layers have separate lifecycles:
 
 | Layer | Created when | Resources | Code |
 | --- | --- | --- | --- |
-| Shared cluster | Cluster creation/update | Gateway API / GAIE CRDs, provider, **Gateway**, **IPP** | `llm_d_bench/model_service/gateway_providers.py` (`render_inference_gateway`), `gateway_ops.py` (`install_inference_gateway` / `install_ipp`) |
-| Deployment | Deployment creation | Model server + EPP + **InferencePool** (1:1, **no own proxy/gateway**) | `llm_d_bench/deploy/...` (disable chart proxy; see `router-gateway-mode.values.yaml`) |
+| Shared cluster | Cluster creation/update | Gateway API / GAIE CRDs, provider, **Gateway**, **IPP** | `llm_d_lens/model_service/gateway_providers.py` (`render_inference_gateway`), `gateway_ops.py` (`install_inference_gateway` / `install_ipp`) |
+| Deployment | Deployment creation | Model server + EPP + **InferencePool** (1:1, **no own proxy/gateway**) | `llm_d_lens/deploy/...` (disable chart proxy; see `router-gateway-mode.values.yaml`) |
 | Model service | Publication | **HTTPRoute**, cross-namespace **ReferenceGrant**, IPP model-mapping **ConfigMap** | `gateway_providers.py` (`render_model_route`), `gateway_ops.py` (`reconcile_cluster_gateway`) |
 
 ```
@@ -126,7 +126,7 @@ New cluster fields (migration `c1f7a2b9d4e6`):
 IPP (`lens-ipp`, Deployment) runs in the Gateway namespace and injects model headers via ext_proc:
 
 ```python
-from llm_d_bench.model_service.gateway_ops import GatewayOpsService
+from llm_d_lens.model_service.gateway_ops import GatewayOpsService
 
 await GatewayOpsService().install_ipp("cluster-a")  # Default chart/version/name
 await GatewayOpsService().uninstall_ipp("cluster-a")
@@ -140,7 +140,7 @@ Version precedence: request → `LENS_IPP_VERSION` → cluster `ipp_version` →
 **each model service with an active member**:
 
 ```python
-from llm_d_bench.model_service.gateway_ops import GatewayOpsService
+from llm_d_lens.model_service.gateway_ops import GatewayOpsService
 
 await GatewayOpsService().reconcile_cluster("cluster-a")
 ```
@@ -156,7 +156,7 @@ await GatewayOpsService().reconcile_cluster("cluster-a")
 - **ConfigMap:** `<slug>-model-map` in Gateway namespace, label
   `inference.llm-d.ai/ipp-managed=true`, containing `data.baseModel` and `adapters`.
 
-`llm_d_bench/api/main.py` reconciles all clusters with non-disabled members every
+`llm_d_lens/api/main.py` reconciles all clusters with non-disabled members every
 `LENS_MODEL_RECONCILE_INTERVAL_SECONDS`. Apply is idempotent and safe to repeat.
 
 ### 4.5 Administration UI and APIs

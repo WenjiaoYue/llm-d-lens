@@ -37,15 +37,15 @@ The CLI itself is still suitable for Helm, Kustomize, and specific kubectl workf
 
 | Shared module | File path | Main entry points | Implementation and boundary |
 | --- | --- | --- | --- |
-| Cluster scoping and compatibility entry points | [kubernetes.py](../../llm_d_bench/utils/kubernetes.py) | `kubeconfig_environment`, `scoped_runner`, `run_kubectl`, `KubernetesCommandRunner` | Reuses registry/session; chooses SDK or CLI while preserving original caller contracts |
-| Limited command adapter | [kubernetes_commands.py](../../llm_d_bench/utils/kubernetes_commands.py) | `execute_sdk_command`, `sdk_enabled`, `sdk_writes_enabled` | Executes only after recognizing complete argv forms; unknown parameters or combinations return the CLI path before execution and do not interpret arbitrary shell scripts |
-| Raw APIs and resource discovery | [kubernetes_api.py](../../llm_d_bench/utils/kubernetes_api.py) | `api_session`, `query_resource`, `resolve_resource`, `server_version` | Built-in resource mappings, dynamic API discovery, namespaces and selectors, pagination; pagination failure does not return partial success |
-| Old list-contract adapter | [kubernetes_reads.py](../../llm_d_bench/utils/kubernetes_reads.py) | `list_sdk_resources` | Preserves the existing caller behavior of returning an empty list on request failure and records redacted error categories |
-| Resource write operations | [kubernetes_mutations.py](../../llm_d_bench/utils/kubernetes_mutations.py) | `create_sdk_resource`, `patch_sdk_resource`, `label_sdk_resource`, `scale_sdk_resource`, `delete_sdk_resource` | Explicit patch types, label conflicts, scaling, and delete waiting; determines whether the original resource has already been deleted based on UID |
-| Authentication and credential cleanup | [kubernetes_auth.py](../../llm_d_bench/utils/kubernetes_auth.py) | `load_configuration`, `cleanup_configuration` | kubeconfig merge, TLS, token, ExecCredential; plugins use argument arrays, validate output, and handle timeout and cancellation |
-| HTTP client reuse | [kubernetes_pool.py](../../llm_d_bench/utils/kubernetes_pool.py) | `start_pool`, `pooled_client`, `close_pool` | Reused by credential/TLS identity within the application lifecycle, with capacity and idle-cleanup boundaries; closed per request outside that lifecycle |
-| Resource event watching | [kubernetes_watch.py](../../llm_d_bench/utils/kubernetes_watch.py) | `watch_resource_events` | Initial list, resourceVersion, BOOKMARK, 410 relist, bounded backoff, and cancellation; dedicated connections avoid exhausting the normal request pool |
-| Node session-query bridge | [sdk_discovery.py](../../llm_d_bench/cluster/sdk_discovery.py), [planningDiscovery.ts](../../server/planningDiscovery.ts) | Session planning query endpoint, `queryCluster` | Active-session validation and a four-query whitelist; does not accept arbitrary client kubeconfig paths |
+| Cluster scoping and compatibility entry points | [kubernetes.py](../../llm_d_lens/utils/kubernetes.py) | `kubeconfig_environment`, `scoped_runner`, `run_kubectl`, `KubernetesCommandRunner` | Reuses registry/session; chooses SDK or CLI while preserving original caller contracts |
+| Limited command adapter | [kubernetes_commands.py](../../llm_d_lens/utils/kubernetes_commands.py) | `execute_sdk_command`, `sdk_enabled`, `sdk_writes_enabled` | Executes only after recognizing complete argv forms; unknown parameters or combinations return the CLI path before execution and do not interpret arbitrary shell scripts |
+| Raw APIs and resource discovery | [kubernetes_api.py](../../llm_d_lens/utils/kubernetes_api.py) | `api_session`, `query_resource`, `resolve_resource`, `server_version` | Built-in resource mappings, dynamic API discovery, namespaces and selectors, pagination; pagination failure does not return partial success |
+| Old list-contract adapter | [kubernetes_reads.py](../../llm_d_lens/utils/kubernetes_reads.py) | `list_sdk_resources` | Preserves the existing caller behavior of returning an empty list on request failure and records redacted error categories |
+| Resource write operations | [kubernetes_mutations.py](../../llm_d_lens/utils/kubernetes_mutations.py) | `create_sdk_resource`, `patch_sdk_resource`, `label_sdk_resource`, `scale_sdk_resource`, `delete_sdk_resource` | Explicit patch types, label conflicts, scaling, and delete waiting; determines whether the original resource has already been deleted based on UID |
+| Authentication and credential cleanup | [kubernetes_auth.py](../../llm_d_lens/utils/kubernetes_auth.py) | `load_configuration`, `cleanup_configuration` | kubeconfig merge, TLS, token, ExecCredential; plugins use argument arrays, validate output, and handle timeout and cancellation |
+| HTTP client reuse | [kubernetes_pool.py](../../llm_d_lens/utils/kubernetes_pool.py) | `start_pool`, `pooled_client`, `close_pool` | Reused by credential/TLS identity within the application lifecycle, with capacity and idle-cleanup boundaries; closed per request outside that lifecycle |
+| Resource event watching | [kubernetes_watch.py](../../llm_d_lens/utils/kubernetes_watch.py) | `watch_resource_events` | Initial list, resourceVersion, BOOKMARK, 410 relist, bounded backoff, and cancellation; dedicated connections avoid exhausting the normal request pool |
+| Node session-query bridge | [sdk_discovery.py](../../llm_d_lens/cluster/sdk_discovery.py), [planningDiscovery.ts](../../server/planningDiscovery.ts) | Session planning query endpoint, `queryCluster` | Active-session validation and a four-query whitelist; does not accept arbitrary client kubeconfig paths |
 
 `run_kubectl` keeps its original name for caller compatibility, **but that name does not mean kubectl will be launched every time**. Commands accepted by the SDK adapter are translated directly into API requests.
 
@@ -54,10 +54,10 @@ The CLI itself is still suitable for Helm, Kustomize, and specific kubectl workf
 | Caller | Integrated content | Preserved domain rules |
 | --- | --- | --- |
 | Shared runner calls in Storage, Model Cache, Simulation, and Monitoring | Recognized resource reads/writes now use the SDK | Resource lifecycle, state interpretation, and business validation in each module |
-| [Deployment runtime](../../llm_d_bench/deploy/runtime/composition.py) | Supported validated commands enter the adapter | Namespace scope, allowed operations, output redaction, and execution evidence |
-| [Cluster monitoring service](../../llm_d_bench/monitoring/cluster_stack/service.py) | SDK mode reuses the shared scoped runner | Monitoring installation, uninstall, and state aggregation |
-| [Evaluation router](../../llm_d_bench/evaluate/router.py) | Cluster JSON / raw query adaptation | Original upper-layer failure-return contract |
-| [Evaluation diagnostics](../../llm_d_bench/evaluate/harness_watch.py) | Watch triggers Pod fault checks | Periodic Pod/log validation and task cancellation |
+| [Deployment runtime](../../llm_d_lens/deploy/runtime/composition.py) | Supported validated commands enter the adapter | Namespace scope, allowed operations, output redaction, and execution evidence |
+| [Cluster monitoring service](../../llm_d_lens/monitoring/cluster_stack/service.py) | SDK mode reuses the shared scoped runner | Monitoring installation, uninstall, and state aggregation |
+| [Evaluation router](../../llm_d_lens/evaluation/router.py) | Cluster JSON / raw query adaptation | Original upper-layer failure-return contract |
+| [Evaluation diagnostics](../../llm_d_lens/evaluation/harness_watch.py) | Watch triggers Pod fault checks | Periodic Pod/log validation and task cancellation |
 | Node cluster planning | Version, node, DeviceClass, and ResourceSlice queries for the selected session now reuse Python | Default-context queries on the Node host still use the local CLI |
 
 ### 3.3 Supported scope and the boundary for retaining the CLI
@@ -110,9 +110,9 @@ Invalid values in the effective configuration raise errors. Running services mus
 | Do not replay failed writes | An SDK failure must not automatically retry through the CLI; choose the CLI only when the unsupported form is confirmed before execution | Command adapter and operations document |
 | Do not swap apply semantics silently | Do not directly replace client-side apply with server-side apply; field ownership, conflicts, and compatibility impact must be made explicit | deployment skill |
 | Interpret errors correctly | New business logic that needs to distinguish “no resource” from “request failed” must use the strict API; do not treat the empty array from the old list entry as proof of success | backend skill |
-| Isolate tests | Use local API fixtures or SDK-boundary mocks; mocking only subprocess cannot isolate the default SDK path. Explicitly select the CLI for CLI-specific tests, and cover SDK paths separately | backend skill, [integration tests](../../llm_d_bench/utils/test_kubernetes_integration.py) |
+| Isolate tests | Use local API fixtures or SDK-boundary mocks; mocking only subprocess cannot isolate the default SDK path. Explicitly select the CLI for CLI-specific tests, and cover SDK paths separately | backend skill, [integration tests](../../llm_d_lens/utils/test_kubernetes_integration.py) |
 | Manage lifecycle | Close async iterators when Watch consumers exit early; reuse existing session/pool cleanup to avoid leaking responses, connections, and temporary certificates | Operations document |
-| Registration and naming | Python utilities belong in `llm_d_bench/utils/` and use `snake_case.py`; domain rules remain in domain directories; register new shared capabilities in the catalog and generate the index | [Shared file conventions](shared-code-guide.md), workflow skill |
+| Registration and naming | Python utilities belong in `llm_d_lens/utils/` and use `snake_case.py`; domain rules remain in domain directories; register new shared capabilities in the catalog and generate the index | [Shared file conventions](shared-code-guide.md), workflow skill |
 
 These rules have been integrated into the backend and deployment skills, and agents should read them when modifying related code; skills are development guidance, do not participate in runtime backend selection, and cannot replace tests or code review.
 

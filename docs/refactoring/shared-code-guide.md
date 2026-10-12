@@ -36,9 +36,9 @@
 | Shared capability | File path | Main entry point | Extracted content |
 | --- | --- | --- | --- |
 | Node upstream requests | [server/http.ts](../../server/http.ts) | `fetchJsonWithTimeout` | Request timeout, response-body reading, and JSON parsing; business error mapping remains in the route layer |
-| Exceptions | [llm_d_bench/core/exceptions.py](../../llm_d_bench/core/exceptions.py) | `DomainError`, `NotFoundError`, `ConflictError`, `DomainValidationError` | Shared exception categories and foundational status codes |
-| API exception adaptation | [llm_d_bench/api/problems.py](../../llm_d_bench/api/problems.py) | `install_problem_handlers` | Response conversion for domain exceptions, HTTP exceptions, and request-validation errors |
-| Namespace validation | [llm_d_bench/utils/kubernetes.py](../../llm_d_bench/utils/kubernetes.py) | `validate_namespace` | Name format, length, and error copy shared by the two monitoring modules |
+| Exceptions | [llm_d_lens/core/exceptions.py](../../llm_d_lens/core/exceptions.py) | `DomainError`, `NotFoundError`, `ConflictError`, `DomainValidationError` | Shared exception categories and foundational status codes |
+| API exception adaptation | [llm_d_lens/api/problems.py](../../llm_d_lens/api/problems.py) | `install_problem_handlers` | Response conversion for domain exceptions, HTTP exceptions, and request-validation errors |
+| Namespace validation | [llm_d_lens/utils/kubernetes.py](../../llm_d_lens/utils/kubernetes.py) | `validate_namespace` | Name format, length, and error copy shared by the two monitoring modules |
 
 ### Reuse of existing implementations
 
@@ -48,7 +48,7 @@
 | Chart foundation layer | [src/components/ui/charts/](../../src/components/ui/charts) | Chart containers, legends, tooltips, and color schemes |
 | Resource loading | [src/utils/resourceLoader.js](../../src/utils/resourceLoader.js) | Caching and in-flight request reuse |
 | Evaluation configuration validation | [src/features/evaluation/configurationValidation.js](../../src/features/evaluation/configurationValidation.js) | Evaluation input validation and server-side error mapping |
-| Temporary directories | [llm_d_bench/utils/paths.py](../../llm_d_bench/utils/paths.py) | Temporary root directory and environment-variable configuration |
+| Temporary directories | [llm_d_lens/utils/paths.py](../../llm_d_lens/utils/paths.py) | Temporary root directory and environment-variable configuration |
 
 Structured-data Store extraction has been rolled back and will be managed by the DB PR; `PageInfo`, `TaskRef`, and `TaskStatus` are not counted within the scope of shared capabilities already integrated.
 
@@ -79,11 +79,11 @@ Existing `*Backend.js` domain clients continue to be extended in their original 
 | Node shared capabilities | `server/` | `camelCase.ts`, named by responsibility | Functions in camelCase, types in PascalCase | `http.ts` → `fetchJsonWithTimeout` |
 | Node domain modules | `server/` or an existing domain subdirectory | `<domain><Responsibility>.ts` | Functions in camelCase, types in PascalCase | `clusterSources.ts` → `loadClusterSources` |
 | MCP adapters | `server/mcp/` | `camelCase.ts` | Functions in camelCase | `specialTools.ts` |
-| Python shared foundational types | `llm_d_bench/core/` | `snake_case.py` | Classes in PascalCase | `exceptions.py` → `DomainError` |
-| Python HTTP adapters | `llm_d_bench/api/` | `snake_case.py` | Functions in snake_case | `problems.py` → `install_problem_handlers` |
-| Python technical utilities | `llm_d_bench/utils/` | `snake_case.py`, named by function | Functions in snake_case, classes in PascalCase | `kubernetes.py` → `validate_namespace` |
-| Python domain logic | `llm_d_bench/<domain>/` | `snake_case.py`, named by responsibility | Functions in snake_case, classes in PascalCase | `configuration/normalizers.py` |
-| Python domain models | `llm_d_bench/<domain>/` | `models.py` or an existing model file | PascalCase | Domain request, response, and data models |
+| Python shared foundational types | `llm_d_lens/core/` | `snake_case.py` | Classes in PascalCase | `exceptions.py` → `DomainError` |
+| Python HTTP adapters | `llm_d_lens/api/` | `snake_case.py` | Functions in snake_case | `problems.py` → `install_problem_handlers` |
+| Python technical utilities | `llm_d_lens/utils/` | `snake_case.py`, named by function | Functions in snake_case, classes in PascalCase | `kubernetes.py` → `validate_namespace` |
+| Python domain logic | `llm_d_lens/<domain>/` | `snake_case.py`, named by responsibility | Functions in snake_case, classes in PascalCase | `configuration/normalizers.py` |
+| Python domain models | `llm_d_lens/<domain>/` | `models.py` or an existing model file | PascalCase | Domain request, response, and data models |
 | Data persistence | The data-access directory determined by the DB PR | Follow the DB PR conventions | Follow the DB PR conventions | Do not add a shared file Store layer |
 
 ### Tests

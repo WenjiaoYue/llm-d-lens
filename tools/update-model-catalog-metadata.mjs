@@ -3,8 +3,8 @@ import { promisify } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
 
 const execFileAsync = promisify(execFile);
-const catalogPath = new URL('../src/data/modelCatalog.js', import.meta.url);
-const outputPath = new URL('../src/data/modelCatalogMetadata.json', import.meta.url);
+const catalogPath = new URL('../packages/shared/src/catalog/modelCatalog.js', import.meta.url);
+const outputPath = new URL('../packages/shared/src/catalog/modelCatalogMetadata.json', import.meta.url);
 const contextKeys = [
     'max_position_embeddings',
     'max_sequence_length',

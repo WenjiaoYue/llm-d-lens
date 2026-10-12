@@ -108,7 +108,7 @@ Pin versions alongside llm-d/llm-d-benchmark in the cluster wizard Software vers
 | Component | Version field | Source |
 | --- | --- | --- |
 | llm-d (local Lens use) | `llm_d_ref` | Source checkout |
-| llm-d-benchmark (local use) | `llm_d_benchmark_ref` | Source checkout |
+| llm-d-benchmark (local use) | `llm_d_lensmark_ref` | Source checkout |
 | Gateway provider | `gateway_provider` + `gateway_version` | Helm chart / CRD |
 | GAIE / Gateway API CRDs | `gie_version` | Official manifests |
 | llm-d Router (EPP / Proxy) | `router_version` | Helm chart / image |

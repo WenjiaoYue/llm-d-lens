@@ -17,7 +17,7 @@
    as the conversation model service**, using their own deployed model instead of configuring
    another external LLM key. The model can query cluster/benchmark data and generate Agentic
    recommendations, but approval/deployment requires **explicit user confirmation**.
-3. Reuse the Agentic Deployment guardrails in `agentic-deployment-architecture.zh-CN.md`:
+3. Reuse the Agentic Deployment guardrails in `agentic-deployment-architecture.md`:
    the LLM selects/scores only within the server-validated candidate space; it cannot generate
    arbitrary configurations or bypass approval to change cluster state.
 
@@ -39,9 +39,9 @@ without reimplementing business logic.
 | Remote deployment | `server/remoteDeploy.ts` | `/api/remote-deploy/{defaults,fingerprint,test,start,status,logs,teardown}` |
 | Candidate/benchmark retrieval | `server/candidateSearch.ts` | `/api/candidate-support`, `/api/candidate-search` |
 | Guide catalog/planning | `server/guidePlanning.ts` | `/api/guide-planning/{catalog,prepare,plan}` |
-| **Agentic Deployment (core)** | `llm_d_bench/agentic/router.py` | `POST /api/agentic-deployments` (create plan)<br>`GET /api/agentic-deployments` (list)<br>`GET /api/agentic-deployments/{id}` (details)<br>`POST /api/agentic-deployments/{id}/select`<br>`POST /api/agentic-deployments/{id}/refine` (Recalculate)<br>`POST /api/agentic-deployments/{id}/approve` (the sole cluster-changing write) |
+| **Agentic Deployment (core)** | `llm_d_lens/agentic/router.py` | `POST /api/agentic-deployments` (create plan)<br>`GET /api/agentic-deployments` (list)<br>`GET /api/agentic-deployments/{id}` (details)<br>`POST /api/agentic-deployments/{id}/select`<br>`POST /api/agentic-deployments/{id}/refine` (Recalculate)<br>`POST /api/agentic-deployments/{id}/approve` (the sole cluster-changing write) |
 | Simulation | `/api/simulation/*` in `simulation-runner-design.md` | Read-only access and task submission |
-| Prometheus/cluster monitoring | `llm_d_bench/monitoring/{cluster_stack,profiling,accelerator,deployment}` | Existing PromQL wrappers (`_query`/`_query_range`), Grafana/Prometheus links, cluster-stack status |
+| Prometheus/cluster monitoring | `llm_d_lens/monitoring/{cluster_stack,profiling,accelerator,deployment}` | Existing PromQL wrappers (`_query`/`_query_range`), Grafana/Prometheus links, cluster-stack status |
 
 Agentic Deployment already resembles constrained tool calling: `DeterministicPlanner`
 generates/filters candidates; `OpenAICompatiblePlanner` selects/scores only server-provided IDs;
@@ -61,7 +61,7 @@ flowchart TD
         MCP["Prism MCP Server\nserver/mcp/*\n(@modelcontextprotocol/sdk)"]
         REST["Existing REST routes\ndeploy.ts / remoteDeploy.ts /\ncandidateSearch.ts / guidePlanning.ts"]
     end
-    subgraph Py["Python services (llm_d_bench)"]
+    subgraph Py["Python services (llm_d_lens)"]
         AGENTIC["agentic/router.py + service.py\n(Deterministic + OpenAI-compatible Planner)"]
         SIM["simulation service"]
     end
@@ -152,7 +152,7 @@ Classify tools by read/write semantics and risk. Phase 1 exposes read-only tools
 
 ### 4.1b Prometheus/monitoring data (read-only, Phase 1)
 
-Existing cluster-level integration in `llm_d_bench/monitoring/*` installs kube-prometheus-stack
+Existing cluster-level integration in `llm_d_lens/monitoring/*` installs kube-prometheus-stack
 through `cluster_stack`. Profiling, accelerator, and deployment services read metrics through
 port-forward tunnels using `_query`/`_query_range` (`/api/v1/query`, `/api/v1/query_range`).
 These production paths already cover idle GPUs, KV-cache hit rates, and EPP phase duration.
@@ -160,7 +160,7 @@ Wrap them as read-only tools.
 
 | Tool | Description | Existing capability |
 | --- | --- | --- |
-| `get_flow_map_metrics` | GPU idle/utilization flow map for a cluster/time window | `llm_d_bench/monitoring/profiling/router.py` `GET /flow-map` |
+| `get_flow_map_metrics` | GPU idle/utilization flow map for a cluster/time window | `llm_d_lens/monitoring/profiling/router.py` `GET /flow-map` |
 | `get_kv_cache_metrics` | Deployment KV-cache settings and hit-rate snapshot | `_cache_queries` + `_query`/`_query_range` in `profiling/service.py` |
 | `get_epp_phase_metrics` | EPP phase-duration distributions | `_epp_phase_queries` in `profiling/service.py` |
 | `get_monitoring_links` | Clickable Grafana dashboard and Prometheus links for a cluster/accelerator | `accelerator/router.py` `GET /{accelerator}/links`, `cluster_stack/router.py` `GET /links` |
@@ -284,10 +284,10 @@ end-to-end Playground SSE, `npm run build`, and existing `server/*.test.ts` test
 
 ## 10. References
 
-- `agentic-deployment-architecture.zh-CN.md`
+- `agentic-deployment-architecture.md`
 - `AGENTIC_DEPLOY_IMPLEMENTATION_PLAN.md`
-- `agentic-planning-evidence-and-rag.zh-CN.md`
+- `agentic-planning-evidence-and-rag.md`
 - `simulation-runner-design.md`
 - `cluster-monitoring-service-design.md`
-- `llm_d_bench/agentic/router.py`
-- `llm_d_bench/monitoring/profiling/service.py` (Prometheus `_query`/`_query_range` wrappers)
+- `llm_d_lens/agentic/router.py`
+- `llm_d_lens/monitoring/profiling/service.py` (Prometheus `_query`/`_query_range` wrappers)

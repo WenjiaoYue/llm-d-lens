@@ -13,15 +13,15 @@
       "createdAt": "2026-09-30T03:25:35.747Z",
       "evidence": [
         {
-          "path": "llm_d_bench/schemas/common.py",
+          "path": "llm_d_lens/schemas/common.py",
           "hash": "353a755d674f395e29a540c0c766075ac8b70c5acb0af8d488e551998d426012"
         },
         {
-          "path": "llm_d_bench/tasks/models.py",
+          "path": "llm_d_lens/tasks/models.py",
           "hash": "74a3fb1199af1763b8d84f0e331c8f7aa38641aa881d21062afea4418102a2f5"
         },
         {
-          "path": "llm_d_bench/tasks/__init__.py",
+          "path": "llm_d_lens/tasks/__init__.py",
           "hash": "dd576004be95bcc0da78025468dbc067f11be29bc36396f8530a575647456ad3"
         }
       ],
@@ -38,11 +38,11 @@
           "createdAt": "2026-09-18T06:47:36.813Z",
           "evidence": [
             {
-              "path": "llm_d_bench/schemas/common.py",
+              "path": "llm_d_lens/schemas/common.py",
               "hash": "eea9a0ab9e82cfb3af3f2ec03477320e645f10e46ec5c926c6a496efc76139ca"
             },
             {
-              "path": "llm_d_bench/tasks/models.py",
+              "path": "llm_d_lens/tasks/models.py",
               "hash": "04bf39fc10de4f69e7663c15655f73360260106b4b752fa1f08425920917cd7f"
             }
           ]
@@ -59,25 +59,25 @@
           "createdAt": "2026-09-20T08:59:21.505Z",
           "evidence": [
             {
-              "path": "llm_d_bench/schemas/common.py",
+              "path": "llm_d_lens/schemas/common.py",
               "hash": "eea9a0ab9e82cfb3af3f2ec03477320e645f10e46ec5c926c6a496efc76139ca"
             },
             {
-              "path": "llm_d_bench/tasks/models.py",
+              "path": "llm_d_lens/tasks/models.py",
               "hash": "04bf39fc10de4f69e7663c15655f73360260106b4b752fa1f08425920917cd7f"
             },
             {
-              "path": "llm_d_bench/tasks/__init__.py",
+              "path": "llm_d_lens/tasks/__init__.py",
               "hash": "55dfd92f3ee294a8db049f93ec37327c2830ea49c132342303a553bd4613faec"
             }
           ],
           "scope": {
             "files": [
-              "llm_d_bench/schemas/common.py",
-              "llm_d_bench/tasks/models.py"
+              "llm_d_lens/schemas/common.py",
+              "llm_d_lens/tasks/models.py"
             ],
             "callers": [
-              "llm_d_bench/tasks/__init__.py"
+              "llm_d_lens/tasks/__init__.py"
             ],
             "capabilityIds": [],
             "operations": [
@@ -109,7 +109,7 @@
       "createdAt": "2026-09-18T08:49:45.974Z",
       "evidence": [
         {
-          "path": "llm_d_bench/utils/storage_admin.py",
+          "path": "llm_d_lens/utils/storage_admin.py",
           "hash": "26fda1e06382c289742725d73ade87b1679afd0169cd80571cf79f83d4c11bde"
         },
         {
@@ -182,15 +182,15 @@
       "createdAt": "2026-09-24T15:58:27.089Z",
       "evidence": [
         {
-          "path": "llm_d_bench/model_service/gateway_ops.py",
+          "path": "llm_d_lens/model_service/gateway_ops.py",
           "hash": "127ed368ecfeef794f85ab87ad0302a551fef9750a81c6e2abc87ab376d6ad12"
         },
         {
-          "path": "llm_d_bench/model_service/agent_router_config.py",
+          "path": "llm_d_lens/model_service/agent_router_config.py",
           "hash": "762d76b2aebcba1e2340ea40c538f56f467df40f1ee38f5a9216f75295a5d855"
         },
         {
-          "path": "llm_d_bench/deploy/providers/optimized_baseline.py",
+          "path": "llm_d_lens/deploy/providers/optimized_baseline.py",
           "hash": "8af69cf96a0ec008e1a27a8c7f8e3da5ece83fea82f0dfc8215d28e7240aeac0"
         }
       ],
@@ -211,11 +211,11 @@
       "createdAt": "2026-09-25T00:47:57.822Z",
       "evidence": [
         {
-          "path": "llm_d_bench/model_service/gateway_ops.py",
+          "path": "llm_d_lens/model_service/gateway_ops.py",
           "hash": "4d51c3b2201c87eb5a275cc9d6c9c3bb1eedeca8e280ec7231fda9fb1a3c34d1"
         },
         {
-          "path": "llm_d_bench/model_service/gateway_contracts.py",
+          "path": "llm_d_lens/model_service/gateway_contracts.py",
           "hash": "12210fbf950bf7e8d71970f9a8d946740e7ca0f36cc333ea5300b60da4465d47"
         },
         {
@@ -237,11 +237,11 @@
           "createdAt": "2026-09-24T18:24:19.247Z",
           "evidence": [
             {
-              "path": "llm_d_bench/model_service/gateway_ops.py",
+              "path": "llm_d_lens/model_service/gateway_ops.py",
               "hash": "5e86d52d434767446802c4e2f7fbf2fd6aa561be353588169cc19ee20379f708"
             },
             {
-              "path": "llm_d_bench/model_service/gateway_contracts.py",
+              "path": "llm_d_lens/model_service/gateway_contracts.py",
               "hash": "902039ae50dca5cb9752ce2fbce1f3d3ec55907ab3608693f86d58a54782f42f"
             },
             {
@@ -249,7 +249,7 @@
               "hash": "6a93045ef78359c186e989a442185976d8d48663ac451d3c1dd68777a45ed348"
             },
             {
-              "path": "llm_d_bench/deploy/providers/optimized_baseline.py",
+              "path": "llm_d_lens/deploy/providers/optimized_baseline.py",
               "hash": "a0172afc0decb61fd0cfda266395b9b0627b426e2ac00d392ea3c91b75586154"
             }
           ]
@@ -272,11 +272,11 @@
       "createdAt": "2026-09-21T11:21:43.763Z",
       "evidence": [
         {
-          "path": "llm_d_bench/evaluate/router.py",
+          "path": "llm_d_lens/evaluation/router.py",
           "hash": "ca086d5deb916758f2a0ce8339843211725149f30ed8aa3aef9b53a75f6673e4"
         },
         {
-          "path": "llm_d_bench/evaluate/test_deployments.py",
+          "path": "llm_d_lens/evaluation/test_deployments.py",
           "hash": "e34d03c03106d198fa7eb08ecb37a152f36a73f14bb560f5f3ae3839fb89c060"
         }
       ],
@@ -298,7 +298,7 @@
       "createdAt": "2026-09-29T07:37:10.980Z",
       "evidence": [
         {
-          "path": "llm_d_bench/utils/ssh.py",
+          "path": "llm_d_lens/utils/ssh.py",
           "hash": "971bf5ac225e6cd86388c5e2c0e63bbc21570de0a4c43dd11fce52ba9dd44c01"
         }
       ],
@@ -319,7 +319,7 @@
       "createdAt": "2026-09-30T03:14:15.316Z",
       "evidence": [
         {
-          "path": "llm_d_bench/agentic/planner.py",
+          "path": "llm_d_lens/agentic/planner.py",
           "hash": "b6c14616723729cb19ff650799661c36798ae4046489bca3e470aa5162ad9dff"
         },
         {
@@ -348,7 +348,7 @@
       "createdAt": "2026-09-30T09:04:06.125Z",
       "evidence": [
         {
-          "path": "llm_d_bench/ai_providers/service.py",
+          "path": "llm_d_lens/ai_providers/service.py",
           "hash": "dfde6e77879c01cc2f9515ff2600ce2b748084af1685e9be908cc7923244515b"
         }
       ],
@@ -365,7 +365,7 @@
           "createdAt": "2026-09-30T08:58:12.298Z",
           "evidence": [
             {
-              "path": "llm_d_bench/ai_providers/service.py",
+              "path": "llm_d_lens/ai_providers/service.py",
               "hash": "dfde6e77879c01cc2f9515ff2600ce2b748084af1685e9be908cc7923244515b"
             }
           ]

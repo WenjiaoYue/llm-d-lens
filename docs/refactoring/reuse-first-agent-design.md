@@ -366,7 +366,7 @@ Module/whole-repo Markdown reports use REVIEWED or INCOMPLETE to indicate comple
 
 | Dimension | Scope |
 | --- | --- |
-| Directories | `src/`, `server/`, `llm_d_bench/`, `tools/`, `scripts/` |
+| Directories | `src/`, `server/`, `llm_d_lens/`, `tools/`, `scripts/` |
 | File types | JS, JSX, TS, TSX, MJS, CJS, Python |
 | Exclusions | Tests, declaration files, dependencies, build artifacts, some generated files, invalid or unsafe paths |
 | Special exclusion | Auto-generated `server/mcp/tools.ts` |

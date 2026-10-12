@@ -1,6 +1,6 @@
 ---
 name: backend
-description: Use when changing Node or Express services in server/, Python APIs and domain services in llm_d_bench/, persistence, backend validation or task execution.
+description: Use when changing Node or Express services in apps/server/src/, Python APIs and domain services in apps/backend/src/llm_d_lens/, persistence, backend validation or task execution.
 ---
 
 # Backend
@@ -10,10 +10,10 @@ registration and unresolved decisions. All source paths below are repo-relative.
 
 ## Locate the implementation
 
-- `server/`: Node/Express endpoints, integrations and proxy boundaries. Inspect
-  existing callers and `server/http.ts` before adding outbound JSON requests;
+- `apps/server/src/`: Node/Express endpoints, integrations and proxy boundaries. Inspect
+  existing callers and `apps/server/src/infrastructure/http.ts` before adding outbound JSON requests;
   compare error, timeout and streaming contracts before reuse.
-- `llm_d_bench/`: Python APIs and domain services. Start in the owning domain
+- `apps/backend/src/llm_d_lens/`: Python APIs and domain services. Start in the owning domain
   (`configuration`, `deploy`, `evaluate`, `simulation`, etc.), then inspect
   `core/`, `schemas/`, `tasks/` and `utils/` for existing lower-level contracts.
 - Use [the capability map](../../../docs/reuse-map.md) and current source to
@@ -43,18 +43,18 @@ Tests must isolate SDK network access with local API fixtures or mocks at the
 SDK boundary. A subprocess mock alone no longer isolates default Kubernetes
 calls. Explicitly select CLI for CLI-specific tests; cover SDK behavior separately
 and do not globally disable SDK merely to make a suite pass. Existing examples
-are in `llm_d_bench/utils/test_kubernetes_integration.py`.
+are in `apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_integration.py`.
 
 ## Hardware profiles
 
 Hardware-specific behavior is data-driven. Declare it in a profile
-(`llm_d_bench/hardware/profiles/<vendor>.json`, shape in
-`llm_d_bench/hardware/schema.json`) and, only when code is required, a provider
-(`llm_d_bench/hardware/providers/<vendor>.py`) contributing driver
+(`apps/backend/src/llm_d_lens/hardware/profiles/<vendor>.json`, shape in
+`apps/backend/src/llm_d_lens/hardware/schema.json`) and, only when code is required, a provider
+(`apps/backend/src/llm_d_lens/hardware/providers/<vendor>.py`) contributing driver
 install/manifests and access `modes`, device resources, monitoring images and
 dashboards, telemetry `device_metric_sources`, and the default runtime image.
 Surface it through `GET /api/v1/hardware/capabilities` (see
-`llm_d_bench/hardware/`) and the cluster overview `hardware` summary.
+`apps/backend/src/llm_d_lens/hardware/`) and the cluster overview `hardware` summary.
 
 Do not hardcode a vendor list, a device-metric name/query, a DCGM/GFD/device-plugin
 manifest, an access mode, a runtime image or an accelerator variant in a domain
@@ -69,21 +69,21 @@ Cover the profile contract and its consumers, not only one vendor.
 
 | Type | Directory | Filename | Export |
 | --- | --- | --- | --- |
-| Node shared transport or utility | `server/` | Responsibility-based `camelCase.ts` | camelCase function; PascalCase type/class |
-| Node domain capability | `server/` or existing domain subdirectory | `<domain><Responsibility>.ts` | camelCase function; PascalCase type/class |
-| MCP adapter | `server/mcp/` | `camelCase.ts` | camelCase function |
-| Python shared base types | `llm_d_bench/core/` | `snake_case.py` | PascalCase class |
-| Python HTTP adaptation | `llm_d_bench/api/` | `snake_case.py` | snake_case function |
-| Python technical utility | `llm_d_bench/utils/` | Responsibility-based `snake_case.py` | snake_case function; PascalCase class |
-| Python domain capability | `llm_d_bench/<domain>/` | Responsibility-based `snake_case.py` | snake_case function; PascalCase class |
+| Node shared transport or utility | `apps/server/src/` | Responsibility-based `camelCase.ts` | camelCase function; PascalCase type/class |
+| Node domain capability | `apps/server/src/` or existing domain subdirectory | `<domain><Responsibility>.ts` | camelCase function; PascalCase type/class |
+| MCP adapter | `apps/server/src/mcp/` | `camelCase.ts` | camelCase function |
+| Python shared base types | `apps/backend/src/llm_d_lens/core/` | `snake_case.py` | PascalCase class |
+| Python HTTP adaptation | `apps/backend/src/llm_d_lens/api/` | `snake_case.py` | snake_case function |
+| Python technical adapter | `apps/backend/src/llm_d_lens/infrastructure/<capability>/` | Responsibility-based `snake_case.py` | snake_case function; PascalCase class |
+| Python domain capability | `apps/backend/src/llm_d_lens/<domain>/` | Responsibility-based `snake_case.py` | snake_case function; PascalCase class |
 | Python domain models | Owning domain directory | `models.py` or existing model module | PascalCase class |
 | Node test | Beside the tested module | `<filename>.test.ts` or existing `.test.js` convention | Existing test conventions |
 | Python test | Owning domain or utility directory | `test_<capability>.py` | `test_<behavior>` function |
 
-Examples: `server/http.ts` / `fetchJsonWithTimeout`,
-`server/clusterSources.ts` / `loadClusterSources`,
-`llm_d_bench/core/exceptions.py` / `DomainError`,
-`llm_d_bench/utils/kubernetes.py` / `validate_namespace`.
+Examples: `apps/server/src/infrastructure/http.ts` / `fetchJsonWithTimeout`,
+`apps/server/src/services/clusterSources.ts` / `loadClusterSources`,
+`apps/backend/src/llm_d_lens/core/exceptions.py` / `DomainError`,
+`apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py` / `validate_namespace`.
 
 Extend existing owners and preserve public import compatibility; do not rename
 unrelated legacy modules. Persistence placement follows the DB PR's data-access
@@ -95,8 +95,8 @@ The human-facing reference is the
 ## File storage
 
 Use the [storage scheme](../../../docs/design/storage-layout.md) for exact domain paths.
-Reuse `storage_path` / `prism_temp_root` in `llm_d_bench/utils/paths.py` and
-`storagePath` in `server/storagePaths.ts`; do not introduce another storage root
+Reuse `storage_path` / `prism_temp_root` in `apps/backend/src/llm_d_lens/utils/paths.py` and
+`storagePath` in `apps/server/src/infrastructure/storagePaths.ts`; do not introduce another storage root
 variable or restore legacy directory overrides. `LENS_*` roots take precedence
 over XDG defaults. Explicit source checkout inputs such as `LLM_D_ROOT` retain
 their existing input semantics.

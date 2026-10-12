@@ -182,7 +182,7 @@ Both directories should be persistent in order to retain historical records afte
 
 ## Implementation Basis
 
-[API Parameter Models](../../../llm_d_bench/evaluate/models.py) · [Frontend Benchmark Validation / Presets](../../../src/features/evaluation/benchmarkSettings.js) · [BenchmarkInputs](../../../src/components/evaluation/BenchmarkInputs.jsx) · [Topology and Parameter Mapping](../../../src/features/evaluation/configuration.js) · [Configuration Validation](../../../src/features/evaluation/configurationValidation.js) · [Guide Parameter Validation](../../../llm_d_bench/configuration/guide_settings.py) · [Setup Matching](../../../src/features/evaluation/setup.js) · [Configuration Models](../../../llm_d_bench/configuration/models.py) · [Execution and Workload Generation](../../../llm_d_bench/evaluate/router.py)
+[API Parameter Models](../../../llm_d_lens/evaluation/models.py) · [Frontend Benchmark Validation / Presets](../../../src/features/evaluation/benchmarkSettings.js) · [BenchmarkInputs](../../../src/components/evaluation/BenchmarkInputs.jsx) · [Topology and Parameter Mapping](../../../src/features/evaluation/configuration.js) · [Configuration Validation](../../../src/features/evaluation/configurationValidation.js) · [Guide Parameter Validation](../../../llm_d_lens/configuration/guide_settings.py) · [Setup Matching](../../../src/features/evaluation/setup.js) · [Configuration Models](../../../llm_d_lens/configuration/models.py) · [Execution and Workload Generation](../../../llm_d_lens/evaluation/router.py)
 
 ### Troubleshooting Benchmark Client OOM
 

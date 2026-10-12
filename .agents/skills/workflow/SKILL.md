@@ -23,7 +23,7 @@ domain operation), then search each capability:
 
 ```bash
 npm run reuse:search -- "describe the intended behavior" --task TASK_ID
-rg -n 'relatedSymbol|relatedRoute|domainTerm' src server llm_d_bench tools scripts
+rg -n 'relatedSymbol|relatedRoute|domainTerm' src server llm_d_lens tools scripts
 ```
 
 Search automatically refreshes the local semantic index. First run downloads the
@@ -138,7 +138,7 @@ has already happened, and which edits are paused. Record the same evidence:
 ```bash
 npm run reuse -- pause --kind similarity \
   --summary "Existing operation retries; new behavior is unspecified" \
-  --file src/api/httpClient.js \
+  --file apps/frontend/src/api/httpClient.js \
   --option "Keep existing behavior and adapt the caller" \
   --option "Change the shared contract and migrate callers"
 ```

@@ -2,7 +2,7 @@
 
 - **Status:** Draft — Gate A review decision confirmed (see §10), pending implementation.
 - **Change directory:** `accelerator-observability-design.md`
-- **Reference architecture:** `llm_d_bench/monitoring/cluster_stack/` (backend),
+- **Reference architecture:** `llm_d_lens/monitoring/cluster_stack/` (backend),
   `src/components/ClusterMonitoringStack/` (frontend).
 - **Upstream documentation:**
   - XPUM Daemon Helm chart: https://github.com/intel/xpumanager/blob/main/xpumd/charts/xpumd/README.md
@@ -78,11 +78,11 @@ frontend to render tabs.
 
 ## 3. Backend architecture
 
-Add package `llm_d_bench/monitoring/accelerator/`, corresponding one-to-one with
-`llm_d_bench/monitoring/cluster_stack/`:
+Add package `llm_d_lens/monitoring/accelerator/`, corresponding one-to-one with
+`llm_d_lens/monitoring/cluster_stack/`:
 
 ```
-llm_d_bench/monitoring/accelerator/
+llm_d_lens/monitoring/accelerator/
 ├── __init__.py        # exports router
 ├── errors.py          # AcceleratorError (same shape as ClusterStackError)
 ├── models.py          # Pydantic DTOs (StrictModel, extra="forbid")
@@ -95,7 +95,7 @@ llm_d_bench/monitoring/accelerator/
 
 ### 3.1 Reuse instead of duplication
 
-- Reuse `llm_d_bench/monitoring/kubernetes.CommandRunner` directly to execute all
+- Reuse `llm_d_lens/monitoring/kubernetes.CommandRunner` directly to execute all
   `kubectl` / `helm` subprocess calls.
 - `operations.py` generalizes `ClusterStackOperationManager`—the same
   `OperationStore` (JSON files under `LENS_DATA_DIR/metadata/monitoring/operations`),
@@ -107,10 +107,10 @@ llm_d_bench/monitoring/accelerator/
 
 ### 3.2 Route registration
 
-Add in `llm_d_bench/api/main.py`:
+Add in `llm_d_lens/api/main.py`:
 
 ```python
-from llm_d_bench.monitoring.accelerator import router as accelerator_router
+from llm_d_lens.monitoring.accelerator import router as accelerator_router
 
 ...
 app.include_router(accelerator_router)
@@ -397,7 +397,7 @@ cannot be accessed directly from the browser; therefore the link buttons in the
 "Dashboards" area navigate through a `kubectl port-forward` tunnel established by
 the backend, rather than configuring NodePort / Ingress.
 
-- Add a shared backend module `llm_d_bench/monitoring/port_forward.py`, caching
+- Add a shared backend module `llm_d_lens/monitoring/port_forward.py`, caching
   tunnels keyed by `(namespace, service, remote_port)`, assigning ports from
   `18000–18999`, with 3 retries; all tunnels are cleaned up on application
   shutdown. Tunnels bind to all interfaces with `--address 0.0.0.0`, so they are

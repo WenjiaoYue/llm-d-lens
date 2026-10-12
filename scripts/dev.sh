@@ -410,19 +410,19 @@ ensure_node_modules() {
 
 # ---- venv setup ---------------------------------------------------------------
 # ensure_venv — create the virtualenv and install Python deps when missing, or
-# when pyproject.toml changed since the last install. The stamp mirrors
+# when apps/backend/pyproject.toml changed since the last install. The stamp mirrors
 # ensure_node_modules: a `git pull` that adds/bumps a dependency (e.g. casbin)
 # must not be silently skipped just because the venv exists and the probed
-# imports (llm_d_bench/uvicorn/pgserver) still work.
+# imports (llm_d_lens/uvicorn/pgserver) still work.
 ensure_venv() {
     local stamp=".venv/.install-stamp"
     local current_hash=""
-    if [[ -f pyproject.toml ]]; then
-        current_hash="$(sha256sum pyproject.toml 2>/dev/null | awk '{print $1}')"
+    if [[ -f apps/backend/pyproject.toml ]]; then
+        current_hash="$(sha256sum apps/backend/pyproject.toml 2>/dev/null | awk '{print $1}')"
     fi
 
     if [[ -x .venv/bin/python && -f "$stamp" && "$(cat "$stamp" 2>/dev/null)" == "$current_hash" ]] \
-        && .venv/bin/python -c "import llm_d_bench, uvicorn, pgserver" 2>/dev/null; then
+        && .venv/bin/python -c "import llm_d_lens, uvicorn, pgserver" 2>/dev/null; then
         return 0
     fi
 
@@ -443,10 +443,10 @@ ensure_venv() {
     # '[embedded-db]' pulls in pgserver, needed by ensure_database's default
     # built-in PostgreSQL fallback below. '[ldap]' pulls in ldap3 so the
     # Administration directory provider "Test" action works in local dev.
-    log "installing Python dependencies (pip install -e .[embedded-db,ldap])..."
+    log "installing Python dependencies (pip install -e apps/backend[embedded-db,ldap])..."
     .venv/bin/python -m pip install --upgrade pip >/dev/null 2>&1 || true
-    run_with_tail 5 .venv/bin/python -m pip install -e ".[embedded-db,ldap]" || {
-        fail "pip install -e .[embedded-db,ldap] failed — see output above"
+    run_with_tail 5 .venv/bin/python -m pip install -e "apps/backend[embedded-db,ldap]" || {
+        fail "pip install -e apps/backend[embedded-db,ldap] failed — see output above"
         return 1
     }
     echo "$current_hash" > "$stamp"
@@ -456,12 +456,12 @@ ensure_venv() {
 # ensure_database — auto-configure the built-in embedded PostgreSQL (no
 # password, local dev only) the first time dev.sh runs with no database
 # already configured (via env vars or a previous "Step 0" -- see
-# llm_d_bench/db/system_router.py's get_database_status()). Unlike the
+# llm_d_lens/db/system_router.py's get_database_status()). Unlike the
 # installer (scripts/LensInstaller-Ubuntu-x86_64.sh), which always requires
 # a password on its embedded database, dev.sh intentionally stays
 # password-less for local-dev convenience.
 ensure_database() {
-    if ! .venv/bin/python -m llm_d_bench.db.bootstrap_cli --mode embedded; then
+    if ! .venv/bin/python -m llm_d_lens.db.bootstrap_cli --mode embedded; then
         fail "database auto-configuration failed — see output above"
         return 1
     fi
@@ -521,9 +521,9 @@ cmd_check() {
 
     if [[ -x .venv/bin/python ]]; then
         log "  venv:     $(.venv/bin/python --version 2>&1)"
-        .venv/bin/python -c "import llm_d_bench, uvicorn" 2>/dev/null \
-            && log "  python deps: llm_d_bench + uvicorn importable" \
-            || { fail "  python deps: import failed — run 'pip install -e .'"; ok=0; }
+        .venv/bin/python -c "import llm_d_lens, uvicorn" 2>/dev/null \
+            && log "  python deps: llm_d_lens + uvicorn importable" \
+            || { fail "  python deps: import failed — run 'pip install -e apps/backend'"; ok=0; }
     else
         fail "  venv:     missing (.venv/bin/python) — 'scripts/dev.sh start' will create it"
         ok=0
@@ -620,7 +620,7 @@ wait_for_http() {
 }
 
 # ---- MCP tool catalog ---------------------------------------------------------
-# regenerate_mcp_tools — regenerate server/mcp/tools.ts from the FastAPI
+# regenerate_mcp_tools — regenerate apps/server/src/mcp/tools.ts from the FastAPI
 # backend's live OpenAPI schema before every start, so the MCP tool catalog
 # can never silently drift from the routes actually exposed by the backend.
 # Non-fatal: falls back to whatever tools.ts is already on disk if this fails.
@@ -631,7 +631,7 @@ regenerate_mcp_tools() {
     mkdir -p "$LOG_DIR"
     log "regenerating MCP tool catalog from the backend API..."
     if ! node scripts/generate-mcp-tools.mjs >"$LOG_DIR/generate-mcp-tools.log" 2>&1; then
-        warn "MCP tool catalog regeneration failed — see $LOG_DIR/generate-mcp-tools.log (using existing server/mcp/tools.ts)"
+        warn "MCP tool catalog regeneration failed — see $LOG_DIR/generate-mcp-tools.log (using existing apps/server/src/mcp/tools.ts)"
     fi
 }
 
@@ -704,7 +704,7 @@ start_services() {
         PRISM_MCP_URL="$scheme://127.0.0.1:$SERVER_PORT/api/mcp" \
         PRISM_MCP_CA_FILE="${TLS_CERT_FILE:-}" \
         LENS_INTERNAL_AUTH_SECRET="$LENS_INTERNAL_AUTH_SECRET" \
-        .venv/bin/python -m uvicorn llm_d_bench.api:app \
+        .venv/bin/python -m uvicorn llm_d_lens.api:app \
         --host "${BACKEND_HOST:-0.0.0.0}" --port "$BACKEND_PORT"
 
     start_one server env SERVER_PORT="$SERVER_PORT" PORT="$SERVER_PORT" \
@@ -712,13 +712,13 @@ start_services() {
         LENS_INTERNAL_AUTH_SECRET="$LENS_INTERNAL_AUTH_SECRET" \
         SIMULATION_API_URL="http://127.0.0.1:$BACKEND_PORT" \
         TLS_CERT_FILE="${TLS_CERT_FILE:-}" TLS_KEY_FILE="${TLS_KEY_FILE:-}" \
-        ./node_modules/.bin/tsx server/server.js
+        ./node_modules/.bin/tsx apps/server/src/server.js
 
     start_one frontend env VITE_HOST="$VITE_HOST" VITE_PORT="$FRONTEND_PORT" \
         VITE_AUTH_PROXY_TARGET="$scheme://127.0.0.1:$SERVER_PORT" \
         VITE_API_PROXY_TARGET="$scheme://127.0.0.1:$SERVER_PORT" \
         TLS_CERT_FILE="${TLS_CERT_FILE:-}" TLS_KEY_FILE="${TLS_KEY_FILE:-}" \
-        ./node_modules/.bin/vite
+        ./node_modules/.bin/vite apps/frontend
 
     log "waiting for services to become ready..."
     wait_for_http backend "http://127.0.0.1:$BACKEND_PORT/api/health"

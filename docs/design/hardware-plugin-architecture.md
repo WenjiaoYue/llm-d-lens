@@ -35,8 +35,8 @@ Organized by runtime layer, with actual locations and hardcoded values forming t
 
 | Location | XPU-specific details |
 |---|---|
-| `llm_d_bench/monitoring/gpu_driver/service.py` | `_DRA_RELEASE_REF = "gpu-v0.11.0"` (Intel DRA Driver), `_DEVICE_PLUGIN_RELEASE_REF = "v0.36.0"` (Intel device plugin), `_NFD_COMMANDS` points to Intel NFD manifests, `_GPU_NODE_LABEL_SELECTOR = "intel.feature.node.kubernetes.io/gpu=true"`, `_is_dra_driver()` / `_is_gpu_plugin()` by `intel-gpu-resource-driver` / `intel-gpu-plugin` name/label matching |
-| `llm_d_bench/monitoring/gpu_driver/router.py` | `/api/v1/monitoring/gpu-driver/status`, `/install`, `access_mode ∈ {dra, plugin}` |
+| `llm_d_lens/monitoring/gpu_driver/service.py` | `_DRA_RELEASE_REF = "gpu-v0.11.0"` (Intel DRA Driver), `_DEVICE_PLUGIN_RELEASE_REF = "v0.36.0"` (Intel device plugin), `_NFD_COMMANDS` points to Intel NFD manifests, `_GPU_NODE_LABEL_SELECTOR = "intel.feature.node.kubernetes.io/gpu=true"`, `_is_dra_driver()` / `_is_gpu_plugin()` by `intel-gpu-resource-driver` / `intel-gpu-plugin` name/label matching |
+| `llm_d_lens/monitoring/gpu_driver/router.py` | `/api/v1/monitoring/gpu-driver/status`, `/install`, `access_mode ∈ {dra, plugin}` |
 | `src/components/ClusterMonitoringStack/gpuDriverBackend.js` | Client wrapper with hardcoded label "Intel GPU" |
 | `src/components/CreateClusterWizard.jsx` | `ACCELERATOR_VENDORS = [{ id: 'intel', label: 'Intel GPU', disabled: false }]`; `acceleratorVendor` Intel only |
 
@@ -46,25 +46,25 @@ Organized by runtime layer, with actual locations and hardcoded values forming t
 
 | Location | XPU-specific details |
 |---|---|
-| `llm_d_bench/cluster/service.py:859-949` | `_INTEL_GPU_LABEL = "intel.feature.node.kubernetes.io/gpu"`, `_GPU_RESOURCE_PREFIX = "gpu.intel.com/"`, `_gpu_count()` sums by prefix (excluding `/monitoring`) |
-| `llm_d_bench/cluster/service.py:154-196` | `component_status()` returns only `intelDevicePlugin`, regex `intel.*(gpu\|device\|resource).*plugin` |
-| `llm_d_bench/cluster/service.py:952-988, 1433` | `_GPU_DRIVER = "gpu.intel.com"`, counts devices from DRA ResourceSlices, `kubectl get resourceslices.resource.k8s.io` |
-| `llm_d_bench/cluster/service.py:378-449` | `_prometheus_hardware_metrics()`: `vramBytes = hw_memory_size_bytes` (XPUM metric name) |
-| `llm_d_bench/cluster/service.py:1333-1419` | `_hardware_summary()` outputs `gpuCount / allocatedGpuCount / availableGpuCount / vramBytes`, consumed by Agentic, Evaluation, and frontend |
-| `llm_d_bench/cluster/sdk_discovery.py` | `deviceclasses` / `resourceslices` kubectl queries (generic, but callers hardcode classes) |
-| `llm_d_bench/cluster/models.py:168` | `intel_device_plugin: ComponentSummary` hardcoded field name |
+| `llm_d_lens/cluster/service.py:859-949` | `_INTEL_GPU_LABEL = "intel.feature.node.kubernetes.io/gpu"`, `_GPU_RESOURCE_PREFIX = "gpu.intel.com/"`, `_gpu_count()` sums by prefix (excluding `/monitoring`) |
+| `llm_d_lens/cluster/service.py:154-196` | `component_status()` returns only `intelDevicePlugin`, regex `intel.*(gpu\|device\|resource).*plugin` |
+| `llm_d_lens/cluster/service.py:952-988, 1433` | `_GPU_DRIVER = "gpu.intel.com"`, counts devices from DRA ResourceSlices, `kubectl get resourceslices.resource.k8s.io` |
+| `llm_d_lens/cluster/service.py:378-449` | `_prometheus_hardware_metrics()`: `vramBytes = hw_memory_size_bytes` (XPUM metric name) |
+| `llm_d_lens/cluster/service.py:1333-1419` | `_hardware_summary()` outputs `gpuCount / allocatedGpuCount / availableGpuCount / vramBytes`, consumed by Agentic, Evaluation, and frontend |
+| `llm_d_lens/cluster/sdk_discovery.py` | `deviceclasses` / `resourceslices` kubectl queries (generic, but callers hardcode classes) |
+| `llm_d_lens/cluster/models.py:168` | `intel_device_plugin: ComponentSummary` hardcoded field name |
 
 ### 2.3 Telemetry and observability
 
 | Location | XPU-specific details |
 |---|---|
-| `llm_d_bench/monitoring/accelerator/registry.py` | **Existing provider registry**: `register()` / `get_provider()` / `capabilities()` + `AcceleratorProvider` protocol |
-| `llm_d_bench/monitoring/accelerator/models.py:20-35` | `AcceleratorType = Literal["intel_gpu"]` (closed literal), `INTEL_GPU_RELEASE_NAME = "xpumd"`, `INTEL_GPU_DEFAULT_NAMESPACE = "intel-xpumd"` |
-| `llm_d_bench/monitoring/accelerator/intel_gpu.py` | xpumd chart repo/version, `discover_status()`, `preflight()`, `prepare_nodes()`, `install_argv()`, `configure_monitoring()` (Grafana dashboard patch) |
-| `llm_d_bench/monitoring/accelerator/service.py:174-253` | Grafana dashboard discovery by `"xpumd"` / `"xpu"` / `"intel"` keyword matching |
-| `llm_d_bench/monitoring/profiling/xpu_metrics.py` | `XPUM_QUERIES` (`hw_gpu_utilization_ratio`, `hw_memory_usage_bytes`), `device_allocations()` resolve `gpu.intel.com` DRA claim, PCI BDF regex |
-| `llm_d_bench/monitoring/profiling/service.py:32` | Direct import of `xpu_metrics`, Flow Map assembly hardcodes XPUM |
-| `llm_d_bench/evaluate/router.py:2379-2397` | `"source": "xpumd-direct"`, direct scrape of `/api/v1/namespaces/intel-xpumd/services/http:xpumd:8080/proxy/metrics` |
+| `llm_d_lens/monitoring/accelerator/registry.py` | **Existing provider registry**: `register()` / `get_provider()` / `capabilities()` + `AcceleratorProvider` protocol |
+| `llm_d_lens/monitoring/accelerator/models.py:20-35` | `AcceleratorType = Literal["intel_gpu"]` (closed literal), `INTEL_GPU_RELEASE_NAME = "xpumd"`, `INTEL_GPU_DEFAULT_NAMESPACE = "intel-xpumd"` |
+| `llm_d_lens/monitoring/accelerator/intel_gpu.py` | xpumd chart repo/version, `discover_status()`, `preflight()`, `prepare_nodes()`, `install_argv()`, `configure_monitoring()` (Grafana dashboard patch) |
+| `llm_d_lens/monitoring/accelerator/service.py:174-253` | Grafana dashboard discovery by `"xpumd"` / `"xpu"` / `"intel"` keyword matching |
+| `llm_d_lens/monitoring/profiling/xpu_metrics.py` | `XPUM_QUERIES` (`hw_gpu_utilization_ratio`, `hw_memory_usage_bytes`), `device_allocations()` resolve `gpu.intel.com` DRA claim, PCI BDF regex |
+| `llm_d_lens/monitoring/profiling/service.py:32` | Direct import of `xpu_metrics`, Flow Map assembly hardcodes XPUM |
+| `llm_d_lens/evaluation/router.py:2379-2397` | `"source": "xpumd-direct"`, direct scrape of `/api/v1/namespaces/intel-xpumd/services/http:xpumd:8080/proxy/metrics` |
 
 > Only telemetry is partially pluggable: its provider registry exists, but profiling joins, PromQL, Grafana discovery, and direct evaluation scraping remain Intel-specific.
 
@@ -72,14 +72,14 @@ Organized by runtime layer, with actual locations and hardcoded values forming t
 
 | Location | XPU-specific details |
 |---|---|
-| `llm_d_bench/deploy/capabilities.py` | Four providers declare `"accelerators": ["xpu"]` (hardcoded); frontend uses this to determine availability |
-| `llm_d_bench/deploy/providers/gpu_selection.py` | `PRISM_GPU_PCI_ALLOWLIST`, CEL `device.attributes["gpu.intel.com"].pciAddress in [...]` |
-| `llm_d_bench/deploy/providers/baseline_vllm.py:262-301` | claim name `intel-claim`, `deviceClassName: "gpu.intel.com"`, request name `"intel"` |
-| `llm_d_bench/deploy/providers/optimized_baseline.py:107-111, 547` | `accelerator_count == tensor_parallel_size` single-node XPU overlay constraint; DRA claim-count rewriting |
-| `llm_d_bench/deploy/providers/pd_disaggregation.py:105-110` | Search ResourceClaimTemplate for `deviceClassName == "gpu.intel.com"` |
-| `llm_d_bench/deploy/providers/precise_prefix_cache_routing.py:493` | Validate that overlay contains ResourceClaimTemplate |
-| `llm_d_bench/deploy/providers/configuration_manifest.py:55-60` | `source.get("accelerator") != "xpu"` reject directly; `modelServer` allowlist |
-| `llm_d_bench/deploy/runtime/composition.py:750, 777, 868-880` | overlay hardcoded path `modelserver/xpu/vllm`; `adapter_type="optimized-baseline-xpu"`; readiness deployment `optimized-baseline-xpu-vllm-decode` |
+| `llm_d_lens/deploy/capabilities.py` | Four providers declare `"accelerators": ["xpu"]` (hardcoded); frontend uses this to determine availability |
+| `llm_d_lens/deploy/providers/gpu_selection.py` | `PRISM_GPU_PCI_ALLOWLIST`, CEL `device.attributes["gpu.intel.com"].pciAddress in [...]` |
+| `llm_d_lens/deploy/providers/baseline_vllm.py:262-301` | claim name `intel-claim`, `deviceClassName: "gpu.intel.com"`, request name `"intel"` |
+| `llm_d_lens/deploy/providers/optimized_baseline.py:107-111, 547` | `accelerator_count == tensor_parallel_size` single-node XPU overlay constraint; DRA claim-count rewriting |
+| `llm_d_lens/deploy/providers/pd_disaggregation.py:105-110` | Search ResourceClaimTemplate for `deviceClassName == "gpu.intel.com"` |
+| `llm_d_lens/deploy/providers/precise_prefix_cache_routing.py:493` | Validate that overlay contains ResourceClaimTemplate |
+| `llm_d_lens/deploy/providers/configuration_manifest.py:55-60` | `source.get("accelerator") != "xpu"` reject directly; `modelServer` allowlist |
+| `llm_d_lens/deploy/runtime/composition.py:750, 777, 868-880` | overlay hardcoded path `modelserver/xpu/vllm`; `adapter_type="optimized-baseline-xpu"`; readiness deployment `optimized-baseline-xpu-vllm-decode` |
 
 > Deployment hardware differences reduce to five variables: device class/extended resource, claim/request name, node-selector label, upstream vendor directory (`xpu`/`gpu`), and overlay root. They are currently scattered across providers. NVIDIA uses `gpu`, not `cuda`, as its directory.
 
@@ -87,27 +87,27 @@ Organized by runtime layer, with actual locations and hardcoded values forming t
 
 | Location | XPU-specific details |
 |---|---|
-| `llm_d_bench/evaluate/router.py:2674-2702` | `driver_profiles = {"gpu.intel.com": "intel-xpu"}`; infer profile from deviceClassName extracted by regex from renderedManifest; fallback `"intel-xpu"` |
-| `llm_d_bench/evaluate/router.py:2972, 3185` | Pass to benchmark chart: `--set accelerator.profile=intel-xpu` |
-| `llm_d_bench/evaluate/router.py:2634-2674` | Adjust smoke workload by accelerator profile |
+| `llm_d_lens/evaluation/router.py:2674-2702` | `driver_profiles = {"gpu.intel.com": "intel-xpu"}`; infer profile from deviceClassName extracted by regex from renderedManifest; fallback `"intel-xpu"` |
+| `llm_d_lens/evaluation/router.py:2972, 3185` | Pass to benchmark chart: `--set accelerator.profile=intel-xpu` |
+| `llm_d_lens/evaluation/router.py:2634-2674` | Adjust smoke workload by accelerator profile |
 | `src/components/OptimizationEvaluateWorkspaceV2.jsx:708` | Hardcoded frontend message "For this Intel XPU cluster the resolved runtime profile is intel-xpu." |
 
 ### 2.6 Configuration/planning: capability and guide validation
 
 | Location | XPU-specific details |
 |---|---|
-| `llm_d_bench/configuration/capability.py:22-27` | AIC `system_name`, `accelerator_count`, backend resolution; call AIConfigurator `check_support` |
-| `llm_d_bench/configuration/validators.py:28-60` | Validate topology accelerator counts against hardware budgets (generic names, hardcoded hardware source) |
-| `llm_d_bench/configuration/guide_settings.py:67-69` | special case `deviceClassName == "dranet-rdma"` |
+| `llm_d_lens/configuration/capability.py:22-27` | AIC `system_name`, `accelerator_count`, backend resolution; call AIConfigurator `check_support` |
+| `llm_d_lens/configuration/validators.py:28-60` | Validate topology accelerator counts against hardware budgets (generic names, hardcoded hardware source) |
+| `llm_d_lens/configuration/guide_settings.py:67-69` | special case `deviceClassName == "dranet-rdma"` |
 | `server/candidateSearch.ts:46-62` | `acceleratorForSystem()`: `/bmg\|max_\|xpu\|b60\|pvc/i ? 'xpu' : 'cuda'` — Guess hardware from AIC system-name regex |
 
 ### 2.7 Agentic planning
 
 | Location | XPU-specific details |
 |---|---|
-| `llm_d_bench/agentic/facts.py:55-63, 346` | Use cluster overview vramBytes/gpuCount as the accelerator abstraction; `HardwareDescriptor(accelerator="cluster")` |
-| `llm_d_bench/agentic/generator.py:513-517` | Read hardware from cluster overview |
-| `llm_d_bench/agentic/benchmark_evidence.py:26-220` | `accelerator_runtime` Match scoring (`accelerator_runtime == query.accelerator_runtime`) |
+| `llm_d_lens/agentic/facts.py:55-63, 346` | Use cluster overview vramBytes/gpuCount as the accelerator abstraction; `HardwareDescriptor(accelerator="cluster")` |
+| `llm_d_lens/agentic/generator.py:513-517` | Read hardware from cluster overview |
+| `llm_d_lens/agentic/benchmark_evidence.py:26-220` | `accelerator_runtime` Match scoring (`accelerator_runtime == query.accelerator_runtime`) |
 
 > Agentic is already hardware-independent, using the accelerator abstraction. It still needs correct VRAM/cudaMem metrics and accelerator_runtime values to match evidence correctly.
 
@@ -173,7 +173,7 @@ Tier 1 is the minimum. Tier 2 is needed only for automatic driver installation o
 
 ### 4.3 Unified HardwareProfile contract
 
-The authority is `llm_d_bench/hardware/profiles/*.json`, validated by schema.json. Python loads the following frozen dataclasses for typed internal use (decision 2).
+The authority is `llm_d_lens/hardware/profiles/*.json`, validated by schema.json. Python loads the following frozen dataclasses for typed internal use (decision 2).
 
 ```python
 @dataclass(frozen=True)
@@ -289,7 +289,7 @@ class UiContribution:
 
 ### 4.4 HardwareProvider code
 
-Hardware requiring executable behavior implements this protocol in `llm_d_bench/hardware/registry.py`:
+Hardware requiring executable behavior implements this protocol in `llm_d_lens/hardware/registry.py`:
 
 ```python
 class HardwareProvider(Protocol):
@@ -313,10 +313,10 @@ class HardwareProvider(Protocol):
 
 **Decision (§10): profiles are JSON; discovery must use Python entry points.** No implicit import-time registration bypass. Bundled Intel/NVIDIA follow the same path through pyproject.toml declarations.
 
-New `llm_d_bench/hardware/` package:
+New `llm_d_lens/hardware/` package:
 
 ```
-llm_d_bench/hardware/
+llm_d_lens/hardware/
 ├── __init__.py
 ├── schema.json         # HardwareProfile JSON Schema for validation
 ├── models.py           # JSON → typed runtime dataclass
@@ -335,13 +335,13 @@ llm_d_bench/hardware/
 Bundled declarations in pyproject.toml; third-party packages declare equivalent entries:
 
 ```toml
-[project.entry-points."llm_d_bench.hardware.profiles"]
-intel-xpu = "llm_d_bench.hardware.providers.intel_xpu:load_profiles"
-nvidia    = "llm_d_bench.hardware.providers.nvidia:load_profiles"
+[project.entry-points."llm_d_lens.hardware.profiles"]
+intel-xpu = "llm_d_lens.hardware.providers.intel_xpu:load_profiles"
+nvidia    = "llm_d_lens.hardware.providers.nvidia:load_profiles"
 
-[project.entry-points."llm_d_bench.hardware.providers"]
-intel-xpu = "llm_d_bench.hardware.providers.intel_xpu:IntelXpuProvider"
-nvidia    = "llm_d_bench.hardware.providers.nvidia:NvidiaProvider"
+[project.entry-points."llm_d_lens.hardware.providers"]
+intel-xpu = "llm_d_lens.hardware.providers.intel_xpu:IntelXpuProvider"
+nvidia    = "llm_d_lens.hardware.providers.nvidia:NvidiaProvider"
 ```
 
 - load_profiles() reads and returns one or more bundled JSON profiles.
@@ -447,10 +447,10 @@ This table is the core deliverable: integration point → current location → h
 
 ## 6. NVIDIA integration example
 
-Add a package: for a bundled provider, use `llm_d_bench/hardware/profiles/nvidia.json` plus providers/nvidia.py and entry-point registration. Required assets are one JSON profile, an optional provider, and upstream overlays.
+Add a package: for a bundled provider, use `llm_d_lens/hardware/profiles/nvidia.json` plus providers/nvidia.py and entry-point registration. Required assets are one JSON profile, an optional provider, and upstream overlays.
 
 ```jsonc
-// llm_d_bench/hardware/profiles/nvidia.json
+// llm_d_lens/hardware/profiles/nvidia.json
 {
   "id": "nvidia",
   "display_name": "NVIDIA GPU",
@@ -551,7 +551,7 @@ Core changes replace hardcoding with resolver calls without `if nvidia` branches
 
 **Phase 0 — Extraction and compatibility (no behavior change)**
 - Add hardware/schema.json, discovery, models, registry, resolver, and router.
-- Discover profiles/providers through llm_d_bench.hardware entry-point groups, including Intel.
+- Discover profiles/providers through llm_d_lens.hardware entry-point groups, including Intel.
 - Extract intel_xpu.json with exactly existing values; retain constants delegating to resolvers.
 
 **Phase 1 — Telemetry/observability (lowest risk)**
@@ -578,7 +578,7 @@ Core changes replace hardcoding with resolver calls without `if nvidia` branches
 - Delivered: profiles/nvidia.json (extended-resource, gpu.nvidia.com, nvdp/nvidia-device-plugin 0.17.4, nvidia/nvidia-dra-driver-gpu 25.8.0; separate driver.modes.plugin/dra); providers/nvidia.py (profile, read-only presence, Helm driver installation/status); monitoring/accelerator/nvidia_gpu.py (type nvidia_gpu, dcgm-exporter 4.8.4, matching telemetry.provider_id). Entry points are registered; hardware query parameter chooses drivers.
 - Remaining: real-cluster end-to-end verification with upstream modelserver/gpu overlays; unavailable offline without a cluster.
 
-After each phase, run relevant pytest and npm run build. Synchronize the Docusaurus docs under docs/docusaurus/docs/ for UI/API/callable changes as required by AGENTS.md.
+After each phase, run relevant pytest and npm run build. Synchronize the Docusaurus docs under apps/docs/docs/ for UI/API/callable changes as required by AGENTS.md.
 
 ---
 
@@ -619,7 +619,7 @@ After each phase, run relevant pytest and npm run build. Synchronize the Docusau
 ### 10.1 Target directory structure
 
 ```
-llm_d_bench/hardware/
+llm_d_lens/hardware/
 ├── __init__.py
 ├── schema.json         # HardwareProfile JSON Schema
 ├── models.py
@@ -634,8 +634,8 @@ llm_d_bench/hardware/
 │   └── nvidia.py
 └── router.py
 
-llm_d_bench/monitoring/accelerator/     # Retain: register TelemetryContribution.provider_id implementations
-llm_d_bench/monitoring/gpu_driver/      # Retain routes; delegate implementation to HardwareProvider.driver_*
+llm_d_lens/monitoring/accelerator/     # Retain: register TelemetryContribution.provider_id implementations
+llm_d_lens/monitoring/gpu_driver/      # Retain routes; delegate implementation to HardwareProvider.driver_*
 ```
 
 ### 10.2 Data flow

@@ -20,7 +20,7 @@ gen_config() {
     LENS_EDGE_ENVOY_CONFIG_PATH="$CONFIG" LENS_EDGE_ENVOY_RELOAD_COMMAND="" \
         "$ROOT/.venv/bin/python" - <<'PY'
 import asyncio
-from llm_d_bench.model_service.gateway_ops import GatewayOpsService
+from llm_d_lens.model_service.gateway_ops import GatewayOpsService
 
 op = asyncio.run(GatewayOpsService().reload_edge())
 print(f"reload_edge: {op.status} — {op.message}")

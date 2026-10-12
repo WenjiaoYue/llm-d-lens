@@ -6,12 +6,12 @@
   - Frontend: `src/components/OptimizationClusterOverview.jsx` (existing single-step
     "Add an existing k8s cluster" modal), `src/components/DataConnections/SubmitValidationPage.jsx`
     (existing multi-step wizard UI pattern that can be reused).
-  - Backend: `llm_d_bench/cluster/` (registry/service/router),
-    `llm_d_bench/storage/` (Storage volumes), `llm_d_bench/model_cache/` (Model Cache
-    download job orchestration), `llm_d_bench/monitoring/cluster_stack/repo.py`
-    (llm-d repository cache), `llm_d_bench/evaluate/router.py`
+  - Backend: `llm_d_lens/cluster/` (registry/service/router),
+    `llm_d_lens/storage/` (Storage volumes), `llm_d_lens/model_cache/` (Model Cache
+    download job orchestration), `llm_d_lens/monitoring/cluster_stack/repo.py`
+    (llm-d repository cache), `llm_d_lens/evaluation/router.py`
     (llm-d-benchmark repository cache, `_managed_benchmark_root`),
-    `llm_d_bench/db/` (new; see
+    `llm_d_lens/db/` (new; see
     `sqlalchemy-data-access-layer-design.md`: a unified data access
     layer that migrates structured data from JSON files to a relational database,
     with both external and embedded PostgreSQL connection modes).
@@ -24,7 +24,7 @@ Currently, "Create cluster" is a single-step modal in
 `OptimizationClusterOverview.jsx`: the user fills in a name and description,
 uploads a kubeconfig file, and after submission `POST /api/cluster/clusters`
 performs synchronous validation and persistence
-(`llm_d_bench/cluster/registry.py::create_cluster`). After the cluster is created,
+(`llm_d_lens/cluster/registry.py::create_cluster`). After the cluster is created,
 the user still needs to manually do the following, separately:
 
 1. Go to the Storage page and create a Storage volume (used as the persistence
@@ -217,7 +217,7 @@ Therefore the create-cluster backend flow changes as follows:
      `provisioning` is empty / `null`, and the frontend behaves exactly as it does
      today (close immediately after creation).
 2. A new background task
-   `llm_d_bench/cluster/provisioning.py::provision_cluster(cluster_id)`
+   `llm_d_lens/cluster/provisioning.py::provision_cluster(cluster_id)`
    (`asyncio.create_task`, using the same fire-and-forget task pattern as the
    existing `deployment_run_manager` and `model_cache`) executes the selected
    substeps in order:
@@ -229,7 +229,7 @@ Therefore the create-cluster backend flow changes as follows:
       target cluster using the user-provided `HF_TOKEN` (see §4.4), and then call
       existing `ModelCacheService.request_download()` + `provision()`.
    c. If software version pinning is enabled: call the new utility (see §4.3)
-      `llm_d_bench/utils/repo_cache.py::ensure_cached(name, url, ref)` to prewarm
+      `llm_d_lens/utils/repo_cache.py::ensure_cached(name, url, ref)` to prewarm
       caches for llm-d and llm-d-benchmark respectively.
    - Each substep updates the Cluster's provisioning status record (see §5), which
      the frontend polls.
@@ -241,7 +241,7 @@ Therefore the create-cluster backend flow changes as follows:
 
 ## 3. Data model changes
 
-### 3.0 (new) `llm_d_bench/db/bootstrap_config.py`: application-level database configuration
+### 3.0 (new) `llm_d_lens/db/bootstrap_config.py`: application-level database configuration
 
 This configuration describes **how the Lens backend process connects to the
 database**, so it **cannot be stored in the database itself** (chicken-and-egg).
@@ -268,7 +268,7 @@ class DatabaseStatus(StrictModel):
     configured: bool
     mode: Literal["external", "embedded"] | None = None
     # In external mode, redacted display info (host/port/dbname), for read-only
-    # hints such as "Connected to xxx:5432/llm_d_bench"; password/username do not
+    # hints such as "Connected to xxx:5432/llm_d_lens"; password/username do not
     # appear here.
     display_target: str | None = Field(default=None, alias="displayTarget")
 
@@ -290,7 +290,7 @@ This section is independent from the rest of §3.1-3.2: `DatabaseBootstrapConfig
 is not attached to `Cluster` / `ClusterRecord`, and does not appear in the
 `POST /api/cluster/clusters` payload (see Non-goal #4 in §1).
 
-### 3.1 `llm_d_bench/cluster/registry.py::Cluster`
+### 3.1 `llm_d_lens/cluster/registry.py::Cluster`
 
 Currently `Cluster` is a frozen dataclass with only four fields. Expand it to:
 
@@ -303,7 +303,7 @@ class Cluster:
     created_at: str
     proxy: ProxyConfig | None = None  # new; see below
     llm_d_ref: str | None = None  # new: llm-d version or commit SHA
-    llm_d_benchmark_ref: str | None = None  # new: llm-d-benchmark version or commit SHA
+    llm_d_lensmark_ref: str | None = None  # new: llm-d-benchmark version or commit SHA
     data_plane: DataPlaneVersions | None = None  # new: model-service data-plane version set
 ```
 
@@ -359,7 +359,7 @@ class ProxyConfig:
   explicitly awaited inside `list_clusters` / `overview`, but that is only a
   single `--raw=/readyz` probe on a different scale.
 
-### 3.2 `llm_d_bench/cluster/models.py`
+### 3.2 `llm_d_lens/cluster/models.py`
 
 ```python
 class ProxyConfigDTO(StrictModel):
@@ -414,7 +414,7 @@ class ClusterRecord(StrictModel):
     ready: bool = False
     proxy: ProxyConfigDTO = Field(default_factory=ProxyConfigDTO)  # new
     llm_d_ref: str | None = Field(default=None, alias="llmDRef")  # new
-    llm_d_benchmark_ref: str | None = Field(default=None, alias="llmDBenchmarkRef")  # new
+    llm_d_lensmark_ref: str | None = Field(default=None, alias="llmDBenchmarkRef")  # new
     data_plane: DataPlaneVersionsDTO | None = Field(default=None, alias="dataPlane")  # new
 
 
@@ -496,7 +496,7 @@ no `clusterId`; see §4.0):
 > configured?" every time the wizard opens. The `POST /api/v1/system/database`
 > API itself (together with the probing/migration/persistence behavior described
 > below) **remains unchanged**; only the caller changes from the React frontend to
-> the new `llm_d_bench/db/bootstrap_cli.py` (both share the same
+> the new `llm_d_lens/db/bootstrap_cli.py` (both share the same
 > `apply_database_setup()` implementation). `GET /api/v1/system/database` also
 > remains, for operational status queries. `CreateClusterWizard.jsx` now only
 > performs a read-only "is it configured?" check when opened, and if not
@@ -556,7 +556,7 @@ expands only after selection:
   `alembic upgrade head`; if the probe fails (network unreachable / authentication
   failure / invalid DSN / missing driver package for the engine), return 422/409 +
   the specific reason (when the driver is missing, include a hint such as
-  `pip install llm-d-prism-backend[mysql|oracle|mssql]`). Step 0 remains visible
+  `pip install llm-d-lens[mysql|oracle|mssql]`). Step 0 remains visible
   and does not allow proceeding; the user can correct the connection string and
   retry, or switch to embedded mode.
 - Embedded mode: call `pgserver.get_server(data_dir)` (initializing with `initdb`
@@ -682,7 +682,7 @@ node/system configuration". Proposal:
 `PATCH /api/cluster/clusters/{id}` (when `mode="auto"`, the background
 Provisioning task triggers one detection and writes back `detected_*`; when
 `mode="custom"`, the manual values take effect directly),
-`llm_d_bench/utils/kubernetes.py::kubeconfig_environment()` and
+`llm_d_lens/utils/kubernetes.py::kubeconfig_environment()` and
 `model_cache/jobs.py::_proxy_environment()` are changed to preferentially read the
 "effective values" of that cluster's `ProxyConfig` (`custom` uses the manually
 entered values; `auto` uses the `detected_*` values; when all are empty, no
@@ -719,7 +719,7 @@ IPP version                  [v0.1.0-rc.4]  (payload-processor chart or image)
 **Backend changes (reuse + generalize the two existing repository caches rather
 than inventing a new one):**
 
-1. Add `llm_d_bench/utils/repo_cache.py`, extracting the reusable parts of
+1. Add `llm_d_lens/utils/repo_cache.py`, extracting the reusable parts of
    `_managed_benchmark_root` / `_install_benchmark` from `evaluate/router.py`
    (clone → checkout → optional build step → file lock against concurrent
    duplicate installs):
@@ -752,7 +752,7 @@ than inventing a new one):**
    behavior (avoiding impact to currently running evaluate tasks and their
    existing `~/.cache/llm-d-bench/backends` path), but add a resolution priority:
    if the request does not explicitly pass repository/revision, and the current
-   cluster identified by `cluster_session_id` has `llm_d_benchmark_ref`, use that
+   cluster identified by `cluster_session_id` has `llm_d_lensmark_ref`, use that
    as the default. Today's priority is "request body > environment variable
    default"; change it to "request body > cluster default > environment variable
    default".
@@ -997,7 +997,7 @@ avoid coupling it to the existing metadata read/write logic in `registry.py`).
 
 ## 8. Recommended phased rollout
 
-- **Phase 0**: Step 0 (database setup gate page) + `llm_d_bench/db/`
+- **Phase 0**: Step 0 (database setup gate page) + `llm_d_lens/db/`
   infrastructure (engine / session / migrations; see
   `sqlalchemy-data-access-layer-design.md`) + `clusters` table landing, and
   `registry.py` switched to DAO implementation. This is the prerequisite for all

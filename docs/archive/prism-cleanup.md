@@ -41,7 +41,7 @@ reset, committed, or published during that cleanup.
 - `npm run type-check`: passed.
 - `make test-js`: 287/287 passed.
 - `make test-python`: 1008 passed, 4 failed. The four failures were reproduced in a
-  temporary directory using Git HEAD snapshots of `llm_d_bench`, `tests`, and
+  temporary directory using Git HEAD snapshots of `llm_d_lens`, `tests`, and
   `pyproject.toml`, confirming pre-existing issues.
 - All 10 retained pages passed initial server rendering through the App entry point.
 - Checked 564 frontend/backend local import/export references; no broken paths.
@@ -62,7 +62,7 @@ Pre-existing Python failures:
 3. `evaluate/test_shared_prefix.py::test_shared_prefix_workload_yaml_is_open_loop_with_reused_system_prompts[legacy_settings0]`
 4. The same test with `[legacy_settings1]`.
 
-Paths above are relative to `llm_d_bench/`. No real cluster deployments, external model
+Paths above are relative to `llm_d_lens/`. No real cluster deployments, external model
 calls, browser interaction end-to-end tests, or Docker image builds were performed.
 Initial rendering cannot substitute for those checks.
 
@@ -118,7 +118,7 @@ Validation for this round: `npm run build` passed with the existing bundle warni
 12 remaining YAML files parsed; Docker/Podman's `make -n image-build` generated valid
 commands; updated local documentation links resolved; no references to removed
 configuration remained outside historical records; `git diff --check` passed.
-SHA-256 comparison of 513 files under `src`, `server`, `llm_d_bench`, `public`, and
+SHA-256 comparison of 513 files under `src`, `server`, `llm_d_lens`, `public`, and
 `dist` confirmed identical file sets and contents before and after cleanup. No empty
 directories remained in scope, and LICENSE was unchanged. Full business tests,
 GitHub-hosted workflows, and actual container builds were not run.

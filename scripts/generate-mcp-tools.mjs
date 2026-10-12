@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // -----------------------------------------------------------------------------
-// Regenerates server/mcp/tools.ts -- entirely -- from the llm_d_bench FastAPI
+// Regenerates apps/server/src/mcp/tools.ts -- entirely -- from the llm_d_lens FastAPI
 // app's own OpenAPI schema, so a Lens MCP tool for a REST endpoint stays in
 // sync with that endpoint's real, current shape without anyone hand-copying
 // request/response fields into this file.
@@ -26,11 +26,11 @@
 // Hand-written tools that are NOT a 1:1 wrapper over one FastAPI operation
 // (composite/custom logic, or backed by a Node/Express route instead of the
 // FastAPI app -- e.g. Deploy PoC, remote-deploy, guide planning,
-// candidate search, wait_for_status) live in server/mcp/specialTools.ts
+// candidate search, wait_for_status) live in apps/server/src/mcp/specialTools.ts
 // instead, and are never touched by this script. Edit that file directly.
 //
 // Usage:  node scripts/generate-mcp-tools.mjs [--check]
-//   (no flags)  Regenerates server/mcp/tools.ts in place.
+//   (no flags)  Regenerates apps/server/src/mcp/tools.ts in place.
 //   --check     Regenerates into memory only and exits non-zero if the file
 //               would change (for CI: "did someone forget to regenerate?").
 //
@@ -58,8 +58,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
-const TOOLS_TS_PATH = path.join(REPO_ROOT, 'server/mcp/tools.ts');
-const SPECIAL_TOOLS_TS_PATH = path.join(REPO_ROOT, 'server/mcp/specialTools.ts');
+const TOOLS_TS_PATH = path.join(REPO_ROOT, 'apps/server/src/mcp/tools.ts');
+const SPECIAL_TOOLS_TS_PATH = path.join(REPO_ROOT, 'apps/server/src/mcp/specialTools.ts');
 const PYTHON_BIN = process.env.PRISM_PYTHON_BIN || path.join(REPO_ROOT, '.venv/bin/python3');
 
 const METHOD_TO_RISK_TIER = {
@@ -88,7 +88,7 @@ const JSON_BODY_METHODS = new Set(['post', 'put', 'patch', 'delete']);
 function dumpOpenApiSchema() {
     const output = execFileSync(
         PYTHON_BIN,
-        ['-c', 'import json; from llm_d_bench.api.main import app; print(json.dumps(app.openapi()))'],
+        ['-c', 'import json; from llm_d_lens.api.main import app; print(json.dumps(app.openapi()))'],
         { cwd: REPO_ROOT, maxBuffer: 64 * 1024 * 1024 },
     );
     return JSON.parse(output.toString('utf8'));
@@ -264,7 +264,7 @@ function buildToolSource(apiPath, method, operation, components) {
     ].join('\n');
 }
 
-// Extracts the hand-written tool names from server/mcp/specialTools.ts, so
+// Extracts the hand-written tool names from apps/server/src/mcp/specialTools.ts, so
 // the generator can refuse to emit a generated tool whose name collides with
 // one of them. A collision would otherwise make `McpServer.registerTool`
 // throw at runtime -- for ALL requests, since the MCP server is rebuilt
@@ -351,7 +351,7 @@ function main() {
         '',
         '// -----------------------------------------------------------------------------',
         '// AUTO-GENERATED FILE -- produced by `node scripts/generate-mcp-tools.mjs` from',
-        '// the llm_d_bench FastAPI app\'s OpenAPI schema (one tool per HTTP operation that',
+        '// the llm_d_lens FastAPI app\'s OpenAPI schema (one tool per HTTP operation that',
         '// declares BOTH a summary and a description). DO NOT HAND-EDIT THIS FILE -- it is',
         '// overwritten wholesale every time the generator runs. To change a generated',
         '// tool, edit the route\'s FastAPI decorator (summary/description/operation_id)',

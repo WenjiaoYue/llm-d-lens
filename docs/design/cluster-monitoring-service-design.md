@@ -65,7 +65,7 @@ flowchart LR
 Backend modules:
 
 ```text
-llm_d_bench/monitoring/
+llm_d_lens/monitoring/
   __init__.py
   kubernetes.py                 # secure kubectl/helm execution boundary shared by both services
   cluster_stack/
@@ -88,7 +88,7 @@ llm_d_bench/monitoring/
     test_*.py
 ```
 
-`llm_d_bench/api/main.py` registers `cluster_stack.router` and, in the future,
+`llm_d_lens/api/main.py` registers `cluster_stack.router` and, in the future,
 `guide_deployments.router` separately. The two share only common Kubernetes execution facilities and do not share state machines, DTOs, or domain services, preventing the Helm release state of the cluster stack from contaminating the monitoring enablement state of guide deployments.
 
 The API namespace is fixed by layer:

@@ -6,7 +6,7 @@ description: Use when changing React pages, components, hooks, browser API clien
 # UI
 
 Every UI change in Lens goes through this contract. It exists so that humans and
-agents produce the same UI the same way: primitives from `src/components/ui/`,
+agents produce the same UI the same way: primitives from `apps/frontend/src/components/ui/`,
 colors from theme tokens, charts from the shared chart layer. If you follow this
 file, a new dashboard needs zero visual review round-trips on basics.
 
@@ -15,7 +15,7 @@ file, a new dashboard needs zero visual review round-trips on basics.
 Follow [workflow](../workflow/SKILL.md) for discovery,
 registration and verification. Paths below are relative to the repository root.
 Before adding request, polling, form, pagination, clipboard or download behavior,
-inspect `src/hooks/`, `src/api/httpClient.js`, `src/utils/` and the capability map.
+inspect `apps/frontend/src/hooks/`, `apps/frontend/src/api/httpClient.js`, `apps/frontend/src/utils/` and the capability map.
 Keep browser transport separate from page-specific presentation and domain rules.
 When an API contract changes, also apply [backend](../backend/SKILL.md).
 Validate affected callers, loading/error/empty states and effect cleanup. Use the
@@ -36,20 +36,20 @@ before introducing a new entry point.
 
 | Type | Directory | Filename | Export |
 | --- | --- | --- | --- |
-| UI primitive | `src/components/ui/` | `PascalCase.jsx` | PascalCase component |
-| Chart component | `src/components/ui/charts/` | `PascalCase.jsx` | PascalCase component |
-| Shared presentation composition | `src/components/shared/` | `PascalCase.jsx` | PascalCase component |
-| React Hook | `src/hooks/` | `usePascalCase.js` | Matching `usePascalCase` function |
-| React-independent utility or browser operation | `src/utils/` | Responsibility-based `camelCase.js` | camelCase function |
-| HTTP client | `src/api/` | `<scope>Client.js` | camelCase function |
-| Domain logic | `src/features/<domain>/` or existing domain directory | Responsibility-based `camelCase.js` | camelCase function |
-| Domain component | `src/components/<Domain>/` | `PascalCase.jsx` | PascalCase component |
+| UI primitive | `apps/frontend/src/components/ui/` | `PascalCase.jsx` | PascalCase component |
+| Chart component | `apps/frontend/src/components/ui/charts/` | `PascalCase.jsx` | PascalCase component |
+| Shared presentation composition | `apps/frontend/src/components/shared/` | `PascalCase.jsx` | PascalCase component |
+| React Hook | `apps/frontend/src/hooks/` | `usePascalCase.js` | Matching `usePascalCase` function |
+| React-independent utility or browser operation | `apps/frontend/src/utils/` | Responsibility-based `camelCase.js` | camelCase function |
+| HTTP client | `apps/frontend/src/api/` | `<scope>Client.js` | camelCase function |
+| Domain logic | `apps/frontend/src/features/<domain>/` or existing domain directory | Responsibility-based `camelCase.js` | camelCase function |
+| Domain component | `apps/frontend/src/components/<Domain>/` | `PascalCase.jsx` | PascalCase component |
 | Test | Beside the tested module | `<filename>.test.js`, `.test.jsx` or `.test.ts` | Existing test conventions |
 
 Match a component filename to its primary component export. Hooks own React
 state and lifecycle; utilities must not import React or pages. Keep existing
 `*Backend.js` clients in their domain; do not create a second implementation in
-`src/api/` merely to match a directory convention. Preserve the language and
+`apps/frontend/src/api/` merely to match a directory convention. Preserve the language and
 extension of existing modules; this rule does not require a JS/TS migration.
 
 Examples: `FormError.jsx` / `FormError`, `useClipboard.js` / `useClipboard`,
@@ -61,28 +61,28 @@ The human-facing reference is the
 
 - Adding or modifying any JSX markup, Tailwind classes, colors, or chart styling.
 - Creating a new dashboard or page (see the recipe at the bottom).
-- Reviewing a PR that touches `src/components/` or `src/index.css`.
+- Reviewing a PR that touches `apps/frontend/src/components/` or `apps/frontend/src/index.css`.
 
 ## The rules
 
 1. **Use the primitives.** Buttons, badges/status chips, modals, form fields,
    panels, stat/KPI cards, empty states, spinners, page headers, toggle groups,
-   chart containers/axes/tooltips come from `src/components/ui/`. Never
+   chart containers/axes/tooltips come from `apps/frontend/src/components/ui/`. Never
    re-implement one inline. If a variant you need is missing, extend the
    primitive (new `variant`/`tone`/`size`) in the same PR — don't fork it.
 2. **Colors come from tokens or the chart palette.** No new hex literals in
-   `src/components/` outside `src/components/ui/`. No new per-dashboard color
+   `apps/frontend/src/components/` outside `apps/frontend/src/components/ui/`. No new per-dashboard color
    arrays — chart series colors come from `CHART_SERIES`.
    Surface/ink colors use the `theme-*` token classes (below).
 3. **Extract on second use.** Markup repeated in two places becomes a primitive
-   (or a variant of one) in `src/components/ui/` in the same PR. Never
+   (or a variant of one) in `apps/frontend/src/components/ui/` in the same PR. Never
    copy-paste styled JSX between components.
 4. **Both themes, always.** Every primitive and screen must render correctly in
    light and dark mode. Prefer token classes (theme-handled once, in
-   `src/index.css`); where a tint is needed, pair light + `dark:` classes.
+   `apps/frontend/src/index.css`); where a tint is needed, pair light + `dark:` classes.
    Never a light-only or dark-only component. (The app currently forces dark
    mode in `App.jsx` — that does not exempt components from light support.)
-5. **Class composition uses `cn()`** from `src/utils/cn.js` — never template
+5. **Class composition uses `cn()`** from `apps/frontend/src/utils/cn.js` — never template
    literals with `${}` for conditional classes.
 6. **Behavior-free styling changes.** A style refactor never changes state,
    props, data flow, or copy. If you need both, separate the commits.
@@ -115,7 +115,7 @@ helpers in `benchmark-results/acceleratorDisplay.js`
 Pages that show server state must keep it fresh on a timer — never require a full
 page reload to see changes made elsewhere.
 
-- Use `usePolling` (`src/hooks/usePolling.js`): it clears the interval on unmount,
+- Use `usePolling` (`apps/frontend/src/hooks/usePolling.js`): it clears the interval on unmount,
   pauses while the tab is hidden and refreshes immediately when it becomes
   visible again, and skips a tick while the previous request is still running.
 - Default is 5s for status/list data (`usePolling(load)`); use 10–30s only for
@@ -133,7 +133,7 @@ page reload to see changes made elsewhere.
 
 ## Theme tokens
 
-Defined in `src/index.css`; single source of color truth. Dark values apply under
+Defined in `apps/frontend/src/index.css`; single source of color truth. Dark values apply under
 the `.dark` class on `<html>`.
 
 | Tailwind class | CSS variable | Use for |
@@ -150,7 +150,7 @@ primitives — call sites pick a `tone`/`variant`, never a color class.
 
 ## Primitive quick reference
 
-All from `import { ... } from './ui'` (or the relative path to `src/components/ui`).
+All from `import { ... } from './ui'` (or the relative path to `apps/frontend/src/components/ui`).
 
 | Primitive | Key props | Replaces |
 |---|---|---|
@@ -206,20 +206,20 @@ All from `import { ... } from './ui'` (or the relative path to `src/components/u
 ## Review checklist (ratchet)
 
 Run on every UI PR — these greps must return nothing for changed files outside
-`src/components/ui/`:
+`apps/frontend/src/components/ui/`:
 
 ```bash
-git diff main --name-only -- 'src/components/*.jsx' 'src/components/**/*.jsx' | grep -v '^src/components/ui/' | \
+git diff main --name-only -- 'apps/frontend/src/components/*.jsx' 'apps/frontend/src/components/**/*.jsx' | grep -v '^apps/frontend/src/components/ui/' | \
   xargs grep -nE '#[0-9a-fA-F]{6}|fixed inset-0|animate-spin' -- 2>/dev/null
 ```
 
-- [ ] No new hex literals or inline `animate-spin` outside `src/components/ui/`.
-- [ ] No new `fixed inset-0` DIALOGS outside `src/components/ui/` — dialogs use
+- [ ] No new hex literals or inline `animate-spin` outside `apps/frontend/src/components/ui/`.
+- [ ] No new `fixed inset-0` DIALOGS outside `apps/frontend/src/components/ui/` — dialogs use
       `Modal`. (Legitimate non-dialog uses exist: invisible popover click-away
       layers and slide-over drawer backdrops. A hit must be one of those, with
       the pattern named in the PR description.)
 - [ ] No template-literal class conditionals where `cn()` fits.
-- [ ] New repeated markup extracted into `src/components/ui/`.
+- [ ] New repeated markup extracted into `apps/frontend/src/components/ui/`.
 - [ ] Charts: fixed-order palette, one axis, `ChartContainer` shell, tooltip on
       the shared shell, legend present for ≥2 series.
 - [ ] No hardcoded vendor/hardware literal (`'xpu'`/`'gpu'`, a vendor image, a

@@ -28,7 +28,7 @@
 - Reuse unit/CLI suite: 18 passed, including missing symbols, Python docstrings,
   invalid bases, untracked source, pending decisions and changed approval evidence.
 - Real offline model integration: 2 passed, including repository retrieval of
-  `llm_d_bench/common/json_store.py::write_json_atomic` from a Chinese requirement.
+  `llm_d_lens/common/json_store.py::write_json_atomic` from a Chinese requirement.
 - Type check, focused ESLint, workflow YAML parse and diff whitespace checks passed.
 - Incremental repository check: 370 source files, 5 changed implementation files,
   no candidate pairs and no pending decisions for this task.

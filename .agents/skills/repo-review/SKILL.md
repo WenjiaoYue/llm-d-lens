@@ -19,7 +19,7 @@ do not reset, commit, push, deploy or migrate historical data as part of review.
 Run `npm run reuse:review -- --task REVIEW_ID` once. If a task is already prepared,
 resume it rather than overwrite it. The CLI prepares an inventory and instructions;
 it does not invoke an LLM or claim a completed review.
-For one module, use `begin --task ID --module src/features/example` (repeat
+For one module, use `begin --task ID --module apps/frontend/src/features/example` (repeat
 `--module` for additional roots). Existing tasks can use `scope --task ID --module
 PATH` without resetting their commit baseline.
 

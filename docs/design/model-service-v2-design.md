@@ -2,7 +2,7 @@
 
 > Status: **Design proposal**. This document defines the design without changing code.
 > All new schemas require human approval before implementation through
-> [`llm_d_bench/db/migrations/README.md`](../../llm_d_bench/db/migrations/README.md)
+> [`llm_d_lens/db/migrations/README.md`](../../llm_d_lens/db/migrations/README.md)
 > (see §15 and §17).
 >
 > Core design: **one public base_url**, **model names** as the only routing input,
@@ -214,7 +214,7 @@ One `group` has N `member` records; each `member` points to an `execution` and a
 
 > All tables are **new** and require human approval (§17) before Alembic implementation.
 > Use `models/<name>.py` + `dao/<name>.py`, registered in
-> [`llm_d_bench/db/models/__init__.py`](../../llm_d_bench/db/models/__init__.py).
+> [`llm_d_lens/db/models/__init__.py`](../../llm_d_lens/db/models/__init__.py).
 
 ### 4.1 ER Diagram
 
@@ -333,7 +333,7 @@ Indexes: `uq_usage_records_request(request_id)`, `(user_id, created_at)`,
 
 - Plaintext format: `lens-mk-<43 base64url characters>` (32 random bytes), with prefix `lens-mk-`.
 - Store only `token_hash = SHA-256(plaintext)` in the DB, **reusing**
-  [`auth/security.py:45 hash_session_token`](../../llm_d_bench/auth/security.py).
+  [`auth/security.py:45 hash_session_token`](../../llm_d_lens/auth/security.py).
   Return plaintext only once in the create/reset response.
 - Store the first 8 plaintext characters in `token_hint`; display `lens-mk-abcd…`.
 
@@ -492,7 +492,7 @@ sequenceDiagram
 ## 8. Permission Model
 
 - **Authorize by execution/resource**, reusing
-  [`auth/policy.py:89 authorize`](../../llm_d_bench/auth/policy.py) + `scope.py`
+  [`auth/policy.py:89 authorize`](../../llm_d_lens/auth/policy.py) + `scope.py`
   for `model-service:inference:use`.
 - Visibility: creator ∪ owner group ∪ cluster scope ∪ explicit resource shares.
 - A member's `cluster_id` reuses cluster scope: access to cluster A allows only A's members.
@@ -591,7 +591,7 @@ client.chat.completions.create(model="qwen3-8b", messages=[...])
 ### 11.4 Error Contract
 
 Reuse RFC 7807 `application/problem+json`
-([`utils/problems.py:12-26`](../../llm_d_bench/utils/problems.py)), with codes
+([`utils/problems.py:12-26`](../../llm_d_lens/utils/problems.py)), with codes
 `token_invalid`, `token_revoked`, `model_not_found`, and `no_healthy_backend`.
 
 ---
@@ -628,7 +628,7 @@ Reuse RFC 7807 `application/problem+json`
 ## 13. APIs and Permission Codes
 
 > Python serves management/user APIs through the Node frontend proxy; register
-> routes in [`auth/routes.py`](../../llm_d_bench/auth/routes.py). Edge Envoy serves
+> routes in [`auth/routes.py`](../../llm_d_lens/auth/routes.py). Edge Envoy serves
 > data-plane `/v1/*`; these are not native Node routes.
 
 ### 13.1 User APIs (Python)
@@ -742,7 +742,7 @@ Keep `LeftNavigation.jsx`, `src/App.jsx`, `auth/routes.py`, and `server/auth.ts`
 | Charts/pages | `ui/charts/*`, `ui/StatCard`, `ui/ModulePage`, `shared/AsyncState`, `hooks/usePolling\|useClipboard\|useSubmission` | **Direct reuse** |
 | Error contract | `utils/problems.py` | **Extend** code set |
 
-New domain modules: `llm_d_bench/model_service/` (token, group, usage, ext_authz,
+New domain modules: `llm_d_lens/model_service/` (token, group, usage, ext_authz,
 usage_adapter), Edge Envoy configuration, and Tunnel-Controller manifests.
 
 ---
@@ -825,7 +825,7 @@ it cannot run standalone on the Lens host like the current Edge.
 > Tradeoff: Lens remains in the data path for thin forwarding; each cluster has a control plane.
 
 Implementation (delivered in this task):
-- `llm_d_bench/model_service/agent_router_config.py` renders cluster members into
+- `llm_d_lens/model_service/agent_router_config.py` renders cluster members into
   `GatewayClass`/`Gateway`/`ClientTrafficPolicy`/`Backend`/`AIServiceBackend`/
   `AIGatewayRoute`, routing by `x-ai-eg-model` + `x-lens-member`.
 - `gateway_ops.install_agent_router`/`uninstall_agent_router` apply/delete per cluster.
@@ -924,7 +924,7 @@ control plane to cluster routers. Layout is deterministic from data and scrolls 
   with no environment override. The tunnel local-port base (default 19000) is
   also configurable in this UI/file, falling back to `LENS_MODEL_AGENT_TUNNEL_PORT_BASE`;
   collisions advance to the next port automatically. Before start/save, check
-  `llm_d_bench/utils/ports.py::port_available`; report failure on a conflict.
+  `llm_d_lens/utils/ports.py::port_available`; report failure on a conflict.
 - **Agent Router lifecycle**: discover the data-plane Deployment in `envoy-gateway-system`
   by `gateway.envoyproxy.io/owning-gateway-name=lens-agent-router`.
   `router/start`/`router/stop` scale to 1/0, retaining CRDs for quick recovery;

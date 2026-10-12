@@ -14,7 +14,7 @@ registration and unresolved decisions. Paths below are repo-relative.
 | --- | --- |
 | Local service start/restart | `scripts/dev.sh`, `scripts/run-backend.sh`, `package.json` |
 | Containers | The relevant Dockerfile under the root or `docker/` |
-| Cluster provisioning/deployment | `llm_d_bench/cluster/`, `llm_d_bench/deploy/`, the manifest/template used by the caller |
+| Cluster provisioning/deployment | `apps/backend/src/llm_d_lens/cluster/`, `apps/backend/src/llm_d_lens/deploy/`, the manifest/template used by the caller |
 | CI | The relevant workflow under `.github/workflows/` |
 
 For backend deployment logic, also apply

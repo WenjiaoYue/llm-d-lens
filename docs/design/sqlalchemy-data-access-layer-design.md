@@ -2,7 +2,7 @@
 
 ## 1. Background and Goals
 
-The backend (`llm_d_bench/`) currently persists all structured data using a "one JSON file per record" pattern: each module (`storage`, `deploy`, `model_cache`, `ai_providers`, `configuration`, `evaluate`, `agentic`, `monitoring`) implements its own nearly identical `XxxStore` class, using `pathlib.Path` + `threading.Lock` + temporary-file atomic replacement (`tmp` → `os.replace`) to guarantee write safety within a single process.
+The backend (`llm_d_lens/`) currently persists all structured data using a "one JSON file per record" pattern: each module (`storage`, `deploy`, `model_cache`, `ai_providers`, `configuration`, `evaluate`, `agentic`, `monitoring`) implements its own nearly identical `XxxStore` class, using `pathlib.Path` + `threading.Lock` + temporary-file atomic replacement (`tmp` → `os.replace`) to guarantee write safety within a single process.
 
 This pattern has the following problems:
 
@@ -10,7 +10,7 @@ This pattern has the following problems:
 2. **Weak query capability**: all filtering/sorting/joining "by field" must first `list()` and fully load everything, then process it in Python. Performance will degrade significantly as record counts grow (for example, `list()` in `storage/store.py` and `deploy/run_store.py` both do full `glob` + deserialization).
 3. **Duplicated implementations**: there are 7+ nearly identical Store classes (`create/get/list/save/delete` + JSON serialization + atomic write), differing only in directory and model type, with no unified abstraction.
 4. **Difficult migration / backup / auditing**: there is no schema version management. Field changes depend on permissive `model_validate` parsing and handwritten migration functions (such as `run_store.py::_migrate_legacy_records`, `evaluate/router.py::_migrate_legacy_records`).
-5. **Deployment is constrained**: data is scattered across inconsistent paths such as `~/.cache/llm-d-bench/...`, `~/.llm-d-bench/...`, and `~/.llm_d_bench/...` (see "Appendix A"), making unified backup/migration inconvenient.
+5. **Deployment is constrained**: data is scattered across inconsistent paths such as `~/.cache/llm-d-bench/...`, `~/.llm-d-bench/...`, and `~/.llm_d_lens/...` (see "Appendix A"), making unified backup/migration inconvenient.
 
 **Goal**: introduce a unified Data Access Layer (DAL) based on **SQLAlchemy 2.x** (ORM + Core), and migrate the current JSON-file-based persistence modules to a relational database, while:
 
@@ -29,16 +29,16 @@ The modules in the codebase that match the "use JSON files as a database" patter
 
 | Module | Store class | On-disk directory (default) | Record granularity |
 |---|---|---|---|
-| `llm_d_bench/storage/store.py` | `StorageVolumeStore` | `~/.cache/llm-d-bench/storage/volumes/*.json` | One storage volume per file |
-| `llm_d_bench/deploy/run_store.py` | `JsonDeploymentRunStore` | `~/.llm-d-bench/deploy/{runs,executions}/*.json` | One deployment run / one execution per file |
-| `llm_d_bench/model_cache/store.py` | `ModelCacheStore` | `~/.llm-d-bench/model-cache/entries/*.json` | One model cache entry per file |
-| `llm_d_bench/ai_providers/store.py` | `AIProviderStore` | `~/.cache/llm-d-bench/ai-providers/*.json` | One external AI Provider per file |
-| `llm_d_bench/configuration/service.py` | Module-level functions (no class) | `~/.cache/llm-d-bench/configurations/.artifacts/*.json` | One configuration artifact per file |
-| `llm_d_bench/evaluate/router.py` | Module-level functions (`_save/_get/_records`) | `~/.llm_d_bench/run_store/evaluate/{runs,workflows}/*.json` | One benchmark run / one workflow per file |
-| `llm_d_bench/agentic/benchmark_store.py` | `JsonBenchmarkRecordStore` | `~/.llm-d-bench/agentic/benchmarks/*.json` | One benchmark evidence record per file |
-| `llm_d_bench/monitoring/accelerator/operations.py` | `AcceleratorOperationStore` | `~/.llm-d-bench/monitoring/operations/*.json` | One asynchronous installation operation per file |
-| `llm_d_bench/monitoring/cluster_stack/operations.py` | `OperationStore` | Same pattern as above (cluster stack installation operations) | One installation operation per file |
-| `llm_d_bench/simulation/service.py` | Module-level functions (`save_task`/`load_task`, using `asyncio.Lock` instead of `threading.Lock` because this module is async) | `~/.cache/llm-d-bench/simulations/<id>/task.json` | One load-test task per file |
+| `llm_d_lens/storage/store.py` | `StorageVolumeStore` | `~/.cache/llm-d-bench/storage/volumes/*.json` | One storage volume per file |
+| `llm_d_lens/deploy/run_store.py` | `JsonDeploymentRunStore` | `~/.llm-d-bench/deploy/{runs,executions}/*.json` | One deployment run / one execution per file |
+| `llm_d_lens/model_cache/store.py` | `ModelCacheStore` | `~/.llm-d-bench/model-cache/entries/*.json` | One model cache entry per file |
+| `llm_d_lens/ai_providers/store.py` | `AIProviderStore` | `~/.cache/llm-d-bench/ai-providers/*.json` | One external AI Provider per file |
+| `llm_d_lens/configuration/service.py` | Module-level functions (no class) | `~/.cache/llm-d-bench/configurations/.artifacts/*.json` | One configuration artifact per file |
+| `llm_d_lens/evaluation/router.py` | Module-level functions (`_save/_get/_records`) | `~/.llm_d_lens/run_store/evaluate/{runs,workflows}/*.json` | One benchmark run / one workflow per file |
+| `llm_d_lens/agentic/benchmark_store.py` | `JsonBenchmarkRecordStore` | `~/.llm-d-bench/agentic/benchmarks/*.json` | One benchmark evidence record per file |
+| `llm_d_lens/monitoring/accelerator/operations.py` | `AcceleratorOperationStore` | `~/.llm-d-bench/monitoring/operations/*.json` | One asynchronous installation operation per file |
+| `llm_d_lens/monitoring/cluster_stack/operations.py` | `OperationStore` | Same pattern as above (cluster stack installation operations) | One installation operation per file |
+| `llm_d_lens/simulation/service.py` | Module-level functions (`save_task`/`load_task`, using `asyncio.Lock` instead of `threading.Lock` because this module is async) | `~/.cache/llm-d-bench/simulations/<id>/task.json` | One load-test task per file |
 
 Shared code pattern (using `storage/store.py` as an example):
 
@@ -67,12 +67,12 @@ This is exactly the target interface that the DAL abstraction layer should unify
                      └───────────────┬───────────────┘
                                      │ Calls existing Store interface (signature unchanged)
                      ┌───────────────▼───────────────┐
-                     │   DAO layer (one per module)  │  <- llm_d_bench/db/dao/*.py
+                     │   DAO layer (one per module)  │  <- llm_d_lens/db/dao/*.py
                      │   StorageVolumeDao, etc.      │
                      └───────────────┬───────────────┘
                                      │ Uses
         ┌────────────────────────────▼───────────────────────────┐
-        │   llm_d_bench/db/ unified data-access infrastructure   │
+        │   llm_d_lens/db/ unified data-access infrastructure   │
         │   engine.py   session.py   base.py   models/*.py  migrations/ │
         └────────────────────────────┬───────────────────────────┘
                                      │ SQLAlchemy Engine
@@ -90,13 +90,13 @@ This is exactly the target interface that the DAL abstraction layer should unify
 
 | Layer | Directory | Responsibility |
 |---|---|---|
-| **Configuration layer** | `llm_d_bench/db/config.py` | Parse `DATABASE_URL` / embedded-mode environment variables and decide which engine to use |
-| **Bootstrap layer** | `llm_d_bench/db/bootstrap.py` | Start/stop `pgserver` in embedded mode; perform connectivity probing in external mode |
-| **Engine / session layer** | `llm_d_bench/db/engine.py`, `session.py` | Create `Engine` / `sessionmaker`, provide a `session_scope()` context manager |
-| **Model layer** | `llm_d_bench/db/models/*.py` | SQLAlchemy ORM models (one file per business module, such as `storage.py`, `deploy.py`) |
-| **Migration layer** | `llm_d_bench/db/migrations/` (Alembic) | Schema version management; `upgrade head` automatically creates/evolves tables |
-| **DAO layer** | `llm_d_bench/db/dao/*.py` | Replace the internal implementation of existing `XxxStore` classes while keeping public method signatures compatible |
-| **Migration script** | `llm_d_bench/db/legacy_import.py` | One-time import of legacy JSON files into the database (see Section 7) |
+| **Configuration layer** | `llm_d_lens/db/config.py` | Parse `DATABASE_URL` / embedded-mode environment variables and decide which engine to use |
+| **Bootstrap layer** | `llm_d_lens/db/bootstrap.py` | Start/stop `pgserver` in embedded mode; perform connectivity probing in external mode |
+| **Engine / session layer** | `llm_d_lens/db/engine.py`, `session.py` | Create `Engine` / `sessionmaker`, provide a `session_scope()` context manager |
+| **Model layer** | `llm_d_lens/db/models/*.py` | SQLAlchemy ORM models (one file per business module, such as `storage.py`, `deploy.py`) |
+| **Migration layer** | `llm_d_lens/db/migrations/` (Alembic) | Schema version management; `upgrade head` automatically creates/evolves tables |
+| **DAO layer** | `llm_d_lens/db/dao/*.py` | Replace the internal implementation of existing `XxxStore` classes while keeping public method signatures compatible |
+| **Migration script** | `llm_d_lens/db/legacy_import.py` | One-time import of legacy JSON files into the database (see Section 7) |
 
 ### 3.2 Why SQLAlchemy (instead of using psycopg directly / hand-writing SQL per module)
 
@@ -108,21 +108,21 @@ This is exactly the target interface that the DAL abstraction layer should unify
 
 ### 4.1 Configuration items
 
-Add the following environment variables (centrally read by `llm_d_bench/db/config.py`):
+Add the following environment variables (centrally read by `llm_d_lens/db/config.py`):
 
 | Environment variable | Description | Default |
 |---|---|---|
 | `LLM_D_BENCH_DB_MODE` | `external` \| `embedded` | If unset: `external` when `DATABASE_URL` exists, otherwise `embedded` |
-| `DATABASE_URL` | SQLAlchemy connection string in external mode, e.g. `******host:5432/llm_d_bench` | None (required in external mode) |
+| `DATABASE_URL` | SQLAlchemy connection string in external mode, e.g. `******host:5432/llm_d_lens` | None (required in external mode) |
 | `LLM_D_BENCH_DB_POOL_SIZE` / `LLM_D_BENCH_DB_MAX_OVERFLOW` | Connection pool parameters | `5` / `10` |
 | `LLM_D_BENCH_EMBEDDED_PG_DATA_DIR` | PostgreSQL data directory in embedded mode | `~/.llm-d-bench/embedded-pg/data` |
 | `LLM_D_BENCH_EMBEDDED_PG_PORT` | Embedded PostgreSQL listen port (`0` = use Unix socket, do not listen on TCP) | `0` (Unix socket only, more secure) |
 
 ### 4.2 External mode (`external`)
 
-> **Be careful to distinguish two different kinds of "database/cluster" to avoid confusion**: the PostgreSQL discussed here is the metadata store for the **Lens backend application itself** (the storage volumes, deployment runs, evaluation records, etc. listed in §2), used by the `llm_d_bench` process for reads and writes. It is completely different from the **target k8s clusters being evaluated/deployed and registered/managed in Lens** (the `Cluster` records in `cluster/registry.py`; those clusters themselves will also be stored as records in this database—see `cluster-creation-wizard-design.md` §3.0/§4.0). PostgreSQL must not be deployed onto, or bound to, one of those target k8s clusters.
+> **Be careful to distinguish two different kinds of "database/cluster" to avoid confusion**: the PostgreSQL discussed here is the metadata store for the **Lens backend application itself** (the storage volumes, deployment runs, evaluation records, etc. listed in §2), used by the `llm_d_lens` process for reads and writes. It is completely different from the **target k8s clusters being evaluated/deployed and registered/managed in Lens** (the `Cluster` records in `cluster/registry.py`; those clusters themselves will also be stored as records in this database—see `cluster-creation-wizard-design.md` §3.0/§4.0). PostgreSQL must not be deployed onto, or bound to, one of those target k8s clusters.
 - The user maintains a PostgreSQL instance themselves (MySQL is also allowed as long as the SQLAlchemy dialect + migration scripts support it) specifically for **the Lens backend service itself** — it can be an independent VM/container, a managed cloud database (RDS, etc.), or a StatefulSet/managed instance inside the deployment environment of the Lens backend (for example, the k8s cluster that runs Lens itself), but it is **not** and should not be one of the target llm-d clusters managed/evaluated by Lens. Put the connection string into `DATABASE_URL` (or a Helm/K8s Secret).
-- `llm_d_bench/db/engine.py` directly creates the engine with `create_engine(DATABASE_URL, pool_pre_ping=True, ...)`.
+- `llm_d_lens/db/engine.py` directly creates the engine with `create_engine(DATABASE_URL, pool_pre_ping=True, ...)`.
 - On startup, execute a connectivity probe (`SELECT 1`) + `alembic upgrade head`; if probing fails, log a clear startup error and prevent the service from starting (avoiding the case where "the database is unavailable but the service pretends to be healthy").
 - Recommended driver: `psycopg[binary]` (PostgreSQL). If MySQL support is desired, add `pymysql`; both are **optional dependencies** (`extras`), while the core dependency only pins SQLAlchemy itself.
 
@@ -134,7 +134,7 @@ Add the following environment variables (centrally read by `llm_d_bench/db/confi
   - The data directory defaults to `~/.llm-d-bench/embedded-pg/data` (overridable via `LLM_D_BENCH_EMBEDDED_PG_DATA_DIR`); on first startup, `pgserver` runs `initdb` automatically.
   - By default it listens only on a Unix domain socket (no TCP port), and the DSN returned by `pgserver` is fed directly into SQLAlchemy's `create_engine`, reducing the attack surface.
   - When the backend process exits (including normal FastAPI `lifespan` shutdown), call `server.cleanup()`/`stop()` to avoid leaving child processes behind.
-- Key implementation (`llm_d_bench/db/bootstrap.py`, pseudocode):
+- Key implementation (`llm_d_lens/db/bootstrap.py`, pseudocode):
 
 ```python
 def start_embedded_postgres(data_dir: Path) -> str:
@@ -256,7 +256,7 @@ Other common conventions:
 
 Before expanding each table, clarify two easy-to-confuse points that will appear in the field tables below:
 
-1. **Two different things both named `ConfigurationArtifact`**: `llm_d_bench.deploy.contracts.ConfigurationArtifact` (a **temporary reference** embedded in `DeploymentCreateRequest` / `DeploymentExecution`, with only a few fields such as `artifact_id`, matching Rule 6 and stored as `JSONVariant`) and `llm_d_bench.configuration.models.ConfigurationArtifactRecord` (a **saved configuration-artifact catalog entry**, corresponding to the standalone `configuration_artifacts` table, whose primary key is also `artifact_id`). The foreign key `evaluate_runs.configuration_artifact_id` points to the **latter** (the saved catalog entry), not the former.
+1. **Two different things both named `ConfigurationArtifact`**: `llm_d_lens.deploy.contracts.ConfigurationArtifact` (a **temporary reference** embedded in `DeploymentCreateRequest` / `DeploymentExecution`, with only a few fields such as `artifact_id`, matching Rule 6 and stored as `JSONVariant`) and `llm_d_lens.configuration.models.ConfigurationArtifactRecord` (a **saved configuration-artifact catalog entry**, corresponding to the standalone `configuration_artifacts` table, whose primary key is also `artifact_id`). The foreign key `evaluate_runs.configuration_artifact_id` points to the **latter** (the saved catalog entry), not the former.
 2. **`agentic_benchmark_records.evaluate_run_id` is a best-effort derived column, not a strict `FOREIGN KEY`**: in the current code, `benchmark_id = f"evaluate:{task_id}"` (`agentic/facts.py`), meaning the namespace of `benchmark_id` currently has only one source (evaluate tasks), but the `BenchmarkRecord` DTO itself does not declare any field pointing to evaluate — future prefixes are entirely possible (for example, manually submitted benchmark tests). Therefore, this column is derived in the application layer by parsing whether `benchmark_id` looks like `evaluate:<id>`, and **does not create a database-level foreign-key constraint** (no `ON DELETE` semantics; it is purely a nullable auxiliary indexed column). In the field table it is marked as "(soft reference, not FK)".
 3. **`monitoring_*_operations.cluster_id` is likewise a best-effort derived column**: `AcceleratorStatusResponse.context` / `namespace` is only a kubeconfig context-name string. The application layer must match it against the kubeconfig of registered clusters in the `clusters` table to reverse-lookup a `cluster_id`; if no match is found, it remains null. This is the Rule-2 case of "cross-module reference where the source has no direct ID": it becomes a nullable real foreign key (`SET NULL`), but the write timing is "after the application layer completes the matching," rather than being expanded directly from the DTO.
 
@@ -268,7 +268,7 @@ For each table below: column name, SQL type, length/precision, nullable, primary
 
 **Function**: stores the connection information (kubeconfig, proxy configuration) and metadata for each k8s target cluster that Lens has connected to / brought under management. This is the root table to which almost all other business tables belong by `cluster_id`.
 
-Corresponds to `llm_d_bench.cluster.registry.Cluster` (actual implemented fields, not a draft).
+Corresponds to `llm_d_lens.cluster.registry.Cluster` (actual implemented fields, not a draft).
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description (source field) |
 |---|---|---|---|---|---|---|
@@ -288,9 +288,9 @@ Corresponds to `llm_d_bench.cluster.registry.Cluster` (actual implemented fields
 | `proxy_detected_at` | DateTime(timezone=True) | NULL |  |  | - | Same as above |
 | `proxy_detection_error` | Text | NULL |  |  | - | Same as above |
 | `llm_d_ref` | String(128) | NULL |  |  | - | `llm_d_ref` |
-| `llm_d_benchmark_ref` | String(128) | NULL |  |  | - | `llm_d_benchmark_ref` |
+| `llm_d_lensmark_ref` | String(128) | NULL |  |  | - | `llm_d_lensmark_ref` |
 | `llm_d_repo_path` | Text | NULL |  |  | - | `llm_d_repo_path` |
-| `llm_d_benchmark_repo_path` | Text | NULL |  |  | - | `llm_d_benchmark_repo_path` |
+| `llm_d_lensmark_repo_path` | Text | NULL |  |  | - | `llm_d_lensmark_repo_path` |
 | `created_at` | DateTime(timezone=True) | NOT NULL |  |  | `func.now()` |  |
 | `updated_at` | DateTime(timezone=True) | NOT NULL |  |  | `func.now()` | `onupdate=func.now()` |
 | `version_id` | Integer | NOT NULL |  |  | `1` | Optimistic-lock version number (SQLAlchemy `version_id_col`); see §6.7 for the concurrent dirty-write prevention mechanism |
@@ -301,7 +301,7 @@ Unique constraint: `uq_clusters_name(name)`. This is the root table and has no f
 
 **Function**: stores persistent storage volumes registered by users for a cluster (exactly one of local disk / NFS / dynamic PVC), used by modules such as Model Cache for mounting.
 
-Corresponds to `llm_d_bench.storage.contracts.StorageVolume`. The three mutually exclusive one-to-one submodels `local_disk` / `nfs` / `dynamic_pvc` are expanded into prefixed columns according to Rule 2, and the application layer (reusing the existing Pydantic `model_validator`) guarantees that only the prefixed column set matching `kind` is non-null in a given row.
+Corresponds to `llm_d_lens.storage.contracts.StorageVolume`. The three mutually exclusive one-to-one submodels `local_disk` / `nfs` / `dynamic_pvc` are expanded into prefixed columns according to Rule 2, and the application layer (reusing the existing Pydantic `model_validator`) guarantees that only the prefixed column set matching `kind` is non-null in a given row.
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -334,7 +334,7 @@ Unique constraint: `uq_storage_volumes_name(name)`. Indexes: `(cluster_id)`, `(k
 
 **Function**: stores model files that have already been downloaded / are being downloaded onto a storage volume, along with per-node download progress, to avoid downloading the same model repeatedly.
 
-Corresponds to `llm_d_bench.model_cache.contracts.ModelCacheEntry`. `source` (`ModelSource`) and `token_source` (`TokenSource`) are expanded according to Rule 2; `node_progress: list[NodeDownloadStatus]` matches Rule 6 (detail snapshot, not split into a table).
+Corresponds to `llm_d_lens.model_cache.contracts.ModelCacheEntry`. `source` (`ModelSource`) and `token_source` (`TokenSource`) are expanded according to Rule 2; `node_progress: list[NodeDownloadStatus]` matches Rule 6 (detail snapshot, not split into a table).
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -364,7 +364,7 @@ Unique constraint: `uq_model_cache_volume_source(storage_volume_id, source_displ
 
 **Function**: stores credentials for user-configured external inference services (OpenAI/Anthropic-compatible APIs), for use by modules such as Agentic that need large-model capabilities.
 
-Corresponds to `llm_d_bench.ai_providers.contracts.AIProvider`. This is global configuration with no `cluster_id`, and its fields are basically all scalars.
+Corresponds to `llm_d_lens.ai_providers.contracts.AIProvider`. This is global configuration with no `cluster_id`, and its fields are basically all scalars.
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -385,7 +385,7 @@ Unique constraint: `uq_ai_providers_name(name)`.
 
 **Function**: stores immutable deployment-configuration artifacts generated and "published" by the Configuration module (rendered content + checksum + provenance info), for consumption by Deploy.
 
-Corresponds to `llm_d_bench.configuration.models.ConfigurationArtifactRecord`. `deployable_configuration` (`DeployableConfiguration`) and `configuration_file` (`ConfigurationFile`) are expanded according to Rule 2, using prefixes `dc_` and `cf_` respectively; `cluster_id` / `edited_from_artifact_id` are queryable derived columns extracted from the `dc_provenance` JSONVariant field.
+Corresponds to `llm_d_lens.configuration.models.ConfigurationArtifactRecord`. `deployable_configuration` (`DeployableConfiguration`) and `configuration_file` (`ConfigurationFile`) are expanded according to Rule 2, using prefixes `dc_` and `cf_` respectively; `cluster_id` / `edited_from_artifact_id` are queryable derived columns extracted from the `dc_provenance` JSONVariant field.
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -416,7 +416,7 @@ Indexes: `(cluster_id)`, `(created_at)`.
 
 **Function**: stores the top-level request and aggregated status for a deployment launched in batch from multiple configurations (see the earlier explanation of the responsibility differences among the three deploy tables).
 
-Corresponds to `llm_d_bench.deploy.contracts.DeploymentRun` (excluding `cases`, see §6.5). The table name uses `deployment_batches` (batches) rather than reusing the DTO class name `DeploymentRun`; see the naming note below the diagram in §5.1 for the reason.
+Corresponds to `llm_d_lens.deploy.contracts.DeploymentRun` (excluding `cases`, see §6.5). The table name uses `deployment_batches` (batches) rather than reusing the DTO class name `DeploymentRun`; see the naming note below the diagram in §5.1 for the reason.
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -437,7 +437,7 @@ Indexes: `(cluster_id)`, `(status)`, `(created_at)`.
 
 **Function**: stores a single deployment work item split from a batch, which can be scheduled/retried independently (corresponding to one `provider_ref + component` combination, supporting dependency ordering and retry chains after failures).
 
-Corresponds to `llm_d_bench.deploy.contracts.DeploymentCase` (split from the `DeploymentRun.cases` array, Rule 5). The table name uses `deployment_jobs` (schedulable work items split from a batch, supporting retries/dependencies) rather than reusing the DTO class name `DeploymentCase`. `create_request` (`DeploymentCreateRequest`) is expanded according to Rule 2 with prefix `create_request_`; its internal `deployment_policy` / `cluster_snapshot` (both `VersionedPayload | None`) are expanded one level further with prefixes `create_request_deployment_policy_` / `create_request_cluster_snapshot_`; `configuration_artifacts: list[ConfigurationArtifact]` (the deploy module's own temporary reference type, not the `configuration_artifacts` table) matches Rule 6.
+Corresponds to `llm_d_lens.deploy.contracts.DeploymentCase` (split from the `DeploymentRun.cases` array, Rule 5). The table name uses `deployment_jobs` (schedulable work items split from a batch, supporting retries/dependencies) rather than reusing the DTO class name `DeploymentCase`. `create_request` (`DeploymentCreateRequest`) is expanded according to Rule 2 with prefix `create_request_`; its internal `deployment_policy` / `cluster_snapshot` (both `VersionedPayload | None`) are expanded one level further with prefixes `create_request_deployment_policy_` / `create_request_cluster_snapshot_`; `configuration_artifacts: list[ConfigurationArtifact]` (the deploy module's own temporary reference type, not the `configuration_artifacts` table) matches Rule 6.
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -473,7 +473,7 @@ Indexes: `(batch_id)`, `(evidence_id)`, `(status)`.
 
 **Function**: stores the immutable evidence left after one actual execution of a deployment job (rendered manifest, usable service endpoint, resource snapshot), for references from Benchmark/Evaluate/auditing.
 
-Corresponds to `llm_d_bench.deploy.contracts.DeploymentExecution`. This is one of the 15 tables with many fields; the table name uses `deployment_evidences` (immutable evidence) rather than reusing the DTO class name `DeploymentExecution`, emphasizing the append-only nature of this table. `artifact` (`DeploymentArtifact`, containing `rendered_payload: VersionedPayload`), `endpoint` (`DeploymentEndpoint | None`), `metadata` (`DeploymentMetadata`), and `resource_snapshot` / `diagnostics` (both `VersionedPayload | None`) are expanded layer by layer according to Rule 2.
+Corresponds to `llm_d_lens.deploy.contracts.DeploymentExecution`. This is one of the 15 tables with many fields; the table name uses `deployment_evidences` (immutable evidence) rather than reusing the DTO class name `DeploymentExecution`, emphasizing the append-only nature of this table. `artifact` (`DeploymentArtifact`, containing `rendered_payload: VersionedPayload`), `endpoint` (`DeploymentEndpoint | None`), `metadata` (`DeploymentMetadata`), and `resource_snapshot` / `diagnostics` (both `VersionedPayload | None`) are expanded layer by layer according to Rule 2.
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -580,7 +580,7 @@ Indexes: `(workflow_id)`, `(status)`.
 
 **Function**: append-only storage of a complete snapshot of model/hardware/runtime/load/configuration/metrics for each benchmark test, for later retrieval of historical benchmark data (such as Agentic intelligent configuration recommendations).
 
-Corresponds to `llm_d_bench.agentic.benchmark_evidence.BenchmarkRecord`. All 6 nested submodels (`model` / `hardware` / `runtime` / `workload` / `configuration` / `metrics`) are expanded according to Rule 2, making this one of the 15 tables with many fields (the table with the most columns is the newly added `simulation_tasks`; see §5.4.15).
+Corresponds to `llm_d_lens.agentic.benchmark_evidence.BenchmarkRecord`. All 6 nested submodels (`model` / `hardware` / `runtime` / `workload` / `configuration` / `metrics`) are expanded according to Rule 2, making this one of the 15 tables with many fields (the table with the most columns is the newly added `simulation_tasks`; see §5.4.15).
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -631,7 +631,7 @@ Indexes: `(timestamp)`, `(model_model_id)`, `(evaluate_run_id)`.
 
 **Function**: records the progress, logs, and result of one asynchronous operation to install/configure accelerator (Intel GPU, via DRA or device-plugin) drivers/plugins for a target cluster — it is an operation-lifecycle audit table, not an accelerator resource inventory table.
 
-Corresponds to `llm_d_bench.monitoring.accelerator.models.AcceleratorOperationResponse`. `logs: list[OperationLogEntry]` matches Rule 6 (structured log details are not split into a table; they are preserved in a JSONVariant array with order/level), while `error: OperationError | None` is expanded according to Rule 2.
+Corresponds to `llm_d_lens.monitoring.accelerator.models.AcceleratorOperationResponse`. `logs: list[OperationLogEntry]` matches Rule 6 (structured log details are not split into a table; they are preserved in a JSONVariant array with order/level), while `error: OperationError | None` is expanded according to Rule 2.
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -658,7 +658,7 @@ Indexes: `(cluster_id)`, `(status)`.
 
 **Function**: records the progress, logs, and result of one asynchronous operation to install/configure the llm-d base platform component stack (cluster stack, such as Gateway/CRD/Helm release, excluding accelerator drivers) for a target cluster. Its structure shares the same origin as `monitoring_accelerator_operations` but with a different subject: the former is "install GPU drivers," while the latter is "install the llm-d platform itself."
 
-Corresponds to `llm_d_bench.monitoring.cluster_stack.models.ClusterStackOperationResponse`. The field structure is almost identical to `monitoring_accelerator_operations` (reusing the same `OperationLogEntry` / `OperationError`), except that it lacks `accelerator` / `access_mode` (cluster-stack installation does not distinguish accelerators).
+Corresponds to `llm_d_lens.monitoring.cluster_stack.models.ClusterStackOperationResponse`. The field structure is almost identical to `monitoring_accelerator_operations` (reusing the same `OperationLogEntry` / `OperationError`), except that it lacks `accelerator` / `access_mode` (cluster-stack installation does not distinguish accelerators).
 
 | Column name | SQLAlchemy type | Nullable | PK | FK | Default | Description |
 |---|---|---|---|---|---|---|
@@ -683,7 +683,7 @@ Indexes: `(cluster_id)`, `(status)`.
 
 **Function**: records the configuration, progress, and result of one traffic replay / load-test task initiated against a ready deployment endpoint.
 
-Corresponds to `llm_d_bench.simulation.models.SimulationTask` (the module itself is named "Simulation"; to avoid confusion with the "run/case/execution" terminology of the `deployment_*` series, the table name directly follows the module name). `simulation` (`SimulationConfig`), `prompt` (`SimulationPrompt`, containing `dataset: SimulationDataset` and `trace: SimulationTrace`), and `result` (`SimulationResult | None`) are expanded layer by layer according to Rule 2 into columns prefixed with `simulation_*` / `prompt_dataset_*` / `prompt_trace_*` / `result_*`.
+Corresponds to `llm_d_lens.simulation.models.SimulationTask` (the module itself is named "Simulation"; to avoid confusion with the "run/case/execution" terminology of the `deployment_*` series, the table name directly follows the module name). `simulation` (`SimulationConfig`), `prompt` (`SimulationPrompt`, containing `dataset: SimulationDataset` and `trace: SimulationTrace`), and `result` (`SimulationResult | None`) are expanded layer by layer according to Rule 2 into columns prefixed with `simulation_*` / `prompt_dataset_*` / `prompt_trace_*` / `result_*`.
 
 `result.per_request: list[SimulationRequestResult]` contains **one detail row per load-test request** (reaching tens of thousands under high concurrency), so it does not meet the Rule-6 assumption of a "bounded-size snapshot array" — putting the whole thing into one JSONVariant array column would make the row too large, and even reads that only need `summary` would have to move the entire detail payload. Therefore it is handled separately: **stored in an independent file, with only a path reference stored in the database** (`result_per_request_ref`), using the same strategy as "Evaluate harness raw artifacts are not stored in the database, only their paths" (see §9); `task.result.summary` (the aggregate metrics actually read by the frontend) is still stored as a Rule-3 JSONVariant column and is unaffected.
 
@@ -763,7 +763,7 @@ FastAPI's route layer has already defined complete request/response DTOs with Py
 Core idea: each DAO class declares a `column_map: ClassVar[dict[str, str]]`, where the key is the database column name and the value is a **dot-separated path to the DTO field** (for example, `"proxy.http_proxy"`, `"artifact.rendered_payload.value"`). `from_dto` / `to_dto` use two generic dot-path get/set helper functions to traverse this mapping, so no table-specific field-move code is required. For fields matching Rule 3/6 (`JSONVariant`) and Rule 4 (arrays), the end of the dot path is simply the `dict` / `list` itself (stored and loaded as-is, without further expansion).
 
 ```python
-# llm_d_bench/db/base.py
+# llm_d_lens/db/base.py
 from typing import Any, ClassVar, Self
 from pydantic import BaseModel
 from sqlalchemy.orm import DeclarativeBase
@@ -851,9 +851,9 @@ class ClusterRow(Base, DeclarativeDtoMixin):
         "proxy_detected_at": "proxy.detected_at",
         "proxy_detection_error": "proxy.detection_error",
         "llm_d_ref": "llm_d_ref",
-        "llm_d_benchmark_ref": "llm_d_benchmark_ref",
+        "llm_d_lensmark_ref": "llm_d_lensmark_ref",
         "llm_d_repo_path": "llm_d_repo_path",
-        "llm_d_benchmark_repo_path": "llm_d_benchmark_repo_path",
+        "llm_d_lensmark_repo_path": "llm_d_lensmark_repo_path",
     }
 
     id: Mapped[str] = mapped_column(String(8), primary_key=True)
@@ -910,7 +910,7 @@ class DeploymentEvidenceRow(Base, DeclarativeDtoMixin):
 All write methods acquire a `Session` from the base class's `self._transaction()` (the `transaction()` context manager from §6.7.2), which already opens a transaction with `READ COMMITTED` isolation, rather than each DAO calling `session_factory.begin()` itself — transaction boundaries, isolation level, and optimistic-lock conflict translation are shared responsibilities of the base class (see §6.7), and subclasses only focus on business logic:
 
 ```python
-# llm_d_bench/db/dao/base.py
+# llm_d_lens/db/dao/base.py
 class BaseDao:
     def __init__(self, session_factory: sessionmaker):
         self._session_factory = session_factory
@@ -935,7 +935,7 @@ class BaseDao:
             yield session
 
 
-# llm_d_bench/db/dao/storage.py —— replaces llm_d_bench/storage/store.py::StorageVolumeStore
+# llm_d_lens/db/dao/storage.py —— replaces llm_d_lens/storage/store.py::StorageVolumeStore
 class StorageVolumeDao(BaseDao):
     def create(self, volume: StorageVolume) -> StorageVolume:
         with self._transaction() as session:
@@ -973,14 +973,14 @@ class StorageVolumeDao(BaseDao):
             session.execute(delete(StorageVolumeRow).where(StorageVolumeRow.id == volume_id))
 ```
 
-Each module keeps its original `XxxStoreError` exception type and `default_store()` singleton factory function, with only the internals pointing to the new DAO implementation, minimizing changes to callers (`router.py` / `service.py`); the new `ConcurrentUpdateError` is uniformly mapped to HTTP `409 Conflict` (add one exception handler in `llm_d_bench/api/errors.py`), and callers retry by convention (re-`get()` the latest row, replay business logic, then `save()` again).
+Each module keeps its original `XxxStoreError` exception type and `default_store()` singleton factory function, with only the internals pointing to the new DAO implementation, minimizing changes to callers (`router.py` / `service.py`); the new `ConcurrentUpdateError` is uniformly mapped to HTTP `409 Conflict` (add one exception handler in `llm_d_lens/api/errors.py`), and callers retry by convention (re-`get()` the latest row, replay business logic, then `save()` again).
 
 ### 6.4 Handling derived columns (not in `column_map`): `cluster_id`, `evaluate_run_id`, etc.
 
 §5.3/§5.4 repeatedly includes cases where "the value of a column cannot be obtained directly from a DTO dot path and must be resolved by the application layer" (such as `deployment_batches.cluster_id` from `provenance.cluster_ref.id`, `configuration_artifacts.edited_from_artifact_id` from `dc_provenance.edited_from_artifact_id`, `monitoring_*.cluster_id` from reverse lookup on `context`, and `agentic_benchmark_records.evaluate_run_id` from parsing the `benchmark_id` prefix). All such columns are uniformly **excluded from `column_map`**, and instead each DAO's `create` / `save` calls a module-level resolver function and passes the results as named arguments to `from_dto(dto, **extra_columns)`:
 
 ```python
-# llm_d_bench/db/dao/deploy.py
+# llm_d_lens/db/dao/deploy.py
 def _resolve_cluster_id(provenance: dict) -> str | None:
     ref = provenance.get("cluster_ref") or {}
     return ref.get("id")
@@ -1076,7 +1076,7 @@ The "shared logic" of the DB access layer specifically refers to `BaseDao` in §
 - A transaction may cover only "one business operation," and must not be held across multiple external calls (such as HTTP requests), preventing long transactions from occupying pool connections and amplifying the conflict window.
 
 ```python
-# llm_d_bench/db/engine.py
+# llm_d_lens/db/engine.py
 engine = create_engine(
     settings.database_url,
     isolation_level="READ COMMITTED",  # explicit; do not depend on DB dialect defaults (see §6.7.3)
@@ -1106,7 +1106,7 @@ A "dirty write" (also called a lost update) means that two transactions concurre
 Optimistic locking assumes conflicts are low-probability events and relies on caller retries after conflict; but some scenarios require that "only one transaction at a time may proceed past this point," either because retries are too expensive or because the semantics require strict mutual exclusion. In those cases, use pessimistic locking instead:
 
 ```python
-# llm_d_bench/db/dao/deploy.py
+# llm_d_lens/db/dao/deploy.py
 def mark_job_scheduled(self, job_id: str) -> DeploymentJob:
     with self._transaction() as session:
         row = session.execute(
@@ -1137,12 +1137,12 @@ The following is the complete list of structured data covered by this migration,
 | 4 | Model Cache (model cache entries) | `~/.llm-d-bench/model-cache/entries/*.json` | `model_cache_entries` | `id, cluster_id, storage_volume_id, status, created_at` | Adds a unique index on `(storage_volume_id, source_display)`, replacing the full-table scan deduplication logic in `find_by_volume_and_source`; `source` / `token_source` are expanded into prefixed columns according to §5.4.3 |
 | 5 | AI Providers (external inference service credentials) | `~/.cache/llm-d-bench/ai-providers/*.json` | `ai_providers` | `id, name, provider_type, created_at, updated_at` | The `api_key` field contains sensitive credentials; see Section 10 security notes |
 | 6 | Configuration (saved configuration artifacts) | `~/.cache/llm-d-bench/configurations/.artifacts/*.json` | `configuration_artifacts` | `artifact_id, created_at` | `ConfigurationArtifactRecord` (`deployable_configuration` / `configuration_file`) is expanded into `dc_*` / `cf_*` prefixed columns according to §5.4.5; the rendered manifest files themselves remain in the on-disk `CONFIGURATION_OUTPUT_DIR`, and the database stores only artifact metadata + checksum |
-| 7 | Evaluate (evaluation runs) | `~/.llm_d_bench/run_store/evaluate/runs/*.json` | `evaluate_runs` | `id, kind='benchmark', status, created_at` | Currently free-form `dict` (no Pydantic model); migration adds a minimal schema-validation layer (§6.6), puts known fields into columns, and the rest into the `extra` JSONVariant column (§5.4.9) |
-| 8 | Evaluate (comparison workflows) | `~/.llm_d_bench/run_store/evaluate/workflows/*.json` | `evaluate_workflows` (+ `cases` split to `evaluate_workflow_cases`) | `id, kind='workflow', status, created_at, finished_at` | Same as above; the `cases` array is split into a standalone child table (§5.4.11), while remaining free-form fields (`report`, etc.) go into the `extra` JSONVariant column |
+| 7 | Evaluate (evaluation runs) | `~/.llm_d_lens/run_store/evaluate/runs/*.json` | `evaluate_runs` | `id, kind='benchmark', status, created_at` | Currently free-form `dict` (no Pydantic model); migration adds a minimal schema-validation layer (§6.6), puts known fields into columns, and the rest into the `extra` JSONVariant column (§5.4.9) |
+| 8 | Evaluate (comparison workflows) | `~/.llm_d_lens/run_store/evaluate/workflows/*.json` | `evaluate_workflows` (+ `cases` split to `evaluate_workflow_cases`) | `id, kind='workflow', status, created_at, finished_at` | Same as above; the `cases` array is split into a standalone child table (§5.4.11), while remaining free-form fields (`report`, etc.) go into the `extra` JSONVariant column |
 | 9 | Agentic (benchmark evidence records) | `~/.llm-d-bench/agentic/benchmarks/*.json` | `agentic_benchmark_records` | `benchmark_id, timestamp` | Append-only (immutable); `save()` is idempotent (skip if already exists), and after migration a unique constraint replaces the old "skip if file exists" check |
 | 10 | Monitoring / Accelerator (asynchronous installation operations) | `~/.llm-d-bench/monitoring/operations/*.json` | `monitoring_accelerator_operations` | `operation_id, status, created_at, finished_at` | `recover_interrupted()` semantics remain unchanged: after process restart, rows in `queued/running` are marked `failed` |
 | 11 | Monitoring / Cluster Stack (installation operations) | Same pattern (`monitoring/cluster_stack/operations.py`) | `monitoring_cluster_stack_operations` | `operation_id, status, created_at, finished_at` | Same as above |
-| 12 | Cluster registry (metadata of connected k8s clusters) | `<clusters_dir>/<id>.json` (`llm_d_bench/cluster/registry.py`) | `clusters` | `id, name, created_at` | See `cluster-creation-wizard-design.md` §3.0/§4.0: this is the "first table" in this database-ization effort, and its availability (that is, Step 0 database setup complete) is a prerequisite for Step 1 of the cluster-creation wizard |
+| 12 | Cluster registry (metadata of connected k8s clusters) | `<clusters_dir>/<id>.json` (`llm_d_lens/cluster/registry.py`) | `clusters` | `id, name, created_at` | See `cluster-creation-wizard-design.md` §3.0/§4.0: this is the "first table" in this database-ization effort, and its availability (that is, Step 0 database setup complete) is a prerequisite for Step 1 of the cluster-creation wizard |
 | 13 | Simulation (load-test tasks) | `~/.cache/llm-d-bench/simulations/<id>/task.json` | `simulation_tasks` | `id, status, endpoint_cluster_id, created_at` | `SimulationTask` (nested submodels such as `simulation` / `prompt` / `result`) is expanded into corresponding prefixed columns according to §5.4.15; `result.per_request` (which can contain tens of thousands of request details per task) is not stored in a JSONVariant column but in a standalone file with only a database path reference; `live_summary` is transient runtime state and is not persisted; `resume_queued_tasks()` semantics remain unchanged: after process restart, queued tasks are reloaded/scheduled in `created_at` order |
 
 **Data not migrated** (kept as files / in-memory as they are now; see Section 8 for reasons):
@@ -1157,9 +1157,9 @@ The following is the complete list of structured data covered by this migration,
 
 1. **Add dependencies**: `sqlalchemy>=2.0`, `alembic>=1.13`, `psycopg[binary]>=3` (common driver for external/embedded), `pgserver` (needed only for embedded mode, added as optional dependency `extras.embedded-db` so it is not forced on users who do not need embedded mode).
 2. **Create tables**: write the initial Alembic migration (`alembic revision --autogenerate` based on the ORM models in Section 5.1), generating tables 1-11 and 13 (`clusters`, i.e. table 12, is usually created earlier in Phase 0; see the phased rollout recommendations in `cluster-creation-wizard-design.md` §8).
-3. **Dual write / one-time import script** (`llm_d_bench/db/legacy_import.py`) — **deprecated**:
+3. **Dual write / one-time import script** (`llm_d_lens/db/legacy_import.py`) — **deprecated**:
    - The database-backed migration has already gone live, and Stores in each domain now read/write the database directly, so **new installations no longer need this script**; it is a historical one-time tool and is **no longer maintained**. Its default old paths and file formats are frozen as they were at the time of migration (the "original storage location" column in §7 is likewise frozen), and the CLI prints a deprecation warning at runtime.
-   - If some database still needs to import pre-DB JSON: run the one-time CLI (for example, `python -m llm_d_bench.db.legacy_import --module storage`), traverse the JSON directory, deserialize each record with `model_validate`, and write it to the new table (using `INSERT ... ON CONFLICT DO NOTHING` to keep repeated execution idempotent).
+   - If some database still needs to import pre-DB JSON: run the one-time CLI (for example, `python -m llm_d_lens.db.legacy_import --module storage`), traverse the JSON directory, deserialize each record with `model_validate`, and write it to the new table (using `INSERT ... ON CONFLICT DO NOTHING` to keep repeated execution idempotent).
    - Only directories with **zero failures** are renamed to `*.migrated`; if there is any failure, the original directory is preserved for retry (the earlier behavior of "archive even on failure" has already been corrected).
    - Each module runs and rolls back independently, allowing phased rollout (for example, switch lower-risk modules such as `ai_providers` / `configuration` first, then core-path modules such as `deploy` / `evaluate`).
    - After successful import, old JSON directories are renamed to `*.migrated` (not physically deleted immediately), preserving a rollback window.
@@ -1209,8 +1209,8 @@ The following is the complete list of structured data covered by this migration,
 ~/.llm-d-bench/model-cache/entries/*.json
 ~/.llm-d-bench/agentic/benchmarks/*.json
 ~/.llm-d-bench/monitoring/operations/*.json         # accelerator
-~/.llm_d_bench/run_store/evaluate/{runs,workflows}/*.json
+~/.llm_d_lens/run_store/evaluate/{runs,workflows}/*.json
 ~/.cache/llm-d-bench/simulations/<id>/task.json
 ```
 
-(Historical legacy: the path prefixes are inconsistent across `~/.cache/llm-d-bench`, `~/.llm-d-bench`, and `~/.llm_d_bench`, which is the result of independent evolution in each module; after this migration they are uniformly replaced by `DATABASE_URL` / the embedded data directory, and these path differences no longer need attention.)
+(Historical legacy: the path prefixes are inconsistent across `~/.cache/llm-d-bench`, `~/.llm-d-bench`, and `~/.llm_d_lens`, which is the result of independent evolution in each module; after this migration they are uniformly replaced by `DATABASE_URL` / the embedded data directory, and these path differences no longer need attention.)

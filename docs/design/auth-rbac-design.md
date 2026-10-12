@@ -3,7 +3,7 @@
 > Status: **Design draft (proposal)**. This document defines only the solution and does not modify code.
 > Any table-structure (schema) change must be approved by a human before it can be
 > implemented following the process in
-> `llm_d_bench/db/migrations/README.md` (see §15 and §18).
+> `llm_d_lens/db/migrations/README.md` (see §15 and §18).
 >
 > Related documents: [`AGENTS.md`](../../AGENTS.md),
 > [`.agents/skills/workflow/SKILL.md`](../../.agents/skills/workflow/SKILL.md),
@@ -91,10 +91,10 @@ optional `owner_group_id` (team ownership, §7.4/§7.14).
 - **Authentication (AuthN)**: **no full authentication framework is introduced** (FastAPI Users / Keycloak /
   Casdoor etc. are not used). Only mature **primitive libraries** are used: `argon2-cffi` (Argon2id password hashing),
   `cryptography` (stored-secret encryption); external directories use `ldap3` (optional extra `[ldap]`).
-  Sessions, login, CSRF, and TTL are custom-built (`llm_d_bench/auth/security.py` / `service.py`) to fit the
+  Sessions, login, CSRF, and TTL are custom-built (`llm_d_lens/auth/security.py` / `service.py`) to fit the
   “Node front door + Python authority” topology and Lens-internal management needs.
 - **Authorization (AuthZ)**: uses **embedded Casbin** (RBAC-with-domains) for “role → permission +
-  cluster scope” decisions (`llm_d_bench/auth/casbin_adapter.py`); it is **not** an independent service
+  cluster scope” decisions (`llm_d_lens/auth/casbin_adapter.py`); it is **not** an independent service
   (`casbin-server` is not used). **Resource-level sharing/ownership** are dynamic resources and are not covered by Casbin;
   they are handled by custom `policy.py` / `scope.py`.
 - **Frontend / Node**: no third-party authentication framework is introduced; reuse existing repository UI primitives and
@@ -137,7 +137,7 @@ optional `owner_group_id` (team ownership, §7.4/§7.14).
     filters by permissions.
   - The shared HTTP client `src/api/httpClient.js` does not attach any identity headers and has no 401/403
     handling.
-  - Python FastAPI (`llm_d_bench/api/main.py:58-76`) registers all routers without auth;
+  - Python FastAPI (`llm_d_lens/api/main.py:58-76`) registers all routers without auth;
     the hit count for `Depends(`, `Security(`, CORS, and middleware is 0.
   - Node/Express (`server/server.js:34-63`) also has no auth middleware.
   - The only leftover “authentication contract” is the `X-Prism-Github-Token` header: the frontend reads
@@ -184,13 +184,13 @@ optional `owner_group_id` (team ownership, §7.4/§7.14).
 | Frontend routing | No routing library; hand-written `?view=` routing; unknown views fall back to `model-market` | `src/App.jsx:36-48` |
 | Sidebar | Static `MENU_GROUPS`, filtered only by `disabled` | `src/components/LeftNavigation.jsx:7-36,105-109` |
 | HTTP client | No identity headers, no 401 interception, relative-path `fetch` | `src/api/httpClient.js:23-36` |
-| Backend app | All routers unauthenticated; no middleware/CORS/Depends | `llm_d_bench/api/main.py:38-86` |
+| Backend app | All routers unauthenticated; no middleware/CORS/Depends | `llm_d_lens/api/main.py:38-86` |
 | Node proxy | Forwards only accept/content-type, discards Cookie/Authorization | `server/backend-api-proxy.ts:52`, `server/monitoring.ts:21` |
 | Native Node write routes | `deploy.ts` / `remoteDeploy.ts` / `guidePlanning.ts` / `configuration.ts` / `candidateSearch.ts` / `playground/chat.ts` / `mcp/router.ts` are all unauthenticated | `server/server.js:55-63` |
-| DB | 16 tables, all in business domains; no user/role/audit tables | `llm_d_bench/db/models/*`, `llm_d_bench/db/README.md:29-57` |
+| DB | 16 tables, all in business domains; no user/role/audit tables | `llm_d_lens/db/models/*`, `llm_d_lens/db/README.md:29-57` |
 | Existing risk vocabulary | MCP already has `read` / `write` / `approve` risk tiers | `server/mcp/specialTools.ts:36`, `server/mcp/tools.ts:20-24` |
-| Session concept | Only “cluster sessions” (kubeconfig), no owner | `llm_d_bench/cluster/sessions.py:22-27`, `server/clusterSession.ts:15-32` |
-| Configuration pattern | frozen dataclass + `from_environment()` | `llm_d_bench/db/settings.py:56-101`, `llm_d_bench/cluster/settings.py:12-30` |
+| Session concept | Only “cluster sessions” (kubeconfig), no owner | `llm_d_lens/cluster/sessions.py:22-27`, `server/clusterSession.ts:15-32` |
+| Configuration pattern | frozen dataclass + `from_environment()` | `llm_d_lens/db/settings.py:56-101`, `llm_d_lens/cluster/settings.py:12-30` |
 | Tests | `node:test` + `pytest`, DB uses in-memory SQLite | `Makefile:24-43`, `conftest.py:20-64` |
 
 Conclusion: this is a **greenfield capability**, but it must be embedded into the repository's existing DTO/DAO/router/test/reuse
@@ -216,7 +216,7 @@ Browser ──HTTPS──▶ Node/Express (primary PEP, browser's only entry poi
 ```
 
 - The **single identity authority** is Python: users/groups/roles/sessions/LDAP all live in the
-  `llm_d_bench/auth/` domain and are persisted with the existing SQLAlchemy + DAO stack.
+  `llm_d_lens/auth/` domain and are persisted with the existing SQLAlchemy + DAO stack.
 - **Node is the primary policy enforcement point** (the browser's only entry point, and it also has native write routes).
 - **Python is the secondary policy enforcement point**: even if someone connects directly to loopback, they must still carry
   the internal identity headers injected by Node and signed/encrypted with `LENS_INTERNAL_AUTH_SECRET`;
@@ -284,8 +284,8 @@ sequenceDiagram
 ## 4. Identity and Permission Data Model
 
 > Add 11 new tables, with names following the existing `models/<name>.py` + `dao/<name>.py` convention
-> (`llm_d_bench/db/README.md:29-57`). New models must also be registered in
-> `llm_d_bench/db/migrations/env.py:11-28` and the root `conftest.py:27-44`.
+> (`llm_d_lens/db/README.md:29-57`). New models must also be registered in
+> `llm_d_lens/db/migrations/env.py:11-28` and the root `conftest.py:27-44`.
 
 ### 4.1 ER diagram
 
@@ -379,7 +379,7 @@ Indexes: `uq_users_username_lower` (unique, `func.lower(username)`),
 | `permission` | `String(100)` | No | Composite PK | | Permission code, see §6 |
 
 > The permission **catalog** (which codes exist, what each means, and which routes they map to)
-> uses the code constant `llm_d_bench/auth/permissions.py` as the single source of truth and is exposed to the frontend through the API;
+> uses the code constant `llm_d_lens/auth/permissions.py` as the single source of truth and is exposed to the frontend through the API;
 > the table stores only role → permission-code bindings. When permission codes are added/removed, update the catalog and built-in roles accordingly,
 > and backfill built-in roles in migrations.
 
@@ -662,7 +662,7 @@ Why DB sessions instead of JWT/Redis:
 ### 5.4 Bootstrap for first use
 
 - When the `users` table is empty and authentication is not disabled, **automatically seed** one global admin on startup
-  (`llm_d_bench/auth/bootstrap.py::ensure_initial_admin`, can be disabled with
+  (`llm_d_lens/auth/bootstrap.py::ensure_initial_admin`, can be disabled with
   `PRISM_ADMIN_AUTOSEED=false`):
   - Username comes from `PRISM_ADMIN_USERNAME` (default `admin`); password comes from
     `PRISM_ADMIN_PASSWORD`.
@@ -674,7 +674,7 @@ Why DB sessions instead of JWT/Redis:
     the password-change page, and after a successful password change, the credential file is automatically deleted.
   - `dev.sh start/restart` reads and prints the file contents after services are ready (if it exists).
 - Other bootstrap/recovery methods: `POST /api/v1/auth/bootstrap` (only when there are no users; returns
-  `409` if the table is non-empty); CLI `python -m llm_d_bench.auth.cli {create-admin|reset-password|list-users}`
+  `409` if the table is non-empty); CLI `python -m llm_d_lens.auth.cli {create-admin|reset-password|list-users}`
   (already implemented, used for operations recovery; `reset-password` unlocks the account and forces a password change).
 - In production, explicitly set `PRISM_ADMIN_USERNAME` / `PRISM_ADMIN_PASSWORD` to avoid using the fixed
   weak password `admin` (the file still exists on disk; after login, a password change is forced and it is automatically deleted).
@@ -708,7 +708,7 @@ Why DB sessions instead of JWT/Redis:
 
 ### 6.2 Permission catalog (code source of truth)
 
-`llm_d_bench/auth/permissions.py` defines:
+`llm_d_lens/auth/permissions.py` defines:
 
 ```python
 @dataclass(frozen=True)
@@ -756,7 +756,7 @@ The table below is the core of “refined permissions”. `R` = read-like, `W` =
 | `system:database:read` | View database configuration status | `GET /api/v1/system/database` |
 | `system:database:configure` | Modify global database configuration (Step 0) | `POST /api/v1/system/database` |
 
-#### 6.3.2 Clusters / sessions / bootstrap (`llm_d_bench/cluster`, `utils/kubernetes.py`)
+#### 6.3.2 Clusters / sessions / bootstrap (`llm_d_lens/cluster`, `utils/kubernetes.py`)
 
 | Permission code | Description | Routes |
 | --- | --- | --- |
@@ -1047,11 +1047,11 @@ authorize(user, required, resource):
   and DAO queries append `WHERE cluster_id IN (...)`; deployments additionally overlay
   `owner_user_id = user OR owner_group_id IN user.groups OR resource sharing`.
 - `permission_matches` supports segment wildcards (`*`).
-- The decision is a **pure function**, placed in `llm_d_bench/auth/policy.py`; the Node side gets `{permissions, reachable_clusters}` from introspection and performs equivalent matching to avoid policy drift.
+- The decision is a **pure function**, placed in `llm_d_lens/auth/policy.py`; the Node side gets `{permissions, reachable_clusters}` from introspection and performs equivalent matching to avoid policy drift.
 
 ### 7.6 Implementation points for resource scope
 
-- `llm_d_bench/auth/scope.py`:
+- `llm_d_lens/auth/scope.py`:
   - `accessible_cluster_ids(principal) -> set[str] | None`
   - `can_access(principal, permission, *, cluster_id=None, resource_type=None, resource_id=None, owner_user_id=None) -> bool`
   - `require_cluster_access(principal, cluster_id)` (used for create / dependent resources)
@@ -1137,7 +1137,7 @@ its role, but a `cluster` binding must not apply them to other users' resources.
 - `admin` / `maintainer`: empty set (a cluster binding covers everything in the cluster);
 - `end-user`: `deployment:*`, `evaluate:*`, `simulation:*`, `configuration:*`,
   and operate/read on `monitoring:deployment:*` (see
-  `llm_d_bench/auth/permissions.py`).
+  `llm_d_lens/auth/permissions.py`).
 
 At decision time, for resource actions: if a global/cluster binding role matches `required`, but that
 `required` belongs to that role's self-scoped set, that binding does **not directly allow** access; it must still be covered by
@@ -1235,7 +1235,7 @@ Create-type actions are still validated by target `cluster_id` and are not part 
 ### 8.1 Domain module layout
 
 ```text
-llm_d_bench/auth/
+llm_d_lens/auth/
 ├── __init__.py
 ├── contracts.py          # User/Group/Role/Session/IdentityProvider DTOs
 ├── permissions.py        # Permission catalog + built-in role permissions (single source of truth)
@@ -1261,7 +1261,7 @@ llm_d_bench/auth/
 ```
 
 Naming follows the table in the [backend skill](../../.agents/skills/backend/SKILL.md):
-Python domain capabilities under `llm_d_bench/<domain>/` + `snake_case.py`.
+Python domain capabilities under `llm_d_lens/<domain>/` + `snake_case.py`.
 
 ### 8.2 Route enforcement plan (minimal intrusion)
 
@@ -1304,7 +1304,7 @@ registered completely according to §6.3. On startup, self-check:
 
 ### 8.5 Error contract
 
-Reuse RFC-7807 (`llm_d_bench/api/problems.py`):
+Reuse RFC-7807 (`llm_d_lens/api/problems.py`):
 
 | Scenario | Status | code |
 | --- | --- | --- |
@@ -1629,7 +1629,7 @@ Pagination/filtering reuse the existing DTO + DAO conventions; import/export is 
 | Regression | `make test-js`, `make test-python`, `npm run type-check`, `npm run build` | Existing callers are not affected |
 
 - Tests **must not hit real LDAP/Postgres**: use a fake server or monkeypatch
-  `llm_d_bench.auth.ldap` for LDAP; use the in-memory engine from root `conftest.py` for the DB.
+  `llm_d_lens.auth.ldap` for LDAP; use the in-memory engine from root `conftest.py` for the DB.
 - New models must be registered in `conftest.py:27-44`, otherwise `create_all` will not create the tables.
 
 ---
@@ -1657,8 +1657,8 @@ and P3 is required before there is a usable login interface.
 
 | Capability | Existing candidate | Difference | Decision |
 | --- | --- | --- | --- |
-| Error responses | `llm_d_bench/api/problems.py` RFC-7807 | Already has 400/404/409; need 401/403 codes | **Reuse and extend**, do not create a new error layer |
-| Domain exceptions | `llm_d_bench/core/exceptions.py` | Need `UnauthenticatedError` / `ForbiddenError` | **Extend** `DomainError` subclasses |
+| Error responses | `llm_d_lens/api/problems.py` RFC-7807 | Already has 400/404/409; need 401/403 codes | **Reuse and extend**, do not create a new error layer |
+| Domain exceptions | `llm_d_lens/core/exceptions.py` | Need `UnauthenticatedError` / `ForbiddenError` | **Extend** `DomainError` subclasses |
 | Persistence | `db/models` + `db/dao` + Alembic | New tables | **Reuse** the pattern, do not create a new JSON Store |
 | Configuration | `frozen dataclass + from_environment()` | Add AuthSettings | **Reuse** the pattern (`cluster/settings.py:12-30`) |
 | Frontend dialogs | `src/components/ui/Modal.jsx` | none | **Reuse** |
@@ -1680,12 +1680,12 @@ and P3 is required before there is a usable login interface.
 
 Must be registered during implementation (this design does not register them on the user's behalf; the implementation PR must):
 
-- `auth-policy`: `llm_d_bench/auth/policy.py` / `permission_matches` / pure-function decisions.
-- `auth-permissions`: `llm_d_bench/auth/permissions.py` / `ALL_PERMISSIONS`.
-- `auth-route-guard`: `llm_d_bench/auth/context.py` / `require_permission`.
-- `authz-scope`: `llm_d_bench/auth/scope.py` / `accessible_cluster_ids`, `can_access`.
-- `casbin-dao-adapter`: `llm_d_bench/auth/casbin_adapter.py` / construct policies from existing DAO.
-- `identity-provider`: `llm_d_bench/auth/providers/base.py` / `IdentityProvider`.
+- `auth-policy`: `llm_d_lens/auth/policy.py` / `permission_matches` / pure-function decisions.
+- `auth-permissions`: `llm_d_lens/auth/permissions.py` / `ALL_PERMISSIONS`.
+- `auth-route-guard`: `llm_d_lens/auth/context.py` / `require_permission`.
+- `authz-scope`: `llm_d_lens/auth/scope.py` / `accessible_cluster_ids`, `can_access`.
+- `casbin-dao-adapter`: `llm_d_lens/auth/casbin_adapter.py` / construct policies from existing DAO.
+- `identity-provider`: `llm_d_lens/auth/providers/base.py` / `IdentityProvider`.
 - `node-auth-gateway`: `server/auth.ts` / `authMiddleware`.
 - `frontend-auth-context`: `src/features/auth/AuthProvider.jsx` / `AuthProvider`.
 - `frontend-permission-gate`: `src/features/auth/PermissionGate.jsx` / `PermissionGate`.
@@ -1717,9 +1717,9 @@ human-review requirement from the [database skill](../../.agents/skills/database
 - 11 new tables: `users`, `groups`, `user_groups`, `roles`, `role_permissions`,
   `user_role_bindings`, `group_role_bindings`, `sessions`,
   `identity_providers`, `identity_group_mappings`, `audit_logs`.
-- Migration script `llm_d_bench/db/migrations/versions/9c1f0a7b4d22_create_auth_tables.py`
+- Migration script `llm_d_lens/db/migrations/versions/9c1f0a7b4d22_create_auth_tables.py`
   (`down_revision = d54cf30d823b`); `upgrade → downgrade → upgrade` has been rehearsed locally.
-- Models registered in `llm_d_bench/db/migrations/env.py` and root `conftest.py`.
+- Models registered in `llm_d_lens/db/migrations/env.py` and root `conftest.py`.
 
 **Still to complete** (covered by the same approval, not yet implemented):
 - Add `owner_user_id` / `owner_group_id` columns to existing resource tables in §4.2.12 (requires a second migration).
@@ -1791,7 +1791,7 @@ human-review requirement from the [database skill](../../.agents/skills/database
 ### 20.2 Identity-source abstraction (two paths)
 
 ```python
-# llm_d_bench/auth/providers/base.py
+# llm_d_lens/auth/providers/base.py
 class ProviderCapabilities(NamedTuple):
     password_auth: bool  # whether username/password form is supported
     browser_redirect: bool  # whether OIDC redirect is used
@@ -1840,7 +1840,7 @@ class IdentityProvider(ABC):
 
 ### 20.4 Casbin: embedded, not an independent service
 
-> Decision D11 (finalized and implemented): **adopt Casbin** (`llm_d_bench/auth/casbin_adapter.py`).
+> Decision D11 (finalized and implemented): **adopt Casbin** (`llm_d_lens/auth/casbin_adapter.py`).
 
 - **Form**: `casbin` (the pycasbin project, same name on PyPI) is an **in-process library**,
   with no service dependency. **`casbin-server` is not introduced** (that is a multi-service PDP approach not needed for a single Lens application). Policies are not stored in files; the adapter constructs them from existing tables.
@@ -1897,7 +1897,7 @@ IdP roles usually serve only as coarse-grained claims.
   `provider_id` / `external_id`.
 - §5.1: authentication sources become a list of “enabled providers”, and §5.1.1 adds JIT/group sync.
 - §6.3.1: `directory:*` permission codes become `idp:*`.
-- §8.1: add the `llm_d_bench/auth/providers/` subsystem.
+- §8.1: add the `llm_d_lens/auth/providers/` subsystem.
 - §11.3: LDAP configuration routes become `/api/v1/identity-providers`.
 - §16: P5 becomes “IdP abstraction + LDAP”, and P6 adds OIDC/SCIM.
 - Related decisions in §18.2: D11 (Casbin), D14–D20 (provider/LDAP).
@@ -1952,7 +1952,7 @@ IdP roles usually serve only as coarse-grained claims.
 ### 22.1 Completed
 
 **Python backend**
-- Pure-logic core: `llm_d_bench/auth/{permissions,contracts,scope,policy,security,principal,service,routes,context,access}.py`.
+- Pure-logic core: `llm_d_lens/auth/{permissions,contracts,scope,policy,security,principal,service,routes,context,access}.py`.
 - 11 table models + DAO + two migrations (`9c1f0a7b4d22` table creation, `b7e2a4c1d9f0` owner columns), already
   registered in `env.py` / `conftest.py` and rehearsed with up/down/up.
 - Authentication closed loop: local login, revocable sessions, TTL, password change, bootstrap, audit;
@@ -1974,7 +1974,7 @@ IdP roles usually serve only as coarse-grained claims.
 
 ### 22.2 Progress on resource-scope filtering
 
-Connected through `llm_d_bench/auth/access.py` (`current_principal` / `visible_cluster_ids` /
+Connected through `llm_d_lens/auth/access.py` (`current_principal` / `visible_cluster_ids` /
 `filter_by_cluster` / `require_cluster_access`; no-op when authentication is disabled):
 
 | Domain | List filtering | Single-resource access validation |
@@ -2001,14 +2001,14 @@ Connected through `llm_d_bench/auth/access.py` (`current_principal` / `visible_c
 - **First-login prompt**: on empty-DB startup, automatically seed an admin, generate/read credentials and print a banner, and write to
   `credentials/initial_admin.txt` (0600); `dev.sh` prints it after services are ready; login then forces a password change,
   and changing the password deletes the file (§5.4).
-- **Centralized model registration**: `llm_d_bench/db/models/__init__.py` becomes the single model registration list,
+- **Centralized model registration**: `llm_d_lens/db/models/__init__.py` becomes the single model registration list,
   and `system_router._create_tables` / root `conftest.py` / `migrations/env.py` all switch to using it,
   fixing DB creation failures caused by missed registration of `clusters.owner_user_id -> users.id`.
 
 ### 22.3.1 Remaining items (require user decisions or later tasks)
 
 - ~~**Casbin adapter (D11)**~~ **decided and implemented**: the user confirmed Casbin for D11.
-  `llm_d_bench/auth/casbin_adapter.py` embeds RBAC-with-domains; `policy.py` delegates the action
+  `llm_d_lens/auth/casbin_adapter.py` embeds RBAC-with-domains; `policy.py` delegates the action
   + scope gate to Casbin, while resource sharing/ownership remains in `policy.py`, keeping the external contract unchanged.
   `global` bindings are expanded to the target domain at decision time, so no domain-matching function is needed; Node does not embed it.
 - ~~**Legacy `X-Prism-Github-Token`**~~ **decided and removed** (user decision, 2026-09-19):
@@ -2023,7 +2023,7 @@ Connected through `llm_d_bench/auth/access.py` (`current_principal` / `visible_c
 
 ### 22.4 Validation
 
-- Python: the full `pytest tests llm_d_bench` baseline failure set remains exactly unchanged (21 existing failures,
+- Python: the full `pytest tests llm_d_lens` baseline failure set remains exactly unchanged (21 existing failures,
   unrelated to authentication), and all new authentication cases are green.
 - Node: `server/auth.test.ts` 7/7; existing proxy tests pass; `tsc --noEmit` passes.
 - Frontend: `npm run build` passes; `make test-js` 330/330; no new related eslint errors.

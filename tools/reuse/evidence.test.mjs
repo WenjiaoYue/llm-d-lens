@@ -7,7 +7,7 @@ const catalog = { entries: [] };
 test('registration discovery covers aliases, defaults, reexports and public Python classes', () => {
   const files = [
     { path: 'src/a.ts', text: 'const impl = () => 1; export { impl as shared }; export default function() { return 2; } export { x } from "./b"; export * from "./c";' },
-    { path: 'llm_d_bench/a.py', text: 'def _private(): pass\ndef public(): pass\nclass Shared: pass\n' },
+    { path: 'llm_d_lens/a.py', text: 'def _private(): pass\ndef public(): pass\nclass Shared: pass\n' },
   ];
   const found = registrationCandidates(files, [], catalog);
   assert.deepEqual(found.map(x => x.symbol), ['shared', 'default', 'x', '*', 'public', 'Shared']);

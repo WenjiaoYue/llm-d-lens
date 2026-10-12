@@ -99,13 +99,13 @@ To avoid overlapping with the DB PR, the following files were restored to their 
 
 | Store | Rollback result |
 | --- | --- |
-| [StorageVolumeStore](../../llm_d_bench/storage/store.py) | Restored local JSON read/write and instance lock |
-| [ModelCacheStore](../../llm_d_bench/model_cache/store.py) | Restored local JSON read/write and instance lock |
-| [AIProviderStore](../../llm_d_bench/ai_providers/store.py) | Restored local JSON read/write and instance lock |
-| [JsonDeploymentRunStore](../../llm_d_bench/deploy/run_store.py) | Restored its own model-read and atomic-write methods |
-| [JsonBenchmarkRecordStore](../../llm_d_bench/agentic/benchmark_store.py) | Restored the original versioned record-file read/write; no longer uses shared file storage |
+| [StorageVolumeStore](../../llm_d_lens/storage/store.py) | Restored local JSON read/write and instance lock |
+| [ModelCacheStore](../../llm_d_lens/model_cache/store.py) | Restored local JSON read/write and instance lock |
+| [AIProviderStore](../../llm_d_lens/ai_providers/store.py) | Restored local JSON read/write and instance lock |
+| [JsonDeploymentRunStore](../../llm_d_lens/deploy/run_store.py) | Restored its own model-read and atomic-write methods |
+| [JsonBenchmarkRecordStore](../../llm_d_lens/agentic/benchmark_store.py) | Restored the original versioned record-file read/write; no longer uses shared file storage |
 
-The shared `llm_d_bench/common/json_store.py` has been removed, and the `json-file-store` entry was removed from the capability catalog accordingly. This is not a declaration that the DB migration is complete; the project still uses the original file storage, to be taken over later by the DB PR.
+The shared `llm_d_lens/common/json_store.py` has been removed, and the `json-file-store` entry was removed from the capability catalog accordingly. This is not a declaration that the DB migration is complete; the project still uses the original file storage, to be taken over later by the DB PR.
 
 ### 2.3 Frontend integration additions (2026-09-18)
 
@@ -126,9 +126,9 @@ The following already exist, but should not be treated as equivalent to “calle
 | Capability | Current status | Remaining work |
 | --- | --- | --- |
 | [AsyncState](../../src/components/shared/AsyncState.jsx) | Integrated in AI Provider, Storage, and Model Cache; display order is loading → error → empty → children, and it supports domain display slots | Browser interaction regression |
-| [DomainError](../../llm_d_bench/core/exceptions.py) | Defines common exceptions plus 404/409/422 subclasses; [API handlers](../../llm_d_bench/api/problems.py) have been registered | Domain exceptions have not yet been migrated comprehensively |
-| [PageInfo / TaskRef](../../llm_d_bench/schemas/common.py) | Shared types are defined | Not yet widely integrated into interfaces |
-| [TaskStatus](../../llm_d_bench/tasks/models.py) | Defines queued/running/succeeded/failed/cancelled | Existing task executors and state machines are not unified |
+| [DomainError](../../llm_d_lens/core/exceptions.py) | Defines common exceptions plus 404/409/422 subclasses; [API handlers](../../llm_d_lens/api/problems.py) have been registered | Domain exceptions have not yet been migrated comprehensively |
+| [PageInfo / TaskRef](../../llm_d_lens/schemas/common.py) | Shared types are defined | Not yet widely integrated into interfaces |
+| [TaskStatus](../../llm_d_lens/tasks/models.py) | Defines queued/running/succeeded/failed/cancelled | Existing task executors and state machines are not unified |
 
 ## 4. Compatibility boundaries and remaining items
 
@@ -179,10 +179,10 @@ Subsequent changes may validate according to actual impact scope:
 npm run build
 npm run lint -- --no-warn-ignored
 ./.venv/bin/pytest -q \
-  llm_d_bench/storage/test_store.py \
-  llm_d_bench/model_cache/test_store.py \
-  llm_d_bench/ai_providers/test_service.py \
-  llm_d_bench/agentic/test_benchmark_store.py
+  llm_d_lens/storage/test_store.py \
+  llm_d_lens/model_cache/test_store.py \
+  llm_d_lens/ai_providers/test_service.py \
+  llm_d_lens/agentic/test_benchmark_store.py
 ```
 
 ## 6. How to reuse these in future development
