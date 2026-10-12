@@ -7,10 +7,13 @@ import { pinModelServerImage, ROUTER_DISAGG_SIDECAR_IMAGE } from './guideDeploym
 import { applyCustomPatches, isAcceleratorDeviceClass, planDocuments, resolveAcceleratorVariant, runtimeClassForAccelerator, selectManifestPaths, validateManifestCapacity } from './guidePlanning.ts';
 
 test('guide variant trimming handles long slash runs without changing selection', () => {
-    const manifestPath = 'guides/guide/modelserver/gpu/vllm/base/deployment.yaml';
-    const selection = selectManifestPaths([manifestPath], 'guide', 'gpu', 'vllm', `${'/'.repeat(10000)}base${'/'.repeat(10000)}`);
-    assert.equal(selection.variant, 'base');
-    assert.deepEqual(selection.selected, [manifestPath]);
+    const paths = [
+        'guides/guide/modelserver/gpu/vllm/base/kustomization.yaml',
+        'guides/guide/modelserver/gpu/vllm/base/deployment.yaml',
+    ];
+    const expected = selectManifestPaths(paths, 'guide', 'gpu', 'vllm', 'base');
+    const selection = selectManifestPaths(paths, 'guide', 'gpu', 'vllm', `${'/'.repeat(10000)}base${'/'.repeat(10000)}`);
+    assert.deepEqual(selection, expected);
 });
 
 test('the vendor container runtime is used when the cluster defines one', () => {
