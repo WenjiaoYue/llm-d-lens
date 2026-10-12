@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import OptimizationConfiguration from './OptimizationConfiguration';
 import { readEvaluationIntent } from '../features/evaluation/transfer';
@@ -10,26 +10,36 @@ export default function OptimizationConfigurationEntry({ onNavigate }) {
     const returnTarget = intent?.return_target || 'optimization-evaluate';
     const requestedModelSource = intent?.runtime?.model_source;
     const deployOnly = intent?.operation === 'deploy-only';
+    // Guards against a duplicate deployment being created if this callback is
+    // somehow invoked again (e.g. a future regression re-introducing a
+    // fire-and-forget call) while a previous deploy request is still in flight.
+    const deployInFlight = useRef(false);
 
     const deployPublishedConfigurations = async ({ artifacts }) => {
-        const configurations = (artifacts || []).map((artifact) => artifact.deployable_configuration).filter(Boolean);
-        if (!configurations.length) throw new Error('No deployable configurations were generated');
-        const clusterId = sessionStorage.getItem('prism_cluster_server_id') || intent?.cluster_id;
-        if (!clusterId) throw new Error('Select a cluster before deploying');
-        const cluster = await loadCluster(clusterId);
-        await startLocalDeployment(configurations, {
-            cluster_session_id: sessionStorage.getItem('prism_cluster_session_id') || undefined,
-            cluster_server_id: clusterId,
-            deployment_source: {
-                kind: 'model-market-advanced',
-                resolved_repository: cluster.llmDRepoPath,
-                ref: cluster.llmDRef || undefined,
-            },
-            deployment_name: intent?.deployment_name,
-            description: intent?.deployment_description,
-            model_market: { deployment_name: intent?.deployment_name },
-        });
-        onNavigate('optimization-deployments');
+        if (deployInFlight.current) return;
+        deployInFlight.current = true;
+        try {
+            const configurations = (artifacts || []).map((artifact) => artifact.deployable_configuration).filter(Boolean);
+            if (!configurations.length) throw new Error('No deployable configurations were generated');
+            const clusterId = sessionStorage.getItem('prism_cluster_server_id') || intent?.cluster_id;
+            if (!clusterId) throw new Error('Select a cluster before deploying');
+            const cluster = await loadCluster(clusterId);
+            await startLocalDeployment(configurations, {
+                cluster_session_id: sessionStorage.getItem('prism_cluster_session_id') || undefined,
+                cluster_server_id: clusterId,
+                deployment_source: {
+                    kind: 'model-market-advanced',
+                    resolved_repository: cluster.llmDRepoPath,
+                    ref: cluster.llmDRef || undefined,
+                },
+                deployment_name: intent?.deployment_name,
+                description: intent?.deployment_description,
+                model_market: { deployment_name: intent?.deployment_name },
+            });
+            onNavigate('optimization-deployments');
+        } finally {
+            deployInFlight.current = false;
+        }
     };
 
     useEffect(() => {

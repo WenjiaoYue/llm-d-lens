@@ -954,7 +954,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                     benchmark: workload.benchmark,
                 });
             }
-            if (onPublished) onPublished({ artifacts: savedArtifacts, advance, optimizationSelection });
+            if (onPublished) await onPublished({ artifacts: savedArtifacts, advance, optimizationSelection });
             else sendWorkloadsToEvaluate(plans, savedArtifacts[0], onNavigate);
         } catch (error) {
             const globalErrors = showServerErrors([error.message || 'Could not publish configuration']);
@@ -1035,7 +1035,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                 preserve_deployment: false,
                 benchmark: defaultBenchmark(selection.guide),
             }];
-            if (onPublished) onPublished({ artifacts: [saved.artifact], optimizationSelection });
+            if (onPublished) await onPublished({ artifacts: [saved.artifact], optimizationSelection });
             else sendWorkloadsToEvaluate(plans, saved.artifact, onNavigate);
         } catch (error) {
             setUploadError(error.message || 'Could not import the configuration YAML');
