@@ -8,6 +8,7 @@ reviewers:
   - WenjiaoYue
   - joshuayao
   - xiaojun-zhang
+  - VincyZhang
 
 approvers:
   - vezio        # Core Maintainer
@@ -15,3 +16,4 @@ approvers:
   - WenjiaoYue
   - joshuayao
   - xiaojun-zhang
+  - VincyZhang
