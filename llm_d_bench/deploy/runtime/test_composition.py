@@ -207,7 +207,11 @@ def test_registered_guide_allows_idempotent_namespace_cleanup(tmp_path: Path):
     )
 
 
-def test_namespace_factory_uses_the_request_policy_prefix():
+@pytest.mark.parametrize(
+    ("requested_prefix", "expected_prefix"),
+    [("llmd-team-", "llmd-team-2-4-"), (None, "llmd-baseline-vllm-2-4-")],
+)
+def test_namespace_factory_uses_only_allowed_request_prefix(requested_prefix, expected_prefix):
     request = type(
         "Request",
         (),
@@ -217,7 +221,7 @@ def test_namespace_factory_uses_the_request_policy_prefix():
                 "Policy",
                 (),
                 {
-                    "value": {"namespace_policy": {"prefix": "standard-"}},
+                    "value": {"namespace_policy": {"prefix": requested_prefix}},
                 },
             )(),
             "configuration_artifacts": [
@@ -234,8 +238,22 @@ def test_namespace_factory_uses_the_request_policy_prefix():
 
     namespace = build_namespace_factory("llmd-")(request)
 
-    assert namespace.startswith("standard-2-4-")
-    assert not namespace.startswith("llmd-")
+    assert namespace.startswith(expected_prefix)
+
+
+@pytest.mark.parametrize("requested_prefix", ["standard-", "other-llmd-", "LLMD-team-"])
+def test_namespace_factory_rejects_prefix_outside_allowlist(requested_prefix):
+    request = type(
+        "Request",
+        (),
+        {
+            "deployment_policy": type("Policy", (), {"value": {"namespace_policy": {"prefix": requested_prefix}}})(),
+            "configuration_artifacts": [type("Artifact", (), {"content": "{}"})()],
+        },
+    )()
+
+    with pytest.raises(RuntimeConfigurationError, match="namespace policy prefix is invalid"):
+        build_namespace_factory("llmd-")(request)
 
 
 def test_registered_guide_helm_allows_only_planned_data_plane_values(tmp_path: Path):
