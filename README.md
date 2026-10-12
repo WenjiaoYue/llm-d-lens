@@ -4,7 +4,7 @@
 </p>
 
 <h3 align="center">
-An open-source control plane for AI inference on llm-d
+The ultimate control plane for AI inference: Single-click deployment, automated benchmarking, and full-stack cluster monitoring.
 </h3>
 
 <p align="center">
