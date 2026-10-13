@@ -473,7 +473,7 @@ export default function EvaluationTaskWizard({ onNavigate }) {
                 deployment_name: deploymentName.trim(),
                 description: deploymentDescription.trim(),
                 model_market: { deployment_name: deploymentName.trim() },
-            });
+            }, configurations[0].provenance?.placement || { replicas: 'prefer-same-node' });
             clearEvaluationIntent();
             onNavigate("optimization-deployments");
         } catch (nextError) {
