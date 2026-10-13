@@ -12,7 +12,8 @@ dist
 dist-ssr
 .cache
 .dev-tools
-apps/docs/build
+docs/site/build
+docs/site/.docusaurus
 apps/frontend/dist
 *.local
 .env.local

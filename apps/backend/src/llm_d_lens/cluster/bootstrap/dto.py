@@ -14,7 +14,7 @@ class BootstrapNodeInput(StrictModel):
     but also a "host spec" that expands to several hosts sharing this row's
     role selection and SSH credentials -- see
     ``llm_d_lens.cluster.bootstrap.host_expr`` and
-    ``docs/design/CLUSTER_BOOTSTRAP_DESIGN.md`` §3.1:
+    ``docs/design/cluster-design.md#kubernetes-bootstrap`` §3.1:
 
     * a single value: ``10.0.0.5``
     * a comma-separated list: ``10.0.0.5, 10.0.0.6, 10.0.0.9``
@@ -25,7 +25,7 @@ class BootstrapNodeInput(StrictModel):
     host: str = Field(min_length=1, max_length=4096)
     port: int = Field(default=22, ge=1, le=65535)
     #: Non-empty; a node may hold both roles at once (see
-    #: docs/design/CLUSTER_BOOTSTRAP_DESIGN.md -- e.g. all-in-one/small clusters where
+    #: docs/design/cluster-design.md#kubernetes-bootstrap -- e.g. all-in-one/small clusters where
     #: the control-plane is also schedulable as a worker).
     roles: list[Literal["control-plane", "worker"]] = Field(default_factory=lambda: ["worker"], min_length=1)
     username: str = Field(default="root", min_length=1, max_length=64)

@@ -52,18 +52,14 @@ cd llm-d-lens
 
 Press Enter to accept the defaults (install directory `$HOME/llm-d-lens`, app port `3000`, backend port `8081`). When it finishes, open the printed URL (`https://localhost:3000` by default) and sign in with the admin credentials it printed.
 
-To work on the code instead of an installed deployment:
+To install dependencies and run directly from the source checkout:
 
 ```bash
-npm install
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -e '.[dev]'
-node scripts/generate-mcp-tools.mjs
-npm run dev
+scripts/lens-local.sh start
+scripts/lens-local.sh status
 ```
 
-The frontend runs on port `5173`, the Node API on `3000`, and the Python backend is started by `scripts/run-backend.sh`. Use `npm run dev:web` when running the Python backend separately. `scripts/dev.sh` starts, stops and restarts the whole stack and regenerates the MCP tool catalog. See the [CLI Reference](https://llm-d-incubation.github.io/llm-d-lens/cli-reference) for every subcommand.
+The source frontend runs on port `5173`, the Node API on `3000`, and the Python backend on `8081`. `scripts/lens-local.sh` prepares dependencies, manages the whole stack and regenerates the MCP tool catalog. To constrain deployments to one node, use `scripts/lens-local.sh restart --target-node node-a --kubeconfig "$HOME/.kube/config"`, or set `TARGET_NODE` and `KUBECONFIG`; no target-specific configuration file is needed. Use `npm run dev:web` when managing the Python backend separately. See the [CLI Reference](https://llm-d-incubation.github.io/llm-d-lens/cli-reference) for every subcommand.
 
 Build and test:
 
@@ -84,7 +80,7 @@ Visit the [documentation](https://llm-d-incubation.github.io/llm-d-lens/) to lea
 
 We welcome and value any contributions. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before opening an issue or pull request.
 
-Before changing behavior, follow [AGENTS.md](AGENTS.md) and the [reuse-first workflow](docs/refactoring/reuse-first-agent-design.md): find existing implementations, compare contracts and callers, and record reuse or new-code rationale in the PR. All repository text and PR titles and descriptions must be English; run `npm run check:english` before committing.
+Before changing behavior, follow [AGENTS.md](AGENTS.md) and the [reuse-first workflow](docs/design/reuse-workflow.md): find existing implementations, compare contracts and callers, and record reuse or new-code rationale in the PR. All repository text and PR titles and descriptions must be English; run `npm run check:english` before committing.
 
 ## License
 

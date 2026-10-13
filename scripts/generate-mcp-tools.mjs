@@ -36,7 +36,7 @@
 //
 // How a route becomes a tool (or doesn't):
 //   - riskTier is derived from the HTTP method by default: GET/HEAD -> read,
-//     POST/PUT/PATCH -> write, DELETE -> approve (see docs/design/mcp-playground-design.zh-CN.md)
+//     POST/PUT/PATCH -> write, DELETE -> approve (see docs/design/mcp-playground-design.md)
 //     -- no attempt is made to infer risk from the route's real side effects.
 //     RISK_TIER_OVERRIDES below is a small, explicit, named exception list
 //     for the rare operationId that's known to kick off a real side effect

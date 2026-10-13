@@ -6,7 +6,7 @@ Gateway (provider-selectable), each deployment owns its ``InferencePool`` + EPP,
 and each model service publishes an ``HTTPRoute`` -> ``InferencePool`` plus an
 IPP model-mapping ``ConfigMap``.
 
-Design reference: docs/design/model-service-llmd-routing-design.zh-CN.md
+Design reference: docs/design/model-service-design.md#lens-model-service-design-per-cluster-native-llm-d
 sections 5, 10.
 """
 

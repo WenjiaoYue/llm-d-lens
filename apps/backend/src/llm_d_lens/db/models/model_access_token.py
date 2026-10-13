@@ -2,7 +2,7 @@
 
 Only the SHA-256 hash of the plaintext token is stored. Backs
 ``llm_d_lens.model_service.contracts.ModelAccessToken``.
-Design reference: docs/design/model-service-v2-design.md section 4.4.
+Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

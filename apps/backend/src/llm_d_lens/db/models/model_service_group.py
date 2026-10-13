@@ -1,7 +1,7 @@
 """``model_service_groups`` table -- the user-facing model name (routing group).
 
 Backs ``llm_d_lens.model_service.contracts.ModelServiceGroup``.
-Design reference: docs/design/model-service-v2-design.md section 4.2.
+Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

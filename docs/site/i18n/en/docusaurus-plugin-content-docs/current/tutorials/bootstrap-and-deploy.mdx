@@ -1,0 +1,50 @@
+---
+title: Add a cluster and deploy a model
+description: Connect a cluster, cache model weights and start an llm-d deployment.
+---
+
+This walkthrough creates an **optimized-baseline** deployment that you can
+publish as a model service. Sign in with access to create clusters and deployments.
+
+## 1. Connect your cluster
+
+1. Open **Clusters → Add**.
+2. Enter a cluster name, select **I already have a kubeconfig**, and upload the file.
+3. Complete **Network Proxy**, **Model gateway**, **Accelerator**, and **llm-d stack**. Keep the gateway on **Istio** and choose your cluster's accelerator.
+4. On **Model Cache**, complete the token settings and select **Create a storage volume for model-cache on this cluster**.
+5. Choose **hostPath** or **NFS**, then enter its path, capacity and other required fields.
+6. Click **Review → Finish**, wait for completion, then click **Done**.
+7. Select the new cluster and check its workers and **Deployable GPU**.
+
+No Kubernetes cluster yet? Follow [Bootstrap with Kubespray](/user-guide/clusters)
+first, then finish the same registration wizard. For storage field examples,
+see [Storage](/user-guide/storage).
+
+## 2. Download the model
+
+1. Open **Model cache → Download model**.
+2. Choose the cluster and storage volume you just created.
+3. Set **Model source** to **Hugging Face** and enter `Qwen/Qwen3-0.6B` as the repo ID.
+4. Click **Start download** and wait for the model to become ready.
+5. If downloading fails, open **View logs**, correct the reported problem, and click **Retry download**.
+
+## 3. Create the deployment
+
+1. Open **Model Market** and select `Qwen/Qwen3-0.6B`.
+2. Enter a deployment name such as `qwen-demo`, select the cluster and cache volume.
+3. Choose **Advanced → Configure deployment**.
+4. Under **Guide template**, choose **optimized-baseline** and the cluster's accelerator.
+5. Review the supplied **Runtime image**, **Replicas** and **TP**. Use the suggested resources supported by your cluster.
+6. Click **Generate YAML**, choose **Currently available**, then click **Confirm & generate**.
+7. Review the generated configuration and correct any highlighted errors.
+8. Click **Next** to create the deployment.
+
+## 4. Confirm the model is ready
+
+1. Open **Deployments** and find `qwen-demo`.
+2. Wait for **Ready**. Use **View Pods & Logs** to follow startup.
+3. If it fails, read the failure banner and pod logs before creating a corrected configuration.
+
+Continue with [Publish a model service](/tutorials/publish-a-model-service) to
+send a request, then [Evaluate a deployment](/tutorials/evaluate-a-deployment)
+to measure performance.

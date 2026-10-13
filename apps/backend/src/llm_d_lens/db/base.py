@@ -1,6 +1,6 @@
 """Declarative base, DTO<->DAO mapping mixin, and portable column types.
 
-See docs/design/sqlalchemy-data-access-layer-design.md section 6 for the
+See docs/design/database-design.md#data-access-architecture section 6 for the
 rationale: every DAO Row class declares a ``column_map`` (db column name ->
 dot-path into its Pydantic/dataclass DTO) and gets ``from_dto``/``to_dto``/
 ``sync_from_dto`` for free, instead of hand-written field-by-field glue code

@@ -5,7 +5,7 @@ Three surfaces:
 - admin: routing groups/members, usage reports
 - internal: Edge Envoy ext_authz authorize + usage recording
 
-Design reference: docs/design/model-service-v2-design.md sections 11-13.
+Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

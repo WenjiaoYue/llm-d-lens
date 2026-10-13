@@ -105,7 +105,7 @@ def _proxy_environment(cluster_id: str | None = None) -> list[dict]:
     lower-case while many cluster tools set upper-case only.
 
     Prefers the owning cluster's own ``ProxyConfig`` (set via the Create
-    Cluster wizard, see docs/design/cluster-creation-wizard-design.md
+    Cluster wizard, see docs/design/cluster-design.md#cluster-creation-wizard
     section 4.2) when it is in ``mode="custom"``; otherwise falls back to the
     Prism backend process's own environment, same as before that config
     existed.

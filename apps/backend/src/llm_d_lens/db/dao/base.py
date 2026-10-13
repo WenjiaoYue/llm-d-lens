@@ -1,6 +1,6 @@
 """Common DAO base: transaction boundary + optimistic-lock conflict handling.
 
-See docs/design/sqlalchemy-data-access-layer-design.md section 6.7. Every
+See docs/design/database-design.md#data-access-architecture section 6.7. Every
 concrete DAO (StorageVolumeDao, ClusterDao, ...) should
 inherit from ``BaseDao`` and route every write through
 ``self._transaction()`` rather than opening its own ``session.begin()`` --

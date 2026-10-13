@@ -18,7 +18,7 @@ results rather than scraping the EPP. Only ``_sum`` (tokens) and ``_count``
 (requests) are read; the counters are cumulative, so callers diff successive
 snapshots (see ``usage_sync``).
 
-Design reference: ``docs/design/model-service-llmd-routing-design.zh-CN.md``
+Design reference: ``docs/design/model-service-design.md#lens-model-service-design-per-cluster-native-llm-d``
 sections 7-9.
 """
 

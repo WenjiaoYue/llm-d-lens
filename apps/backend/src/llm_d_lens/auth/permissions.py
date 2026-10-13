@@ -251,7 +251,7 @@ _MAINTAINER_DENIED = _permissions_named(
 )
 
 #: end-user is a model-service *consumer* only (product decision D15 in
-#: docs/design/model-service-v2-design.md): manage its own access tokens,
+#: docs/design/model-service-design.md#6-domain-model): manage its own access tokens,
 #: call models it is authorized for, and read its own usage. Workloads,
 #: evaluations, simulations, clusters, storage, model cache, external
 #: providers, observability and administration belong to maintainer/admin.

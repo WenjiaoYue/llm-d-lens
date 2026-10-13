@@ -5,12 +5,15 @@
 All repository-authored text must be English: documentation, comments, messages,
 UI labels, examples, tests, configuration, filenames, and agent instructions.
 The one explicit exception is published documentation translations under
-`apps/docs/i18n/` — Docusaurus's i18n locale content (translated Markdown
+`docs/site/i18n/zh-CN/` — Docusaurus's Chinese locale content (translated Markdown
 docs, the standalone homepage, and UI strings such as the navbar/footer) for
 the bilingual (English/Chinese) docs site. Its whole purpose is non-English,
 user-facing content, so `npm run check:english` skips that directory; every
 other path, including source, comments, commit/PR text and configuration,
 remains English-only and is still fully scanned.
+
+English documentation also lives under `docs/site/i18n/en/`; it is not part of
+the translation exception and must pass the same English check as source code.
 Before every commit and before creating or updating a PR, agents MUST:
 
 1. Run `npm run check:english` over the entire repository, not only the diff.
@@ -23,19 +26,19 @@ Before every commit and before creating or updating a PR, agents MUST:
 
 The CI English check runs for every PR, including documentation-only changes.
 It scans tracked and untracked non-ignored text (excluding the
-`apps/docs/i18n/` translation exception above); ignored dependencies,
+`docs/site/i18n/zh-CN/` translation exception above); ignored dependencies,
 runtime files and binary assets are outside this repository-text policy.
 
 ## Dev workflow
 
 After changing backend, frontend or Node code, **restart the local dev services
-automatically** (`scripts/dev.sh restart`) so the running app picks up the change —
+automatically** (`scripts/lens-local.sh restart`) so the running app picks up the change —
 do not wait to be asked. Then verify the change against the running services.
 
 ## Reuse before implementation
 
 Before adding or changing behavior, read [the reuse workflow](.agents/skills/workflow/SKILL.md)
-and [the capability map](docs/reuse-map.md). Apply it to frontend, Node, Python,
+and [the capability map](.reuse/map.md). Apply it to frontend, Node, Python,
 and development tooling. Documentation-only edits need reference checks, not a
 model download or duplicate scan.
 
@@ -66,7 +69,7 @@ model download or duplicate scan.
    `verify`, `check` and `verify-report` **only right before a commit**, so the
    pass reflects the final tree. See [Before you commit](#before-you-commit).
 
-`scripts/dev.sh start` and `restart` also regenerate and validate the map before
+`scripts/lens-local.sh start` and `restart` also regenerate and validate the map before
 starting/stopping services. This is a fallback, not a replacement for the coding
 agent's registration and validation responsibilities. Startup cannot infer an
 undocumented capability's business contract. Semantic vectors refresh on search.
@@ -151,7 +154,7 @@ only when their contracts are relevant. Do not run model downloads for link edit
 
 ## Keep the docs site in sync
 
-Lens ships a Docusaurus documentation site under `apps/docs/` (preview: `npm run
+Lens ships a Docusaurus documentation site under `docs/site/` (preview: `npm run
 docs:dev`; build/link-check: `npm run docs:check`), published to GitHub Pages
 at `https://llm-d-incubation.github.io/llm-d-lens/`. Every Lens frontend
 module has three doc surfaces, and a code change must update whichever of
@@ -160,16 +163,16 @@ follow-up:
 
 1. **Frontend page behavior** (a React page/component under `apps/frontend/src/`) →
    update the matching User Guide page at
-   `apps/docs/docs/user-guide/<module>.mdx`.
+   `docs/site/i18n/en/docusaurus-plugin-content-docs/current/user-guide/<module>.mdx`.
 2. **A FastAPI/Node REST endpoint** (added, changed, removed) →
    update the `## Backend API` section of the matching module page at
-   `apps/docs/docs/api-reference/modules/<module>.mdx`: keep its `### <endpoint
+   `docs/site/i18n/en/docusaurus-plugin-content-docs/current/api-reference/modules/<module>.mdx`: keep its `### <endpoint
    name>` entry and REST API tab (method, path, request/response fields and
    a real JSON example) accurate to the actual route and Pydantic/TS contract.
 3. **The underlying Python callable a REST endpoint uses** (service/DAO
    method signature, module path, or behavior change) → update that same
    `### <endpoint name>` entry's Python API tab on
-   `apps/docs/docs/api-reference/modules/<module>.mdx` so the sample code still
+   `docs/site/i18n/en/docusaurus-plugin-content-docs/current/api-reference/modules/<module>.mdx` so the sample code still
    imports and calls the real function. Every Backend API row must keep a
    matching, concrete Python usage example — never leave one updated
    without the other.
@@ -187,13 +190,27 @@ fails on reported errors) and fix anything it surfaces before finishing the
 task. Documentation-only edits still follow the reuse workflow's
 reference-check guidance, not a full duplicate/model-download scan.
 
-Three pages are synced in from canonical sources outside `apps/docs/docs/` by
-`apps/docs/scripts/sync-external-docs.mjs` — `docs/design/agentic-deployment-architecture.md`,
-`docs/design/agentic-planning-evidence-and-rag.md`, and
-`CONTRIBUTING.md` — so edit those source files directly rather than their
-generated copies under `apps/docs/docs/architecture/` and
-`apps/docs/docs/resources/contributing.md` (gitignored, regenerated by
+Three pages are synced from two canonical sources outside `docs/site/i18n/en/docusaurus-plugin-content-docs/current/` by
+`docs/site/scripts/sync-external-docs.mjs`: the marked `architecture` and `evidence`
+parts of `docs/design/agentic-deployment-design.md`, plus `CONTRIBUTING.md`.
+The Agentic parts retain the existing published page URLs. Edit those source
+files directly rather than their
+generated copies under `docs/site/i18n/en/docusaurus-plugin-content-docs/current/architecture/` and
+`docs/site/i18n/en/docusaurus-plugin-content-docs/current/resources/contributing.md` (gitignored, regenerated by
 `npm run docs:dev` / `npm run docs:check`).
+
+## Design documentation ownership
+
+- Keep exactly one canonical design document per product module or shared domain
+  under `docs/design/`. Add related architecture, contracts and operations as
+  sections of that document, not sibling version, phase or subfeature designs.
+- Use lowercase, hyphen-separated English filenames ending in `.md`. Do not add
+  locale suffixes such as `zh-CN`; published translations belong in `docs/site/i18n/zh-CN/`.
+- Keep effective designs and constraints, not superseded proposals or historical
+  implementation snapshots. Extract still-valid content before removing an old design.
+- When renaming or merging, update incoming links, section references, source
+  comments, instruction files, ignore rules, docs sync inputs and CI path filters.
+  Preserve published documentation routes and validate destination anchors.
 
 
 ## Existing contracts

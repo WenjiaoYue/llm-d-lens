@@ -7,7 +7,7 @@ makes) with all tables in ``llm_d_lens.db.base.Base.metadata`` created
 before the test runs. This replaces the old per-test isolation pattern of
 monkeypatching ``cluster_settings`` to a fresh ``tmp_path`` (see
 ``llm_d_lens/cluster/registry.py``'s move from file-based storage to the
-SQLAlchemy data access layer -- docs/design/sqlalchemy-data-access-layer-design.md).
+SQLAlchemy data access layer -- docs/design/database-design.md#data-access-architecture).
 """
 
 from __future__ import annotations

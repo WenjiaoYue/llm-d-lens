@@ -1,5 +1,5 @@
 """Application-level database configuration ("Step 0" of the cluster creation
-wizard -- see docs/design/cluster-creation-wizard-design.md section 4.0).
+wizard -- see docs/design/cluster-design.md#cluster-creation-wizard section 4.0).
 
 This describes *how the Prism backend process itself connects to its own
 database*, so it cannot be stored in that database (chicken and egg). It is
@@ -39,7 +39,7 @@ class DatabaseBootstrapConfig(StrictModel):
     # Optional when mode == "embedded": a password to enforce on the embedded
     # PostgreSQL superuser instead of pgserver's default trust-based (no
     # password) auth -- see settings.py's _harden_embedded_postgres_password.
-    # Left unset (None) for e.g. scripts/dev.sh's local-dev embedded database,
+    # Left unset (None) for e.g. scripts/lens-local.sh's local-dev embedded database,
     # which intentionally stays password-less for convenience.
     embedded_password: str | None = Field(default=None, alias="embeddedPassword")
     configured_at: datetime = Field(default_factory=utcnow, alias="configuredAt")

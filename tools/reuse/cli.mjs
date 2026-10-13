@@ -32,7 +32,7 @@ function reportDestination(root, path) {
 }
 
 const HELP = `Reuse-first tools (run at any location inside the repository)
-  map                         Regenerate docs/reuse-map.md from the capability catalog
+  map                         Regenerate .reuse/map.md from the capability catalog
   index [--offline]           Build/update local semantic file index (first run downloads model)
   search "requirement description" [--offline] [--limit 8] [--file-limit 6] [--lexical] [--task ID]
                               Semantic file retrieval then chunk ranking; lexical is explicitly separate
@@ -213,13 +213,13 @@ async function main() {
   const errors = validateCatalog(root, catalog);
   if (command === 'map') {
     if (errors.length) throw new Error(errors.join('\n'));
-    write(resolve(root, 'docs/reuse-map.md'), renderMap(catalog));
-    console.log('Updated docs/reuse-map.md; capability meaning still requires source/caller review.');
+    write(resolve(root, '.reuse/map.md'), renderMap(catalog));
+    console.log('Updated .reuse/map.md; capability meaning still requires source/caller review.');
     return;
   }
   const files = sources(root);
   if (command === 'check') {
-    const mapPath = resolve(root, 'docs/reuse-map.md');
+    const mapPath = resolve(root, '.reuse/map.md');
     if (!errors.length && (!existsSync(mapPath) || readFileSync(mapPath, 'utf8') !== renderMap(catalog))) errors.push('Capability map is stale/missing: run npm run reuse:map');
     const purpose = values.purpose || (task ? 'task' : 'audit');
     if (!['audit', 'startup', 'task'].includes(purpose) || (purpose === 'task' && !task) || (task && purpose !== 'task')) throw new Error('Task purpose requires --task; audit/startup cannot claim task evidence');

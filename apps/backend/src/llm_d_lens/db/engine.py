@@ -1,6 +1,6 @@
 """SQLAlchemy Engine/Session construction.
 
-Per docs/design/sqlalchemy-data-access-layer-design.md section 6.7: a
+Per docs/design/database-design.md#data-access-architecture section 6.7: a
 single process-wide Engine + sessionmaker, explicit ``READ COMMITTED``
 isolation (so nobody accidentally relies on a dialect's implicit default),
 short-lived Sessions per DAO call (no long-held sessions), and a

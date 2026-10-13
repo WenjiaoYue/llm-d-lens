@@ -1,0 +1,48 @@
+---
+title: 添加集群并部署模型
+description: 连接集群、下载模型权重并启动 llm-d 部署。
+---
+
+本教程创建一个 **optimized-baseline** 部署，后续可发布为模型服务。
+请使用有权创建集群和部署的账户登录。
+
+## 1. 连接集群
+
+1. 打开 **Clusters → Add（集群 → 新增）**。
+2. 填写集群名称，选择 **I already have a kubeconfig** 并上传文件。
+3. 依次完成 **Network Proxy**、**Model gateway**、**Accelerator** 和 **llm-d stack**。网关保持 **Istio**，加速器选择集群实际使用的类型。
+4. 在 **Model Cache** 中填写令牌设置，勾选 **Create a storage volume for model-cache on this cluster**。
+5. 选择 **hostPath** 或 **NFS**，填写路径、容量等必填项。
+6. 点击 **Review → Finish**，等待完成后点击 **Done**。
+7. 选择新集群，检查工作节点和 **Deployable GPU（可部署 GPU）**。
+
+还没有 Kubernetes 集群时，先按[通过 Kubespray 创建集群](/user-guide/clusters)操作，再完成同一向导。
+存储字段填写方法见[存储](/user-guide/storage)。
+
+## 2. 下载模型
+
+1. 打开 **Model cache → Download model（模型缓存 → 下载模型）**。
+2. 选择刚创建的集群和存储卷。
+3. **Model source** 选择 **Hugging Face**，仓库 ID 填 `Qwen/Qwen3-0.6B`。
+4. 点击 **Start download**，等待模型就绪。
+5. 下载失败时，打开 **View logs**，修正提示的问题后点击 **Retry download**。
+
+## 3. 创建部署
+
+1. 打开 **Model Market（模型市场）**，选择 `Qwen/Qwen3-0.6B`。
+2. 填写部署名称，例如 `qwen-demo`，选择刚才的集群和缓存卷。
+3. 点击 **Advanced → Configure deployment**。
+4. 在 **Guide template** 中选择 **optimized-baseline** 和集群使用的加速器。
+5. 检查预填的 **Runtime image**、**Replicas** 和 **TP**，使用集群支持的推荐资源。
+6. 点击 **Generate YAML**，选择 **Currently available**，再点击 **Confirm & generate**。
+7. 检查生成的配置并修正标出的错误。
+8. 点击 **Next** 创建部署。
+
+## 4. 确认模型就绪
+
+1. 打开 **Deployments（部署）**，找到 `qwen-demo`。
+2. 等待 **Ready（就绪）**，可通过 **View Pods & Logs** 查看启动进度。
+3. 失败时先检查失败提示和 Pod 日志，再创建修正后的配置。
+
+接着[发布模型服务](/tutorials/publish-a-model-service)并发送请求，
+再[运行评估](/tutorials/evaluate-a-deployment)测量性能。

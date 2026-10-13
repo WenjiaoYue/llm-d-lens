@@ -34,12 +34,12 @@ embedded-db = [
     # Only needed when running with LLM_D_BENCH_DB_MODE=embedded (the default);
     # not required for users who connect to their own externally managed
     # PostgreSQL instance via LLM_D_BENCH_DATABASE_URL. See
-    # docs/design/sqlalchemy-data-access-layer-design.md section 4.
+    # docs/design/database-design.md section 4.
     "pgserver>=0.1",
 ]
 # DBAPI drivers for the experimental non-PostgreSQL engines selectable in the
 # Step 0 "connect to a database I already deployed" wizard step (see
-# cluster-creation-wizard-design.md §4.0 and llm_d_lens/db/settings.py's
+# cluster-design.md §4.0 and llm_d_lens/db/settings.py's
 # SUPPORTED_EXTERNAL_ENGINES). Only installed on request -- most deployments
 # only ever need PostgreSQL (bundled unconditionally, see the "psycopg"
 # dependency above).

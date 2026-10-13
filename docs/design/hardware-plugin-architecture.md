@@ -3,7 +3,7 @@
 - **Status:** Draft; core decisions confirmed (§10.3), pending phased implementation.
 - **New design document:** `hardware-plugin-architecture.md`.
 - **Audience:** Python backend, Node/TS gateway, frontend, deployment, and evaluation maintainers.
-- **Related designs:** [Accelerator Observability Services](accelerator-observability-design.md) (the existing and only hardware provider registry), [Cluster Monitoring Service](cluster-monitoring-service-design.md), [Model service v2](model-service-v2-design.md).
+- **Related designs:** [Accelerator Observability Services](observability-design.md#accelerator-observability-services), [Cluster Monitoring Service](observability-design.md#cluster-monitoring-stack-service-design), [Model service](model-service-design.md#lens-model-service-design-per-cluster-native-llm-d).
 
 ---
 
@@ -578,7 +578,7 @@ Core changes replace hardcoding with resolver calls without `if nvidia` branches
 - Delivered: profiles/nvidia.json (extended-resource, gpu.nvidia.com, nvdp/nvidia-device-plugin 0.17.4, nvidia/nvidia-dra-driver-gpu 25.8.0; separate driver.modes.plugin/dra); providers/nvidia.py (profile, read-only presence, Helm driver installation/status); monitoring/accelerator/nvidia_gpu.py (type nvidia_gpu, dcgm-exporter 4.8.4, matching telemetry.provider_id). Entry points are registered; hardware query parameter chooses drivers.
 - Remaining: real-cluster end-to-end verification with upstream modelserver/gpu overlays; unavailable offline without a cluster.
 
-After each phase, run relevant pytest and npm run build. Synchronize the Docusaurus docs under apps/docs/docs/ for UI/API/callable changes as required by AGENTS.md.
+After each phase, run relevant pytest and npm run build. Synchronize the Docusaurus docs under docs/site/i18n/en/docusaurus-plugin-content-docs/current/ for UI/API/callable changes as required by AGENTS.md.
 
 ---
 

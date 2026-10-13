@@ -1,0 +1,89 @@
+---
+title: 模型服务
+description: 发布部署、创建 API 密钥并调用模型。
+---
+
+将就绪的部署发布为模型服务，应用即可使用 API 密钥调用。
+调用已有服务从 **My services（我的服务）**开始；发布服务使用 **Model services（模型服务）**。
+
+## 调用已发布的模型
+
+1. 打开 **My services**。
+2. 在 **Gateway connections（网关连接）**中，点击目标集群旁的 **Copy（复制）**。
+3. 找到模型，点击 **cURL**。
+4. 在 **cURL examples** 中复制请求，保留示例中的地址和请求头。
+5. 将 `lens-mk-...` 替换为你自己的 API 密钥。
+6. 在终端运行请求，确认模型返回回复。
+
+需要记录流式请求用量时，保留 `"stream_options": {"include_usage": true}`。
+生成的聊天示例已包含此设置。
+
+## 创建并保存 API 密钥
+
+1. 打开 **API keys（API 密钥）**，点击 **New key（新建密钥）**。
+2. 在 **Key name（密钥名称）**中填写便于识别的名称，点击 **Create（创建）**。
+3. 在 **Copy your key now** 中点击 **Copy**，立即保存完整密钥。
+4. 保存后点击 **I saved it（我已保存）**。
+
+完整密钥只显示一次，不要分享给其他用户或写入代码仓库。
+
+## 重置或吊销 API 密钥
+
+1. 打开 **API keys**。
+2. 重置默认密钥：点击 **Reset**，复制并保存新密钥，再点击 **I saved it**。
+3. 吊销密钥：打开该行操作，在 **Revoke API key** 中点击 **Revoke**。
+
+旧密钥会失效。重置后请更新所有使用旧密钥的客户端。
+
+## 创建模型服务
+
+1. 打开 **Model services**，点击 **Add model service（添加模型服务）**。
+2. 在 **New service** 中选择部署所在的 **Cluster（集群）**。
+3. 填写 **Model name (user-facing)**，例如 `team-chat`。应用请求中的模型名称使用此值。
+4. 按需填写 **Display name** 和 **Description**。
+5. 点击 **Create**。
+
+## 为服务添加模型服务器
+
+1. 点击 **Add model server（添加模型服务器）**。
+2. 在 **Add provider** 中依次选择 **Cluster**、**Model service** 和 **Deployment**。
+3. 核对 **Derived target (from the deployment)**，确认选中了正确部署，无需手工填写目标。
+4. 点击 **Add provider（添加提供方）**。
+5. 在 **Service flow（服务流程）**中检查状态，然后到 **My services** 复制 **cURL** 请求进行调用。
+
+部署必须与服务位于同一集群。添加多个提供方不会合并它们的容量：
+服务使用第一个活动提供方的资源池。
+
+## 移除提供方或模型服务
+
+1. 在 **Model services** 中打开目标服务的 **HTTPRoute** 节点菜单。
+2. 移除当前提供方：选择 **Remove provider (this cluster)**。移除最后一个提供方也会删除所属模型服务。
+3. 移除所选服务及全部提供方：选择 **Remove model service (all clusters)**。
+4. 核对弹窗中的服务和集群后确认。
+
+**移除已发布路由会中断使用该路由的客户端。**请提前通知调用方。
+
+## 检查和维护服务组件
+
+1. 打开 **Model services → Service flow**，将鼠标悬停在异常状态点上查看原因。
+2. 打开对应组件菜单，按下表操作。
+3. 查看右侧操作日志，确认组件恢复后重试模型请求。
+
+| 目标 | 组件与操作 |
+| --- | --- |
+| 安装缺失的网关 | **Gateway → Install** |
+| 应用已保存的网关和路由设置 | **Gateway → Reconcile**；页面顶部的 **Reconcile** 处理所有有服务成员的集群 |
+| 查看网关日志 | **Gateway → View logs** |
+| 安装载荷处理器 | **IPP → Install IPP** |
+| 启动已停止的组件 | **Gateway**、**IPP** 或 **EPP → Start** |
+| 修改载荷处理设置 | **IPP → Configure**；**Use chart default** 清除自定义设置 |
+| 停止或移除组件 | 对应的 **Stop** 或 **Uninstall** |
+
+**Stop** 和 **Uninstall** 可能中断模型请求，请在计划维护时执行。
+**HTTPRoute** 和 **InferencePool** 只显示状态，没有启动或停止按钮。
+
+## 看不到操作按钮
+
+请管理员检查你的模型服务权限和集群访问范围。不要使用他人的 API 密钥。
+
+部署监控见[可观测性](/user-guide/observability)，服务无法访问时见[故障排查](/troubleshooting)。

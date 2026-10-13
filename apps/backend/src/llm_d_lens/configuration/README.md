@@ -1,16 +1,37 @@
-# Prism Configuration API
+# Lens Configuration API
 
-FastAPI implementation of the configuration contract in [specs/changes/aiconfiguration.md](../../specs/changes/aiconfiguration.md).
+The Configuration domain prepares immutable artifacts for deployment and
+evaluation. The maintained [REST and Python API reference](../../../../../docs/site/i18n/en/docusaurus-plugin-content-docs/current/api-reference/modules/deployments.mdx#configuration-preparation-apis)
+documents the concrete request and response models.
+
+## Workflow and ownership
+
+Users select a candidate source, supply or edit source configurations, and review
+generated artifacts. Capability checking, normalization and validation are domain
+operations rather than separate user-facing stages.
+
+| Operation | Domain responsibility | Output |
+| --- | --- | --- |
+| `resolve_configurations` | Normalize each input, check model/hardware capability, then validate; retain a result per selected configuration | `CandidateConfig` plus errors and warnings |
+| `render_configuration` | Validate candidate and supplied Guide resources, map role parameters and preserve source/bundle provenance | `DeployableConfiguration` |
+| `save_configuration` | Check resource facts and checksums, write immutable artifact content and record its identity | Artifact ID and file metadata |
+| Deployment | Consume the saved artifact, validate runtime requirements and manage Kubernetes resources | Execution, readiness, logs and cleanup |
+
+The candidate source describes where a configuration came from, not its final
+deployment type. Configuration owns input interpretation and publication; Deploy
+owns Pod/Service lifecycle, teardown and rollback. Render and save alone do not
+deploy a service. A file checksum protects bytes, not business semantics.
 
 ## Run locally
 
-From the repository root, in an environment containing the packages in `requirements.txt`:
+From the repository root, with the backend package and dependencies installed
+from `apps/backend/pyproject.toml`:
 
 ```sh
 python -m uvicorn llm_d_lens.api.main:app --host 127.0.0.1 --port 8090
 ```
 
-The backend follows the same module boundary as Prism's Simulation workflow:
+The backend uses the following module boundaries:
 
 - `llm_d_lens.api.main` owns the minimal FastAPI application and health endpoint.
 - `configuration.router` owns HTTP request handling and error translation.
@@ -20,9 +41,14 @@ The backend follows the same module boundary as Prism's Simulation workflow:
 
 `llm_d_lens.configuration.app:app` remains available as a compatibility import.
 
-Prism's Express server proxies `/api/configurations/{resolve,render,save}` to this service. Override the upstream with `CONFIGURATION_API_URL`; set the data root with `LENS_DATA_DIR` (configurations use its `artifacts/configurations` subdirectory) (the default is `~/.local/share/lens/artifacts/configurations`). The logical file path returned to Deploy is `/configs/<artifact-id>/<file>`.
+Lens's Express server proxies configuration requests to this service. Set the data
+root with `LENS_DATA_DIR`; configuration payloads use `artifacts/configurations`
+beneath it (default `~/.local/share/lens/artifacts/configurations`). The logical
+file path returned to Deploy is `/configs/<artifact-id>/<file>`.
 
-The resolve operation calls the in-process AIConfigurator adapter in `llm_d_lens.aic` before normalization and validation. The adapter uses the pinned `aiconfigurator` nightly wheel and does not require a separate prediction service.
+Resolve uses the in-process capability adapter in `llm_d_lens.aic` after
+normalization and before validation. The adapter uses the pinned `aiconfigurator`
+dependency and does not require a separate prediction service.
 
 ## Evaluation configuration integrity
 

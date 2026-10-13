@@ -1,6 +1,6 @@
 """In-memory job/state models for the Kubespray bootstrap flow.
 
-See ``docs/design/CLUSTER_BOOTSTRAP_DESIGN.md`` section 4.4. Nothing here is persisted to
+See ``docs/design/cluster-design.md#kubernetes-bootstrap`` section 4.4. Nothing here is persisted to
 disk beyond the ephemeral working directory a job uses while it runs; the
 job store itself is a plain in-process dict, mirroring
 ``llm_d_lens.cluster.repo_downloads``'s in-memory status pattern.
@@ -51,7 +51,7 @@ class BootstrapNode:
     port: int = 22
     #: Non-empty; a node commonly holds both roles at once (all-in-one /
     #: small clusters where the control-plane is also schedulable) -- see
-    #: docs/design/CLUSTER_BOOTSTRAP_DESIGN.md. Kubespray just needs the host listed in
+    #: docs/design/cluster-design.md#kubernetes-bootstrap. Kubespray just needs the host listed in
     #: both the ``kube_control_plane`` and ``kube_node`` groups for that.
     roles: list[NodeRole] = field(default_factory=lambda: ["worker"])
     username: str = "root"

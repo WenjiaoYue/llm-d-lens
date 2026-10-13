@@ -16,7 +16,7 @@ class StrictModel(BaseModel):
 
 
 class ProxyConfigDTO(StrictModel):
-    """See docs/design/cluster-creation-wizard-design.md section 4.2.
+    """See docs/design/cluster-design.md#cluster-creation-wizard section 4.2.
 
     ``mode="auto"`` today falls back to whatever proxy env vars the Prism
     backend process itself sees (auto-detection of the target cluster's own
@@ -89,7 +89,7 @@ class ClusterSettingsUpdateRequest(StrictModel):
 
 class HfTokenSecretCreateRequest(StrictModel):
     """Standalone "create an HF_TOKEN secret" request, decoupled from any
-    Model Cache entry -- see docs/design/cluster-creation-wizard-design.md
+    Model Cache entry -- see docs/design/cluster-design.md#cluster-creation-wizard
     section 4.4. The resulting secret is then referenced by a normal Model
     Cache ``TokenSourceMode.EXISTING_SECRET`` token source; no new token
     source mode is introduced."""

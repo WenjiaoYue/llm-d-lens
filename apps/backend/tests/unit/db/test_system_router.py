@@ -1,6 +1,6 @@
 """Tests for the "Step 0" system database setup API.
 
-See docs/design/cluster-creation-wizard-design.md section 4.0.
+See docs/design/cluster-design.md#cluster-creation-wizard section 4.0.
 """
 
 from __future__ import annotations

@@ -8,7 +8,7 @@ delta into ``usage_records`` attributed to the token/user behind the
 ``fairness_id``. The pure diff/key helpers stay separate from the I/O
 orchestration so the attribution rules are unit-testable.
 
-Design reference: ``docs/design/model-service-llmd-routing-design.zh-CN.md``
+Design reference: ``docs/design/model-service-design.md#lens-model-service-design-per-cluster-native-llm-d``
 sections 7-9.
 """
 

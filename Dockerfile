@@ -37,7 +37,7 @@ FROM node:26-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-COPY apps/docs/package.json ./apps/docs/package.json
+COPY docs/site/package.json ./docs/site/package.json
 COPY apps/frontend/package.json ./apps/frontend/package.json
 COPY apps/server/package.json ./apps/server/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
@@ -58,7 +58,7 @@ RUN apk add --no-cache curl git kubectl
 
 # Install production dependencies for server
 COPY package*.json ./
-COPY apps/docs/package.json ./apps/docs/package.json
+COPY docs/site/package.json ./docs/site/package.json
 COPY apps/frontend/package.json ./apps/frontend/package.json
 COPY apps/server/package.json ./apps/server/package.json
 COPY packages/shared/package.json ./packages/shared/package.json

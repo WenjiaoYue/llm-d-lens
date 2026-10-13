@@ -37,6 +37,14 @@ unique and assigning every inventory file exactly once. Discuss shared dependenc
 in each analysis even when ownership of a file belongs to another unit. Do not
 mark an entire large module complete using one generic search and explanation.
 
+Track changed, kept, blocked and unreviewed units separately. Deletions still
+require recorded review, and the ten-source fallback counts deleted files.
+New files must be assigned; changed hashes expire prior coverage. Whole-review
+duplicate analysis covers all sources, while registration stays task-diff scoped.
+Late scope additions preserve the original task snapshot; historical tasks without
+one use conservative baseline differences. Failed report generation must not
+leave a stale successful completion claim.
+
 ## Work through every unit
 
 1. Search each sub-capability with `search QUERY --task ID --unit UNIT_ID`; default

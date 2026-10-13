@@ -1,7 +1,7 @@
 """Database connection settings: external DSN vs. embedded PostgreSQL.
 
-Per docs/design/sqlalchemy-data-access-layer-design.md section 4 and
-docs/design/cluster-creation-wizard-design.md ("Step 0: database setup"),
+Per docs/design/database-design.md#data-access-architecture section 4 and
+docs/design/cluster-design.md#cluster-creation-wizard ("Step 0: database setup"),
 Prism supports two mutually exclusive ways to obtain a database connection:
 
 1. External: the user points us at a database instance they already run
@@ -65,7 +65,7 @@ class DatabaseSettings:
     embedded_data_directory: Path
     # Set when mode == "embedded" and a password was configured at install
     # time (see bootstrap_config.py). None means "stay on pgserver's default
-    # trust auth, no password" -- the scripts/dev.sh local-dev case.
+    # trust auth, no password" -- the scripts/lens-local.sh local-dev case.
     embedded_password: str | None = None
 
     @classmethod
@@ -76,7 +76,7 @@ class DatabaseSettings:
         if not external_url and not mode:
             # No explicit ops-provided configuration -- fall back to whatever
             # the "Step 0" wizard flow persisted last time it ran (see
-            # bootstrap_config.py / cluster-creation-wizard-design.md §4.0).
+            # bootstrap_config.py / cluster-design.md#cluster-creation-wizard §4.0).
             from llm_d_lens.db.bootstrap_config import load_bootstrap_config  # noqa: PLC0415
 
             bootstrap = load_bootstrap_config()
@@ -204,7 +204,7 @@ def _harden_embedded_postgres_password(server: object, password: str) -> None:
     ``pgserver`` always runs ``initdb --auth=trust --auth-local=trust`` (see
     its ``postgres_server.py``) and never opens a TCP listener -- only a
     Unix domain socket, reachable solely by the local OS user. That's a
-    reasonable default for e.g. ``scripts/dev.sh``'s local-dev database
+    reasonable default for e.g. ``scripts/lens-local.sh``'s local-dev database
     (``password`` is None there, so this function is never called), but the
     installer (``LensInstaller-Ubuntu-x86_64.sh``) asks the operator to set a
     password as defense in depth. Since PostgreSQL's ``trust`` auth method

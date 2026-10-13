@@ -7,7 +7,7 @@
 # Modes:
 #   Silent mode        : ./LensInstaller-Ubuntu-x86_64.sh --silent [flags]
 #                         No prompts. Uses flags/env vars or sane defaults.
-#                         Suitable for scripted/CI installs (mirrors dev.sh).
+#                         Suitable for scripted/CI installs (mirrors lens-local.sh).
 #   Interactive mode    : ./LensInstaller-Ubuntu-x86_64.sh   (default)
 #                         Asks for the install path and ports, each with a
 #                         sensible default the user can just press Enter to
@@ -179,7 +179,7 @@ DB_USER="${DB_USER:-}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 # Password enforced on the built-in embedded PostgreSQL's superuser (only
 # used when DB_MODE=embedded; see llm_d_lens/db/settings.py's
-# _harden_embedded_postgres_password). Unlike scripts/dev.sh's local-dev
+# _harden_embedded_postgres_password). Unlike scripts/lens-local.sh's local-dev
 # embedded database (intentionally password-less), the installer always
 # requires one -- prompted interactively, or auto-generated for silent
 # installs if not supplied via --db-embedded-password.
@@ -535,7 +535,7 @@ ensure_system_packages() {
     ok "system packages installed"
 }
 
-# ---- Node.js toolchain (adapted from scripts/dev.sh) ------------------------------
+# ---- Node.js toolchain (adapted from scripts/lens-local.sh) ------------------------------
 TOOLS_DIR="$INSTALL_DIR/.tools"
 LOCAL_NODE_DIR="$TOOLS_DIR/node"
 
@@ -1123,7 +1123,7 @@ cmd_uninstall() {
     if [[ "$LENS_IN_PLACE" == "1" ]]; then
         warn "this is an in-place install (running from the source checkout) —"
         warn "only build artifacts will be removed; source files are left untouched."
-        rm -rf node_modules apps/frontend/dist apps/docs/build .venv .tools "$PID_DIR"
+        rm -rf node_modules apps/frontend/dist docs/site/build .venv .tools "$PID_DIR"
         [[ "$mode" == "purge" ]] && rm -f .lens-install.env
         log "build artifacts removed from $ROOT_DIR."
         return 0

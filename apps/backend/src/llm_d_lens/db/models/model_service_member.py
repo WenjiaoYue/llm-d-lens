@@ -1,7 +1,7 @@
 """``model_service_members`` table -- a published deployment backing a group.
 
 Backs ``llm_d_lens.model_service.contracts.ModelServiceMember``.
-Design reference: docs/design/model-service-v2-design.md section 4.3.
+Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

@@ -16,7 +16,7 @@
 // Prism MCP tools are THIN wrappers: every tool handler calls Prism's own
 // existing REST API over loopback HTTP instead of re-implementing cluster,
 // session, or auth logic. This keeps the MCP layer a pure adapter, matching
-// the "no new business logic" principle in docs/design/mcp-playground-design.zh-CN.md.
+// the "no new business logic" principle in docs/design/mcp-playground-design.md#prism-mcp-tools-and-playground-design.
 // -----------------------------------------------------------------------------
 
 import fs from 'fs';

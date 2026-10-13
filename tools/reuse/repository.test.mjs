@@ -71,6 +71,9 @@ test('duplicate evidence catches identifier renaming and reports source location
 test('map rendering is deterministic and tracks changes to capability boundaries', () => {
   const entry = { id: 'json', path: 'src/a.js', symbols: ['load'], purpose: 'JSON', boundaries: 'No streams', examples: ['src/b.js'], tests: [], testNote: 'None' };
   const first = renderMap({ version: 1, entries: [entry] });
+  assert.ok(first.includes('[reuse development guide](../docs/design/reuse-workflow.md)'));
+  assert.ok(first.includes('[src/a.js](../src/a.js)'));
+  assert.ok(first.includes('[src/b.js](../src/b.js)'));
   assert.equal(first, renderMap({ version: 1, entries: [entry] }));
   assert.notEqual(digest(first), digest(renderMap({ version: 1, entries: [{ ...entry, boundaries: 'Streams too' }] })));
 });

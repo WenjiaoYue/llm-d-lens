@@ -1,7 +1,7 @@
 """Durable cluster registry for uploaded kubeconfigs.
 
 Backed by the ``clusters`` table (see
-docs/design/sqlalchemy-data-access-layer-design.md section 5.4.1) via
+docs/design/database-design.md#data-access-architecture section 5.4.1) via
 ``ClusterDao``, instead of one JSON file per cluster under
 ``<data_directory>/clusters``. The public functions below keep their exact
 signatures/behavior from the file-based implementation so every other module
@@ -44,7 +44,7 @@ class Cluster:
     # back to whatever proxy env vars the Prism backend process itself sees,
     # same as pre-wizard behavior; ``mode="custom"`` means the three values
     # below are used verbatim regardless of the backend process environment.
-    # See docs/design/cluster-creation-wizard-design.md section 4.2.
+    # See docs/design/cluster-design.md#cluster-creation-wizard section 4.2.
     proxy_mode: str = "auto"
     http_proxy: str | None = None
     https_proxy: str | None = None
@@ -66,7 +66,7 @@ class Cluster:
     # llm-d Gateway Mode data plane pinned per cluster (wizard Software Versions
     # step): one shared Gateway installed at cluster creation, provider selectable
     # (istio/gke/agentgateway/envoy-ai-gateway). See
-    # docs/design/model-service-llmd-routing-design.zh-CN.md section 5.
+    # docs/design/model-service-design.md#lens-model-service-design-per-cluster-native-llm-d section 5.
     gateway_provider: str | None = None
     gateway_namespace: str | None = None
     gateway_name: str | None = None

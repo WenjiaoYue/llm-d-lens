@@ -50,3 +50,46 @@ test('accepts English text and deleted tracked files; rejects undecodable text',
     assert.throws(() => checkEnglish(root), /non-UTF-8/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('exempts only Chinese locale content, not English docs or site source', () => {
+  const root = mkdtempSync(join(tmpdir(), 'english-check-'));
+  try {
+    execFileSync('git', ['init', '-q', root]);
+    const paths = [
+      'docs/site/i18n/zh-CN/docusaurus-plugin-content-docs/current/overview.mdx',
+      'docs/site/i18n/zh-CN/code.json',
+      'docs/site/i18n/en/docusaurus-plugin-content-docs/current/overview.mdx',
+      'docs/site/i18n/en/code.json',
+      'docs/site/src/pages/index.mdx',
+      'docs/design/cluster-design.md',
+    ];
+    for (const path of paths) {
+      mkdirSync(join(root, path, '..'), { recursive: true });
+      writeFileSync(join(root, path), sample);
+    }
+    const findings = checkEnglish(root);
+    assert.equal(findings.length, 4);
+    for (const path of paths.slice(2)) {
+      assert.ok(findings.some(line => line.startsWith(`${path}:1:`)));
+    }
+    assert.equal(checkEnglish(root, [paths[0]]).length, 5);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('retains filename checks within translations and scopes the locale-label exception', () => {
+  const root = mkdtempSync(join(tmpdir(), 'english-check-'));
+  try {
+    execFileSync('git', ['init', '-q', root]);
+    mkdirSync(join(root, 'docs/site/i18n/zh-CN'), { recursive: true });
+    writeFileSync(join(root, `docs/site/i18n/zh-CN/${sample}.md`), sample);
+    const selfName = String.fromCodePoint(0x7b80, 0x4f53, 0x4e2d, 0x6587);
+    const label = `  'zh-CN': { label: '${selfName}' },`;
+    writeFileSync(join(root, 'docs/site/docusaurus.config.ts'), `${label}\n// ${sample}\n`);
+    writeFileSync(join(root, 'other.config.ts'), label);
+    const findings = checkEnglish(root);
+    assert.equal(findings.length, 3);
+    assert.ok(findings.some(line => line.includes('Chinese characters in filename')));
+    assert.ok(findings.some(line => line.startsWith('docs/site/docusaurus.config.ts:2:')));
+    assert.ok(findings.some(line => line.startsWith('other.config.ts:1:')));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

@@ -1,0 +1,48 @@
+---
+title: Quickstart
+description: Start Lens, deploy a model and send your first request.
+---
+
+Follow this path to get a model response: **install Lens → add a cluster → deploy
+a model → publish a service → send a request**.
+
+## 1. Install and open Lens
+
+On an Ubuntu x86_64 machine, run:
+
+```bash
+git clone https://github.com/llm-d-incubation/llm-d-lens.git
+cd llm-d-lens
+./scripts/LensInstaller-Ubuntu-x86_64.sh
+```
+
+Accept the installer defaults or enter your installation directory and ports.
+Open the URL printed at completion and sign in with the printed administrator
+credentials. To run from source instead, follow [Installation](/installation).
+
+## 2. Add a cluster and deploy a model
+
+1. In **Clusters**, click **Add** and upload the cluster's kubeconfig.
+2. Complete the wizard's proxy, gateway, accelerator, software and model-cache steps, then click **Finish → Done**.
+3. In **Model cache**, download the model into a cache volume and wait for it to be ready.
+4. In **Model Market**, choose the model and cluster. Select **Advanced → Configure deployment** to use an llm-d Guide.
+5. Choose **optimized-baseline**, check the suggested resources, then click **Generate YAML → Confirm & generate → Next**.
+6. In **Deployments**, wait for **Ready**.
+
+For the complete field-by-field walkthrough, use [Add a cluster and deploy a model](/tutorials/bootstrap-and-deploy).
+
+## 3. Publish and call the model
+
+1. In **Model services**, click **Add model service**, choose the cluster, enter the public model name, and click **Create**.
+2. Click **Add model server**, choose the cluster, service and deployment, then click **Add provider**.
+3. In **API keys**, click **New key**, create a key and save it immediately.
+4. In **My services**, find the model and click **cURL**.
+5. Copy the request, replace `lens-mk-...` with your key, and run it in a terminal.
+
+**You are done when the request returns a model reply.** If the gateway is not
+ready, follow [Publish a model service](/tutorials/publish-a-model-service).
+
+## 4. Measure performance
+
+Follow [Evaluate a deployment](/tutorials/evaluate-a-deployment) for a small first
+benchmark. It measures the service you just published without deploying another model.

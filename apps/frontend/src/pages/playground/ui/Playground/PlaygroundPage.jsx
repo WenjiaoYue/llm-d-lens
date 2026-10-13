@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// "Chat with Lens" (docs/design/mcp-playground-design.zh-CN.md, section 6): the
+// "Chat with Lens" (docs/design/mcp-playground-design.md#prism-mcp-tools-and-playground-design, section 6): the
 // user first picks a Cluster, then a Deployment on that cluster as the
 // conversation's model service, then chats with it. The model calls Prism
 // MCP tools (server/mcp); every tool call is shown in a timeline for

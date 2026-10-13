@@ -1,0 +1,98 @@
+---
+title: Model services
+description: Publish deployments as OpenAI-compatible model services behind a shared gateway.
+---
+
+Publish a ready deployment so applications can call it with an API key.
+To call an existing service, start with **My services**; to publish one, use **Model services**.
+
+## Browse published models and copy request examples
+
+1. Open **My services**.
+2. In **Gateway connections**, click **Copy** beside the cluster you want to call.
+3. Find the model you want to call and click **cURL**.
+4. In **cURL examples**, copy the request you need. Keep its URL and headers unchanged.
+5. Replace `lens-mk-...` in the example with one of your own keys before sending the request.
+6. Run the request in a terminal and confirm the model returns a reply.
+
+For streaming usage statistics, keep `"stream_options": {"include_usage": true}`
+in the request. The generated chat example includes it.
+
+## Create and store an API key
+
+1. Open **API keys**.
+2. Click **New key**.
+3. In **Create API key**, enter a value in **Key name**.
+4. Click **Create**.
+5. In **Copy your key now**, click **Copy** and store the full token immediately.
+6. After you have saved the token, click **I saved it**.
+
+## Reset or revoke an API key
+
+1. Open **API keys**.
+2. To rotate the default key, click **Reset**. Lens immediately opens **Copy your key now** for the replacement token.
+3. In **Copy your key now**, click **Copy**, save the new token, then click **I saved it**.
+4. To remove a key completely, use the row action button for that key and open **Revoke API key**.
+5. In **Revoke API key**, click **Revoke**.
+
+Resetting or revoking a key stops clients using the old key from authenticating.
+Update those clients with the replacement key.
+
+## Create a model service
+
+1. Open **Model services**.
+2. Click **Add model service**.
+3. In **New service**, choose the **Cluster (required)** containing your deployment.
+4. Fill in **Model name (user-facing)**, for example `team-chat`. Applications use this name in requests.
+5. Optionally fill in **Display name (optional)** and **Description**.
+6. Click **Create**.
+
+## Add a model server to a model service
+
+1. On **Model services**, click **Add model server**.
+2. In the **Add provider** drawer, choose the **Cluster** first, then the **Model service** in that cluster, then one of its **Deployment** options (only deployments in the service's cluster can be providers).
+3. Check **Derived target (from the deployment)** to confirm you chose the right deployment; no manual target entry is needed.
+4. Click **Add provider**.
+5. Check the service's status in **Service flow**, then open **My services** and send a copied **cURL** request.
+
+Choose a deployment in the service's cluster. Adding several providers does not
+combine their capacity: the service publishes the first active provider's pool.
+
+## Remove a model service or a provider
+
+1. Open **Model services**.
+2. On a model service's **HTTPRoute** node, open its menu.
+3. Choose **Remove provider (this cluster)** to remove that provider. Removing the last provider also removes its model service.
+4. To remove the selected service and all its providers, choose **Remove model service (all clusters)**.
+5. Review the affected service and cluster in the dialog, then confirm.
+
+**Removing a published route interrupts clients using it.** Notify callers before removal.
+
+## Manage the data-plane components
+
+1. Open **Model services → Service flow** and hover an unhealthy status dot to read the problem.
+2. Open that component's menu and use the action below.
+3. Read the operation log in the right-hand panel. Confirm the component recovers, then retry the service request.
+
+| Goal | Component and action |
+| --- | --- |
+| Install a missing gateway | **Gateway → Install** |
+| Apply saved gateway and route settings | **Gateway → Reconcile**, or page-level **Reconcile** for all clusters with members |
+| Inspect gateway logs | **Gateway → View logs** |
+| Install the payload processor | **IPP → Install IPP** |
+| Restart a stopped component | **Gateway**, **IPP** or **EPP → Start** |
+| Edit payload-processor settings | **IPP → Configure**; **Use chart default** removes your custom settings |
+| Stop or remove a component | Its **Stop** or **Uninstall** action |
+
+**Stop** and **Uninstall** can interrupt model requests. Use them only during planned
+maintenance. **HTTPRoute** and **InferencePool** show state but have no start/stop buttons.
+
+## Permissions
+
+If an action is missing, ask an administrator to check your model-service
+permissions and cluster access. Do not use another account's API key.
+
+## Related pages
+
+Use [Observability](/user-guide/observability) to monitor deployments and
+[Troubleshooting](/troubleshooting) when a published service cannot be reached.

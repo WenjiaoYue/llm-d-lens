@@ -1,6 +1,6 @@
 """Model-service domain service: groups, members, usage and gateway authorize.
 
-Design reference: docs/design/model-service-v2-design.md sections 4-9.
+Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // -----------------------------------------------------------------------------
-// "Talk with your Prism" chat orchestrator (docs/design/mcp-playground-design.zh-CN.md
+// "Talk with your Prism" chat orchestrator (docs/design/mcp-playground-design.md#prism-mcp-tools-and-playground-design
 // section 3.1). This is the ONLY component that speaks both protocols:
 //   - OpenAI-compatible chat/completions + tools/tool_calls, to the
 //     Deployment the user picked in the Playground as the model service.

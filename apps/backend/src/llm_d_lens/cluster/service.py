@@ -835,7 +835,7 @@ async def create_hf_token_secret(cluster: registry.Cluster, namespace: str, name
     """Create a standalone ``HF_TOKEN`` Secret for the wizard's Model Cache step.
 
     Decoupled from any Model Cache entry (see
-    docs/design/cluster-creation-wizard-design.md section 4.4): the caller
+    docs/design/cluster-design.md#cluster-creation-wizard section 4.4): the caller
     is expected to reference the resulting namespace/name via a normal
     ``TokenSourceMode.EXISTING_SECRET`` token source afterwards. Uses
     ``kubectl create`` (not ``apply``) so a name collision surfaces as an

@@ -3,7 +3,7 @@
 The cluster installs ONE shared Gateway (provider-selectable) at creation; each
 model service publishes an HTTPRoute -> InferencePool plus IPP model-mapping.
 Deployments own their InferencePool + EPP and run no proxy. Design reference:
-docs/design/model-service-llmd-routing-design.zh-CN.md sections 5/10.
+docs/design/model-service-design.md#lens-model-service-design-per-cluster-native-llm-d sections 5/10.
 """
 
 from __future__ import annotations

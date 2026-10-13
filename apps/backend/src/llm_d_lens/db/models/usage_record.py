@@ -2,7 +2,7 @@
 
 Backs ``llm_d_lens.model_service.contracts.UsageRecord``. This version stores
 token counts and routing identity only; no pricing/cost columns (see design
-section 1.3). Design reference: docs/design/model-service-v2-design.md section 4.5.
+section 1.3). Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

@@ -1,0 +1,95 @@
+---
+title: Deployments
+description: Find deployments, check readiness, view logs and remove unused services.
+---
+
+Open **Deployments** to check whether a model is ready, inspect a failure, or manage an existing deployment.
+
+## Open the deployment creation flow
+
+1. In the left navigation, open **Deployments**.
+2. In the page header, click **Create**.
+3. Follow [Create a deployment](/user-guide/model-market). The new deployment appears in this list after submission.
+
+## Find a deployment in the list
+
+1. Review the summary cards at the top of the page: **Total**, **Ready**, **In progress**, **Failed**, and **Cleaned**.
+2. In the list toolbar, type in **Search deployments** to match a deployment by name, description, model, namespace, guide, or ID.
+3. Open **Status** to filter by deployment state.
+4. Open the cluster selector and choose **All clusters** or one cluster.
+5. If needed, change **Rows per page** and use the pager to move through the list.
+6. If no rows match, click **Clear filters**.
+
+## View deployment details
+
+1. In the deployment row, click the action with tooltip **View details**.
+2. In the drawer, review the sections **Basic Information**, **Model & Serving Engine**, **Cluster & Environment**, **Network & Endpoints**, and **Audit & Timeline**.
+3. Use the copy buttons beside values such as **Namespace**, **Cluster Session ID**, **Container Image**, **Internal Endpoint**, **Forwarded Endpoint**, or **Execution ID** when you need to reuse them elsewhere.
+4. If the deployment failed, read the failure banner before making changes.
+
+Wait for **Ready** before calling the deployment. For **In progress**, check the pod logs for startup progress. For **Failed**, read the failure banner and the affected pod's logs.
+
+## View pods and stream logs
+
+1. To see pod status inline, click the row toggle with tooltip **Show pods**.
+2. In the expanded row, review the pod table columns **Pod**, **Status**, **Restarts**, **Node**, and **Pod IP**.
+3. For the full log viewer, click the action with tooltip **View Pods & Logs**.
+4. Use the node filter or search fields to find the pod.
+5. Click a pod card to open **Pod Logs:** for that pod.
+6. If a pod has multiple containers, choose the needed **Container: ...** entry.
+7. Select **100 lines**, **200 lines**, **500 lines**, or **1000 lines** to change the log tail length.
+8. Turn **Previous** on if you need the previous container log.
+9. Leave **Auto-refresh (5s)** enabled to keep the pod list and logs live.
+10. Use **Filter log lines...** to narrow the log output, or click **Copy** to copy the current log text.
+
+## Create a local port-forward for a ready deployment
+
+1. Find a deployment that is already **Ready**.
+2. In that row, click the action with tooltip **Create local port-forward**.
+3. Wait for the success notice **Local endpoint connected**.
+4. Copy the updated local endpoint from the table if you want to call the service from your workstation.
+
+## Open deployment monitoring and profiling
+
+1. In the deployment row, click the action with tooltip **Deployment monitoring**.
+2. If monitoring has not been installed yet, click **Install**.
+3. If monitoring is present but paused, click **Enable**.
+4. When monitoring is enabled, use **Open Grafana** or **Open Prometheus** to open the dashboards in a new tab.
+5. Click **Profiling** to jump to the profiling view for that deployment.
+6. Use **Disable** to stop monitoring without uninstalling it.
+7. Use **Uninstall** to remove deployment monitoring from that service.
+
+## Edit the deployment name and description
+
+1. In the deployment row, click the action with tooltip **Edit name and description**.
+2. In **Edit deployment**, update **Display name** and **Description**.
+3. Click **Save changes**.
+4. If you decide not to keep the edit, click **Cancel**.
+To change the model, image, resources or cluster, [create a new deployment](/user-guide/model-market); this dialog only edits its name and description.
+
+## Share a deployment with another user or group
+
+1. In the deployment row, click the action with tooltip **Share deployment**.
+2. In **Share deployment**, choose **Share with**: **User** or **Group**.
+3. Pick the target from **User** or **Group**.
+4. Choose **Permission on this deployment**.
+5. Click **Share**.
+6. To remove a share later, click the **Revoke access** action beside that user or group.
+7. Click **Close** when you are finished.
+
+## Delete a deployment
+
+1. In the deployment row, click the action with tooltip **Delete deployment**.
+2. In **Delete deployment**, review **Execution ID**, **Cluster**, and **Namespace**.
+3. Leave **Also delete the Kubernetes namespace** checked if you want Lens to remove the namespace and everything inside it, or clear it to remove only the deployment record.
+4. In **Type `<phrase>` to confirm**, enter the exact confirmation phrase shown in the dialog.
+5. Click **Delete deployment**.
+6. If you do not want to continue, click **Cancel**.
+
+## Cannot find a deployment or action?
+
+Clear the search, status and cluster filters first. If the deployment or action
+is still unavailable, ask an administrator to check your cluster access or the
+deployment's sharing settings.
+
+To let applications call a ready deployment, [publish a model service](/tutorials/publish-a-model-service).

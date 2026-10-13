@@ -1,0 +1,41 @@
+---
+title: 评估一个部署
+description: 对已发布的模型服务运行小负载，查看并保存报告。
+---
+
+本教程向现有服务发送十个正式请求，不创建新部署。
+开始前先[发布部署并创建 API 密钥](/tutorials/publish-a-model-service)。
+
+## 1. 选择服务
+
+1. 打开 **Evaluation → New Task（评估 → 新建任务）**。
+2. 选择 **Use existing endpoint（使用现有端点）**。
+3. 选择 **Model service（模型服务）**，将自己的密钥填入 **Model access token**。
+4. 点击 **Next**。
+
+列表中没有该服务时，到 **Model services** 检查是否已发布且健康。
+
+## 2. 设置小负载
+
+1. 在 **Benchmark & comparison** 中选择 **Custom workload（自定义负载）**。
+2. **Task name** 填 `first-benchmark`，**Benchmark runner** 保持 **inference-perf**，**Traffic workers** 保持 `1`。
+3. 点击 **Add matrix**，再点击 **Add ISL/OSL point**。
+4. **ISL** 填 `128`、**OSL** 填 `64`，删除其他长度行。
+5. 点击 **Add concurrency stage**，**Concurrency** 填 `1`、**Requests** 填 `10`，删除其他阶段。
+6. 点击 **Launch evaluation（启动评估）**。
+
+## 3. 查看并保存结果
+
+1. 在任务列表找到 `first-benchmark`，点击 **Results（结果）**。
+2. 等待任务结束；失败时查看 **Benchmark logs（基准测试日志）**。
+3. 检查成功率、**TTFT（首 token 耗时）**、**TPOT（每输出 token 耗时）**和输出吞吐量。
+4. 点击 **Download Report（下载报告）**保存结果。
+
+## 4. 增加负载
+
+使用相同服务和令牌创建新任务，添加 `1`、`4`、`8` 三个并发阶段，
+保持输入输出长度不变，再比较延迟和错误率。
+更复杂的负载设置见[评测参数](/evaluation/parameters)。
+
+要比较不同模型资源，使用[基于配置的评估](/user-guide/evaluation)。
+**部署**页的编辑弹窗只修改名称和描述，不修改资源分配。

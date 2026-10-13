@@ -12,7 +12,7 @@ Documentation-only edits require reference checks, not semantic indexing.
 ## Before changing code
 
 Record the task-start commit with `git rev-parse HEAD`. Start task evidence before
-implementation: `npm run reuse -- begin --task TASK_ID`. Read `docs/reuse-map.md`.
+implementation: `npm run reuse -- begin --task TASK_ID`. Read `.reuse/map.md`.
 Resume an existing task rather than resetting its baseline to hide committed work.
 Fill `.cache/reuse/tasks/TASK_ID.json`: `applicableSkills` (repo-relative paths),
 `operations` (explicit operation names) and `analysis` (capability, candidate paths,
@@ -108,8 +108,8 @@ automatic deletion, source deduplication or historical migration.
 Before creating or extracting a shared module, apply the naming table in
 [ui](../ui/SKILL.md) or
 [backend](../backend/SKILL.md), as appropriate.
-Use the [shared code guide](../../../docs/refactoring/shared-code-guide.md)
-for the existing inventory and directory conventions.
+Use the [capability map](../../../.reuse/map.md) for the existing inventory;
+the UI and backend skill tables own placement and naming conventions.
 
 - State the target path and exported symbol with the reuse decision.
 - Use the existing capability owner; do not introduce duplicate `common`,
@@ -118,7 +118,7 @@ for the existing inventory and directory conventions.
 - Apply conventions to new files. Preserve established public imports and
   existing file extensions; unrelated legacy renames are outside the task.
 - Before delivery, check filenames, exported symbols, test names, imports and
-  catalog paths. Keep the guide and affected skill tables consistent when
+  catalog paths. Keep affected skill tables and catalog entries consistent when
   changing a naming convention. Record capability IDs in `kebab-case`.
 
 ## Human decision handoff
@@ -203,8 +203,8 @@ never remove the obligation to pause on uncertainty discovered by reading code.
 5. Report reused/extended/extracted entries, new implementation rationale, checks,
    and any user decisions. Complete the PR's reuse section when creating a PR.
 
-See [the tool guide](../../../docs/refactoring/reuse-first-agent-design.md) for scope, exit codes and CI behavior.
-`scripts/dev.sh start/restart` regenerates and checks the map as a fallback before
+See [the tool guide](../../../docs/design/reuse-workflow.md) for scope, exit codes and CI behavior.
+`scripts/lens-local.sh start/restart` regenerates and checks the map as a fallback before
 service changes; agents still register and validate capabilities during the task.
 
 Task evidence and command logs are ignored local artifacts. Attach/export the task
@@ -213,7 +213,7 @@ Git commit. Never put secrets in commands or evidence. Stage records correspond 
 DISCOVERY (begin/search), REUSE_ANALYSIS (analysis), DECISION_GATE (ledger),
 IMPLEMENTATION (Git diff), REGISTRATION (candidate dispositions) and VERIFICATION
 (captured command results/report). Their existence does not enforce editor order.
-Host behavior acceptance scenarios: [protocol](../../../specs/changes/reuse-agent-scenarios.md).
+Host behavior acceptance scenarios: [protocol](../../../docs/design/reuse-workflow.md#agent-host-acceptance-protocol).
 
 
 ## Large modules and comprehensive review

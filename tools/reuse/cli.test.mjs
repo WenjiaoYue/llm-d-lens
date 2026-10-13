@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -17,11 +17,18 @@ function setup(t) {
   return { root, put, run };
 }
 
-test('check rejects stale map and invalid base instead of quietly passing', t => {
-  const { run, put } = setup(t);
+test('map stays under .reuse and check rejects missing or stale maps and invalid bases', t => {
+  const { run, put, root } = setup(t);
   assert.equal(run('map').status, 0);
+  assert.match(readFileSync(join(root, '.reuse/map.md'), 'utf8'), /\[src\/a.js\]\(\.\.\/src\/a.js\)/);
+  assert.equal(existsSync(join(root, 'docs')), false);
   assert.equal(run('check').status, 0);
-  put('docs/reuse-map.md', 'old map');
+  rmSync(join(root, '.reuse/map.md'));
+  const missing = run('check');
+  assert.equal(missing.status, 1, missing.stderr);
+  assert.match(missing.stdout, /stale\/missing/);
+  assert.equal(run('map').status, 0);
+  put('.reuse/map.md', 'old map');
   const stale = run('check');
   assert.equal(stale.status, 1, stale.stderr);
   assert.match(stale.stdout, /map/);

@@ -5,7 +5,7 @@
 
 Preflight (§3.2) is intentionally exposed as a separate, synchronous-ish
 step the frontend calls before ``start_bootstrap`` -- see
-``docs/design/CLUSTER_BOOTSTRAP_DESIGN.md`` §2/§3. This module only starts the real,
+``docs/design/cluster-design.md#kubernetes-bootstrap`` §2/§3. This module only starts the real,
 slow ``ansible-playbook cluster.yml`` run once every node has already
 passed that quick check.
 """

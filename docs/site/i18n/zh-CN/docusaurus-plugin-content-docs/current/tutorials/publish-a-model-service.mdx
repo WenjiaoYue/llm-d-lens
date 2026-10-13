@@ -1,0 +1,51 @@
+---
+title: 发布模型服务
+description: 发布就绪的部署，并发送带认证的模型请求。
+---
+
+先准备一个[已就绪的 llm-d 部署](/tutorials/bootstrap-and-deploy)。
+发布操作需要模型服务管理权限。
+
+## 1. 创建公开模型名称
+
+1. 打开 **Model services**，点击 **Add model service（添加模型服务）**。
+2. 选择部署所在的 **Cluster（集群）**。
+3. 在 **Model name (user-facing)** 中填写名称，例如 `qwen-demo`。
+4. 点击 **Create（创建）**。
+
+## 2. 关联部署
+
+1. 点击 **Add model server（添加模型服务器）**。
+2. 依次选择 **Cluster**、刚创建的 **Model service** 和已就绪的 **Deployment**。
+3. 核对 **Derived target (from the deployment)**，点击 **Add provider**。
+4. 在 **Service flow（服务流程）**中查看各组件状态点。
+
+没有可选部署时，确认它与服务位于同一集群，且通过提供 InferencePool 的 llm-d Guide 创建。
+
+## 3. 检查网关
+
+1. 在 **Service flow** 中找到该集群的 **Gateway** 节点。
+2. 未安装时，打开节点菜单并点击 **Install（安装）**。
+3. 需要重新应用设置时，点击 **Reconcile（协调）**。
+4. 查看操作日志，等待网关和服务组件变为健康状态。
+
+地址不正确时，在 **Clusters → Edit cluster → Gateway host/IP** 中修改。
+安装失败的处理方法见[故障排查](/troubleshooting)。
+
+## 4. 创建 API 密钥
+
+1. 打开 **API keys → New key**。
+2. 填写名称，例如 `first-call`，点击 **Create**。
+3. 点击 **Copy**，保存完整密钥，再点击 **I saved it**。
+
+完整密钥只显示一次。不要写入代码或分享给其他用户。
+
+## 5. 发送请求
+
+1. 打开 **My services（我的服务）**，找到 `qwen-demo`。
+2. 点击 **cURL**，再点击聊天请求示例旁的 **Copy**。
+3. 粘贴到终端，将 `lens-mk-...` 替换为自己的密钥，保留其他请求头和地址。
+4. 运行请求，确认模型返回回复。
+
+现在可以[评估该服务](/tutorials/evaluate-a-deployment)。
+应用代码接入示例见[集成](/integrations)。

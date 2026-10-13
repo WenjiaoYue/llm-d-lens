@@ -20,7 +20,7 @@ from pathlib import Path
 from llm_d_lens.infrastructure.process import CommandNotFoundError, run_sync
 from llm_d_lens.infrastructure.storage.paths import storage_path
 
-#: Matches the version referenced throughout ``docs/design/CLUSTER_BOOTSTRAP_DESIGN.md``
+#: Matches the version referenced throughout ``docs/design/cluster-design.md#kubernetes-bootstrap``
 #: (the latest tag as of the design's research pass). Bump deliberately,
 #: not automatically, so behaviour doesn't drift silently.
 KUBESPRAY_TAG = "v2.31.0"
@@ -61,11 +61,10 @@ def ensure_ready(tag: str = KUBESPRAY_TAG) -> Path:
 
     This is a slow, blocking operation (git clone + pip install) -- callers
     running inside the event loop must wrap it in ``asyncio.to_thread``.
-    Intentionally *not* invoked automatically as part of every bootstrap
-    job: an operator is expected to provision this once via an explicit
-    setup step/CLI command (see ``docs/design/CLUSTER_BOOTSTRAP_DESIGN.md`` §9, M1),
-    since it requires outbound network access to GitHub/PyPI which may not
-    be available at request-serving time in every deployment.
+    Bootstrap jobs call this when the readiness check fails (see
+    ``docs/design/cluster-design.md#kubernetes-bootstrap`` §4.2).
+    Operators may pre-provision the checkout when outbound access is not
+    available during jobs; ready checkouts are reused.
     """
     dest = checkout_dir(tag)
     if not (dest / ".git").exists():
@@ -95,8 +94,8 @@ def ensure_ready(tag: str = KUBESPRAY_TAG) -> Path:
 def require_ready(tag: str = KUBESPRAY_TAG) -> Path:
     """Like :func:`ensure_ready` but never clones/installs -- raises
     :class:`CommandNotFoundError` if the pinned checkout isn't already
-    provisioned, for use on the request-serving path (see M1 in the design
-    doc: provisioning happens out-of-band, not on-demand per bootstrap)."""
+    provisioned. The caller decides whether to provision in a background
+    job or surface the missing dependency."""
     if not is_ready(tag):
         raise CommandNotFoundError(
             f"Kubespray {tag} is not provisioned at {checkout_dir(tag)}; "

@@ -1,0 +1,93 @@
+---
+title: Clusters
+description: Connect a Kubernetes cluster, prepare it for models and manage its nodes.
+---
+
+Add a cluster before creating storage or deploying a model.
+Use its kubeconfig to connect an existing cluster, or use Kubespray to create one on your machines.
+
+## Register a cluster from a kubeconfig
+
+1. Open **Clusters** and click **Add**.
+2. Enter **Cluster name**. Keep **I already have a kubeconfig**, click **Browse**, and choose the file.
+3. Click **Next**. If connection or version checks fail, correct the reported problem before continuing.
+4. On **Network Proxy**, keep **Auto-detect this cluster's proxy (recommended)**. To supply a proxy, choose **Custom proxy for this cluster** and fill in the proxy fields.
+5. On **Model gateway**, keep **Provider** on **Istio** and check the addresses using the table below.
+6. On **Accelerator**, select the accelerator types installed in the cluster and their driver access modes.
+7. On **llm-d stack**, review the listed versions and click **Next**. Wait for source downloads and image preparation to finish.
+8. On **Model Cache**, keep the suggested secret namespace/name and paste a **HuggingFace token** from your [Hugging Face settings](https://huggingface.co/settings/tokens). To prepare a cache now, select **Create a storage volume for model-cache on this cluster** and fill in its path and capacity.
+9. Click **Review**, check the summary, then click **Finish**.
+10. Wait for the operations to finish and click **Done**. Select the cluster in the list and check **Workers** and **Deployable GPU**.
+
+| Model gateway field | What to enter |
+| --- | --- |
+| **Gateway exposed port (NodePort)** | The port clients will use to call models |
+| **Gateway host/IP** | A host or IP reachable by clients; leave blank to let Lens derive it |
+| **Lens address** | The Lens host or IP reachable from the cluster; keep the auto-filled address if it is reachable |
+| **Node inotify limit** | Keep the initial value unless your administrator requires a different limit |
+
+The wizard installs software and prepares images on cluster nodes. Run it against
+a cluster you are authorized to manage. A failed preparation step must be corrected
+before completing the wizard.
+
+## Bootstrap a new cluster via Kubespray
+
+1. Open **Clusters → Add** and enter the cluster name.
+2. Choose **Bootstrap a new cluster via Kubespray**.
+3. For each machine, enter **Host(s)**, **Port**, **Role(s)**, **Username**, and an **SSH private key** or **SSH password**. Use **Add node** for more machines.
+4. Under **Network proxy for target nodes**, keep **Auto** to reuse each machine's settings, or choose **Custom for these nodes** and enter the proxy.
+5. Click **Run preflight**. Fix failed checks and run preflight again until every host passes.
+6. Click **Start bootstrap** and follow its progress.
+7. When the generated kubeconfig appears, continue through the registration steps above to **Finish** and **Done**.
+
+Bootstrap changes the target machines. Check their addresses and roles before starting.
+
+## Edit a cluster
+
+1. Select the cluster, then click **Edit cluster**.
+2. Change its name, description, proxy or model-gateway settings.
+3. Click **Save changes** and check that the updated values appear.
+
+Component versions are supplied by the Lens release and are not editable here.
+
+<span id="model-gateway-prerequisites" />
+
+## Check model gateway access
+
+1. In **Clusters → Edit cluster**, check **Gateway host/IP** and **Gateway exposed port** against the address clients can reach.
+2. Open **Model services** and locate this cluster's **Gateway** node.
+3. Open the node menu and choose **Install** if the gateway is absent, or **Reconcile** to apply its saved settings.
+4. Follow the operation logs, then [publish a model service and send a request](/tutorials/publish-a-model-service).
+
+If installation or requests fail, use [Troubleshooting](/troubleshooting).
+The create/edit wizard currently offers **Istio**; instructions for manually
+repairing other providers belong to troubleshooting, not the normal registration flow.
+
+## Review cluster health and deployments
+
+1. Select a cluster in **Clusters**.
+2. Check **Workers**, **CPU**, **Memory**, **Deployable GPU**, **VRAM**, **Disk**, and **Monitoring**.
+3. In **Deployments**, use **Copy endpoint** to copy an address, or **View Pods & Logs** to inspect a deployment.
+4. In a deployment's **Monitoring** menu, choose **Open Grafana**, **Open Prometheus**, or **Profiling**.
+
+For log filters and namespace deletion, follow [Manage deployments](/user-guide/deployments).
+
+## Put worker nodes into maintenance mode
+
+1. In the cluster's **Workers** list, select the nodes.
+2. Click **Enter maintenance mode**, review the names, then click **Cordon nodes**.
+3. After maintenance, select the nodes, click **Exit maintenance mode**, and confirm **Uncordon nodes**.
+
+**Cordon stops new pods from being scheduled; it does not stop or move existing pods.**
+Plan any required workload shutdown or migration separately.
+
+## Delete a cluster registration
+
+1. Open the cluster's **Actions → Delete cluster**.
+2. Check the cluster name and the deletion warning.
+3. Click **Delete** and confirm the registration disappears from the list.
+
+## Cannot see a cluster?
+
+Ask an administrator to check your cluster assignment. Maintainers manage assigned
+clusters; administrators can manage all clusters.

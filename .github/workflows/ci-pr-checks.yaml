@@ -46,6 +46,7 @@ jobs:
         with:
           filters: |
             code:
+              - 'docs/site/**'
               - '!docs/**'
               - '!**/*.md'
               - '!LICENSE'

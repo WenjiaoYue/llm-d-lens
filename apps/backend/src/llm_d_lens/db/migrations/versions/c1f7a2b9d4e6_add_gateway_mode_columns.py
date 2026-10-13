@@ -9,7 +9,7 @@ Adds the cluster-scoped llm-d Gateway Mode data plane columns:
 - model_service_groups: cluster scope, engine served name, IPP base model.
 - model_service_members: deployment-owned InferencePool + EPP references.
 
-Design reference: docs/design/model-service-llmd-routing-design.zh-CN.md
+Design reference: docs/design/model-service-design.md#lens-model-service-design-per-cluster-native-llm-d
 sections 5/6. All new columns are nullable so existing rows stay valid.
 """
 

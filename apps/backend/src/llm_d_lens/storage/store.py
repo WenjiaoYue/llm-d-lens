@@ -1,7 +1,7 @@
 """Durable storage for Storage-owned volume records.
 
 Backed by the ``storage_volumes`` table (see
-docs/design/sqlalchemy-data-access-layer-design.md section 5.4.2) via
+docs/design/database-design.md#data-access-architecture section 5.4.2) via
 ``StorageVolumeDao``, instead of one JSON file per record. Keeps the
 exact public surface of the old file-based ``StorageVolumeStore``
 (``create``/``get``/``list``/``save``/``delete``) so callers (Storage

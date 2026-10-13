@@ -2,7 +2,7 @@ import { applyClusterCrds, downloadClusterSoftware, listLensHosts, loadClusterCr
 import { requestJson } from '../../../shared/api/httpClient';
 // Multi-step "Create Cluster" wizard.
 //
-// See docs/design/cluster-creation-wizard-design.md for the full design.
+// See docs/design/cluster-design.md#cluster-creation-wizard for the full design.
 // Step 1 creates the cluster immediately (so Step 2-4 have a real
 // `cluster_id` to attach kubeconfig-backed operations to); Step 2/3 PATCH
 // the cluster's proxy/version-pin settings; Step 4 (optional) prewarms a
@@ -121,7 +121,7 @@ export function CreateClusterWizard({ onClose, onCreated }) {
     const [description, setDescription] = useState('');
     const [file, setFile] = useState(null);
     // "I have kubeconfig" (upload) vs "Bootstrap via Kubespray" -- see
-    // docs/design/CLUSTER_BOOTSTRAP_DESIGN.md. Bootstrapping only ever produces a
+    // docs/design/cluster-design.md#kubernetes-bootstrap. Bootstrapping only ever produces a
     // kubeconfig string that gets wrapped into a synthetic File below, so
     // every other Step 1 field/validation/submit path stays untouched.
     const [kubeconfigSource, setKubeconfigSource] = useState('upload'); // 'upload' | 'bootstrap'

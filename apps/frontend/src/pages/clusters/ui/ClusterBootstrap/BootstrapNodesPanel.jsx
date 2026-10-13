@@ -1,6 +1,6 @@
 import { requestJson } from '../../../../shared/api/httpClient';
 // Kubespray-based "bootstrap a K8s cluster" sub-flow for Step 1 of the
-// Create Cluster wizard. See docs/design/CLUSTER_BOOTSTRAP_DESIGN.md at the repo root
+// Create Cluster wizard. See docs/design/cluster-design.md#kubernetes-bootstrap at the repo root
 // for the full design; this component only talks to
 // `/api/cluster/bootstrap/*` and, once a bootstrap job succeeds, hands the
 // resulting kubeconfig text back to the caller via `onKubeconfigReady` --
@@ -46,7 +46,7 @@ export function BootstrapNodesPanel({ onKubeconfigReady, onCancel }) {
     const [hostKeysConfirmed, setHostKeysConfirmed] = useState(false);
     // Flat list of expanded-host results from the last preflight run --
     // each row's `host` spec may expand to several hosts (see
-    // docs/design/CLUSTER_BOOTSTRAP_DESIGN.md §3.1), so results aren't 1:1 with rows
+    // docs/design/cluster-design.md#kubernetes-bootstrap §3.1), so results aren't 1:1 with rows
     // and are shown as a separate list rather than inline per row.
     const [preflightResults, setPreflightResults] = useState(null); // null | [{host, roles, state, error}]
     const [error, setError] = useState('');

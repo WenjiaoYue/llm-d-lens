@@ -167,6 +167,6 @@ Pause and get explicit approval (and record it as a new `D<n>` in the design doc
 
 - `make test-python` (auth + owning domain) and `make test-js`; `npm run type-check`.
 - `npm run reuse:check -- --base <task-start-commit>`; update `.reuse/catalog.json`
-  and regenerate `docs/reuse-map.md` when you add/extract a capability.
-- Restart the backend (`scripts/dev.sh restart`) before manual verification:
+  and regenerate `.reuse/map.md` when you add/extract a capability.
+- Restart the backend (`scripts/lens-local.sh restart`) before manual verification:
   middleware, route registry and Node env changes are not hot-reloaded.

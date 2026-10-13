@@ -4,7 +4,7 @@ Reuses the auth domain's token primitives (``generate_session_token`` /
 ``hash_session_token``) so model tokens and login sessions share one random/hash
 implementation, while living in a separate table and namespace.
 
-Design reference: docs/design/model-service-v2-design.md section 5.
+Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ tables (see ``llm_d_lens/db/models/``), so their field names are the source of
 truth for the DAO ``column_map`` dot-paths. HTTP payloads use the camelCase
 aliases via ``model_dump(by_alias=True)``.
 
-Design reference: docs/design/model-service-v2-design.md sections 4-6.
+Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

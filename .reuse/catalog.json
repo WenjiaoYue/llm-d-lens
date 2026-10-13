@@ -580,14 +580,14 @@
         "useDebouncedValue"
       ],
       "purpose": "Debounced React value propagation with timer cleanup.",
-      "boundaries": "Caller owns normalization, requests and cancellation; initial value is immediate; delay defaults to 300ms.",
+      "boundaries": "Caller owns normalization, requests and cancellation; initial value is immediate; delay defaults to 300ms. Pending timers are cleared on value/delay replacement and unmount.",
       "examples": [
         "apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx",
         "apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx",
         "apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx"
       ],
       "tests": [],
-      "testNote": "React StrictMode browser checks: debounce replacement, notice replacement/expiry, copy timer replacement and unmount; see docs/refactoring/nine-shared-capabilities.md."
+      "testNote": "Historical manual React StrictMode browser checks reported debounce replacement and unmount cleanup passing. The temporary Playwright script and logs were not committed; no dedicated automated hook test is registered, and this is not current verification evidence."
     },
     {
       "id": "transient-notice",
@@ -596,14 +596,14 @@
         "useNotice"
       ],
       "purpose": "Transient notice state with automatic expiry.",
-      "boundaries": "Returns useState-compatible pair; 4000ms default, timer resets when message changes and cleans up on unmount; no business text.",
+      "boundaries": "Returns useState-compatible pair; 4000ms default, timer resets when message changes and cleans up on unmount; same-value updates retain useState semantics and do not restart the timer; no business text.",
       "examples": [
         "apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx",
         "apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx",
         "apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx"
       ],
       "tests": [],
-      "testNote": "React StrictMode browser checks: debounce replacement, notice replacement/expiry, copy timer replacement and unmount; see docs/refactoring/nine-shared-capabilities.md."
+      "testNote": "Historical manual React StrictMode browser checks reported notice replacement, expiration and unmount cleanup passing. The temporary Playwright script and logs were not committed; no dedicated automated hook test is registered, and this is not current verification evidence."
     },
     {
       "id": "collection-pagination",
@@ -674,7 +674,7 @@
       "tests": [
         "apps/frontend/src/shared/lib/browserActions.test.js"
       ],
-      "testNote": "React StrictMode browser checks: debounce replacement, notice replacement/expiry, copy timer replacement and unmount; see docs/refactoring/nine-shared-capabilities.md."
+      "testNote": "Historical manual React StrictMode browser checks reported consecutive copy timers and unmount before copy completion passing without page errors. The temporary Playwright script and logs were not committed. browserActions.test.js covers clipboard/download primitives, not React hook lifecycle; this historical note is not current verification evidence."
     },
     {
       "id": "kubernetes-namespace",
@@ -893,7 +893,7 @@
       "purpose": "Offline legacy data copy, artifact backfill and non-destructive retention inventory.",
       "boundaries": "Dry-run default, explicit --apply copies without deleting sources or overwriting conflicts. Stop writers before apply. Only known local path fields rebase; cache executable bits preserved, symlinks skipped. Reindex retains unknown historical provenance. Retention reports candidates; domain delete APIs own removal.",
       "examples": [
-        "specs/changes/unified-artifact-storage.md"
+        "docs/design/storage-layout.md"
       ],
       "tests": [
         "apps/backend/tests/unit/infrastructure/storage/test_admin.py"
@@ -1519,7 +1519,7 @@
       "boundaries": "Only when auth is enabled and the users table is empty; gated by PRISM_ADMIN_AUTOSEED. Generated passwords go to $LENS_DATA_DIR/credentials/initial_admin.txt (mode 600) and are removed after the password changes. Env-supplied passwords are never written to disk. Account is created with must_change_password=true.",
       "examples": [
         "apps/backend/src/llm_d_lens/api/main.py",
-        "scripts/dev.sh"
+        "scripts/lens-local.sh"
       ],
       "tests": [
         "apps/backend/tests/unit/auth/test_bootstrap.py",

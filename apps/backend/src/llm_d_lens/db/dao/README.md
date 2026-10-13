@@ -3,7 +3,7 @@
 This document is for developers writing **service-layer** code (routers, background
 jobs, business logic modules, etc.) who need to read or write structured data that
 now lives in the database. It does not cover how the DAO/DAL layer is implemented
-internally -- see `docs/design/sqlalchemy-data-access-layer-design.md` for that.
+internally -- see `docs/design/database-design.md` for that.
 
 ## The short version
 
@@ -157,6 +157,6 @@ for case in run.cases:
 ## Adding a new table?
 
 That's a DAO/Row-layer concern, not a service-layer one -- see
-`docs/design/sqlalchemy-data-access-layer-design.md` (sections 5-6) for how to
+`docs/design/database-design.md` (sections 5-6) for how to
 define a new `*Row` model, its `column_map`, and its DAO. Once that exists, service
 code consumes it exactly like every example above.

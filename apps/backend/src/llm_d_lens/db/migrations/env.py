@@ -7,7 +7,7 @@ import llm_d_lens.db.models  # noqa: F401
 
 # Import the models package so Base.metadata is fully populated before
 # autogenerate compares it against the live database (see
-# docs/design/sqlalchemy-data-access-layer-design.md section 8, step 2).
+# docs/design/database-design.md#data-access-architecture section 8, step 2).
 # `llm_d_lens.db.models.__init__` is the single registration list.
 from llm_d_lens.db.base import Base
 from llm_d_lens.db.settings import DatabaseSettings, resolve_database_url

@@ -10,7 +10,7 @@
     a best-effort historical tool for a database that still needs pre-DB JSON
     imported; new installs never need to run it.
 
-See design doc ``docs/design/sqlalchemy-data-access-layer-design.md`` section 8
+See design doc ``docs/design/database-design.md#data-access-architecture`` section 8
 ("Rollout plan", step 3) and section 12 (Appendix A, legacy path list).
 
 Usage::

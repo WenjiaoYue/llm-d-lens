@@ -11,11 +11,11 @@
 > [`.agents/skills/database/SKILL.md`](../../.agents/skills/database/SKILL.md),
 > [`.agents/skills/ui/SKILL.md`](../../.agents/skills/ui/SKILL.md),
 > [`.agents/skills/deployment/SKILL.md`](../../.agents/skills/deployment/SKILL.md),
-> [`docs/reuse-map.md`](../../docs/reuse-map.md),
+> [`.reuse/map.md`](../../.reuse/map.md),
 > [`storage-layout.md`](storage-layout.md),
-> [`db-table-schema-design.md`](db-table-schema-design.md),
-> [`cluster-monitoring-service-design.md`](cluster-monitoring-service-design.md),
-> [`accelerator-observability-design.md`](accelerator-observability-design.md).
+> [`database-design.md`](database-design.md#5-database-schema-design-including-foreign-key-relationships),
+> [`observability-design.md`](observability-design.md#cluster-monitoring-stack-service-design),
+> [`observability-design.md`](observability-design.md#accelerator-observability-services).
 
 ---
 
@@ -144,7 +144,7 @@ optional `owner_group_id` (team ownership, §7.4/§7.14).
     `localStorage.prism_github_access_token` in `src/api/monitoringClient.js:5`, `src/utils/download.js:41`,
     and `src/components/SimulationDashboard.jsx:123/1353`, but there is **no writer anywhere**
     in the repository; the roles `user`/`admin` appear only in documentation
-    (`cluster-monitoring-service-design.md:100-101`). **This header has been removed in this implementation
+    (`observability-design.md:100-101`). **This header has been removed in this implementation
     and replaced by login sessions.**
 - Key structural fact: the browser communicates only with Node/Express, and Python is accessed only on loopback
   behind the Node proxy; moreover, `server/backend-api-proxy.ts:52` and `server/monitoring.ts:21`
@@ -547,7 +547,7 @@ Authentication is no longer a single enum mode, but **a set of enabled `identity
   validation, map everyone to built-in `admin`; requires `PRISM_ALLOW_UNAUTHENTICATED=true` and
   `NODE_ENV!=production`, with a conspicuous warning logged on startup).
 - Backward compatibility for old switch: recognize `SIMULATION_ALLOW_UNAUTHENTICATED=true` as an alias for `disabled`
-  (`cluster-monitoring-service-design.md:100-101`), to be deprecated in the next major version.
+  (`observability-design.md:100-101`), to be deprecated in the next major version.
 - **Two-path conflicts** (decisions D15/D18): `(provider_id, external_id)` is unique; when usernames conflict,
   **reject creation and show a prompt**; v1 does not support account linking. Multiple external providers
   may be enabled at the same time in v1 (decision D16).
@@ -672,7 +672,7 @@ Why DB sessions instead of JWT/Redis:
     `PRISM_ADMIN_PASSWORD` is recommended.
   - Regardless of source, the account is set with `must_change_password=true`; after login, `App` forcibly enters
     the password-change page, and after a successful password change, the credential file is automatically deleted.
-  - `dev.sh start/restart` reads and prints the file contents after services are ready (if it exists).
+  - `lens-local.sh start/restart` reads and prints the file contents after services are ready (if it exists).
 - Other bootstrap/recovery methods: `POST /api/v1/auth/bootstrap` (only when there are no users; returns
   `409` if the table is non-empty); CLI `python -m llm_d_lens.auth.cli {create-admin|reset-password|list-users}`
   (already implemented, used for operations recovery; `reset-password` unlocks the account and forces a password change).
@@ -874,7 +874,7 @@ The table below is the core of “refined permissions”. `R` = read-like, `W` =
 > `monitoring:accelerator:install` / `monitoring:gpu-driver:install` are
 > **cluster-level infrastructure** and remain executable only by `maintainer` / `admin`.
 > Note: deployment monitoring depends on the cluster monitoring stack being `ready` (see
-> [`cluster-monitoring-service-design.md`](cluster-monitoring-service-design.md));
+> [`observability-design.md`](observability-design.md#cluster-monitoring-stack-service-design));
 > when it is not ready, end-user operations fail with a prompt, but their permissions are not elevated because of that.
 
 #### 6.3.10 Assistant and MCP (`playground`, `server/mcp`)
@@ -974,7 +974,7 @@ bindings (for example, “maintainer of cluster A + end-user of cluster B”).
 
 - **Subordinate resources**: storage volume, model cache entry, deployment run/execution,
   evaluation, simulation, and configuration all carry `cluster_id`
-  (see [`db-table-schema-design.md`](db-table-schema-design.md)), so a
+  (see [`database-design.md`](database-design.md#5-database-schema-design-including-foreign-key-relationships)), so a
   `cluster` binding naturally covers their visibility and operation rights.
 - **Resource-level bindings** (enabled in v1): share a **single deployment** (run/execution) to a
   user/group, see §7.7. storage volume / model cache entry stay at the `cluster`
@@ -1526,7 +1526,7 @@ Pagination/filtering reuse the existing DTO + DAO conventions; import/export is 
 | Default-open behavior | Unregistered routes denied by default + startup self-check |
 | Key rotation | `LENS_SECRET_KEY` uses multiple keys: `LENS_SECRET_KEY` (current) + `LENS_SECRET_KEYS_OLD` (comma-separated old keys) for fallback decryption; after rotation, re-encrypt LDAP/OIDC secrets; rotating `LENS_INTERNAL_AUTH_SECRET` requires Node and Python to restart together (otherwise signatures mismatch) |
 | Documentation exposure | `/api/simulation/docs`, `/redoc`, `/openapi.json` are disabled by default in production (`PRISM_EXPOSE_API_DOCS=false`), or placed behind authentication, to avoid exposing the full route and permission registry |
-| Sensitive logging | Audit/access logs must not record passwords/tokens/keys/Secret contents (aligned with `cluster-monitoring-service-design.md:417-419`) |
+| Sensitive logging | Audit/access logs must not record passwords/tokens/keys/Secret contents (aligned with `observability-design.md:417-419`) |
 | Rate limiting | login/logout/password-change/bootstrap endpoints get independent limits (stricter than global `/api`), keyed by both `IP` and `username`; the existing global limiter is effectively disabled (`server/server.js:47-54`) and cannot serve as authentication protection |
 
 ---
@@ -1565,7 +1565,7 @@ Pagination/filtering reuse the existing DTO + DAO conventions; import/export is 
 - See §9.2 for the adjusted mount order in `server.js`.
 - `.deploy_config.example` and the installer-written environment: inject `LENS_SECRET_KEY`,
   `LENS_INTERNAL_AUTH_SECRET` through secrets; in production set `PRISM_COOKIE_SECURE=true`.
-- `scripts/dev.sh`: for development paths other than the default `PRISM_AUTH_MODE=disabled`,
+- `scripts/lens-local.sh`: for development paths other than the default `PRISM_AUTH_MODE=disabled`,
   provide a bootstrap admin; keep `SIMULATION_ALLOW_UNAUTHENTICATED` compatibility.
 - In production, `NODE_ENV=production` must be set and both keys must be non-empty; otherwise startup fails fast.
 
@@ -1695,8 +1695,8 @@ And per workflow, run
 
 ### 17.3 Documentation consistency
 
-- Update `docs/reuse-map.md` (generated by `npm run reuse:map`, do not edit by hand).
-- If this design conflicts with the `X-Prism-Github-Token` description in `cluster-monitoring-service-design.md:100-101`,
+- Update `.reuse/map.md` (generated by `npm run reuse:map`, do not edit by hand).
+- If this design conflicts with the `X-Prism-Github-Token` description in `observability-design.md:100-101`,
   follow the compatibility strategy in this design and link back.
 - The permission matrix is a product contract; future page/interface changes must update both this file and `permissions.py`.
 
@@ -1999,7 +1999,7 @@ Connected through `llm_d_lens/auth/access.py` (`current_principal` / `visible_cl
   `PRISM_EXPOSE_API_DOCS` (local default is disabled).
 - **Frontend account UI**: show the current user and “Sign out” at the bottom of the sidebar.
 - **First-login prompt**: on empty-DB startup, automatically seed an admin, generate/read credentials and print a banner, and write to
-  `credentials/initial_admin.txt` (0600); `dev.sh` prints it after services are ready; login then forces a password change,
+  `credentials/initial_admin.txt` (0600); `lens-local.sh` prints it after services are ready; login then forces a password change,
   and changing the password deletes the file (§5.4).
 - **Centralized model registration**: `llm_d_lens/db/models/__init__.py` becomes the single model registration list,
   and `system_router._create_tables` / root `conftest.py` / `migrations/env.py` all switch to using it,

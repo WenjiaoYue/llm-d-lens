@@ -4,7 +4,7 @@ The publish form only needs the cluster + execution; namespace/service/port/
 kind are read from the persisted execution (never trusted from the request
 body). Reuses the same fields ``deploy/endpoint.py`` parses.
 
-Design reference: docs/design/model-service-gateway-deployment.md section 4.1.
+Design reference: docs/design/model-service-design.md#model-service-gateway-deployment-and-operations-guide-llm-d-gateway-mode section 4.1.
 """
 
 from __future__ import annotations

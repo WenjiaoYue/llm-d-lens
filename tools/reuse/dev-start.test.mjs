@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, copyFileSync, symlinkSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, copyFileSync, symlinkSync, existsSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -11,26 +11,61 @@ function setup(t) {
   const put = (path, text) => { mkdirSync(resolve(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), text); };
   put('src/a.js', 'export function load() { return 1; }');
   put('.reuse/catalog.json', JSON.stringify({ version: 1, entries: [{ id: 'load', path: 'src/a.js', symbols: ['load'], purpose: 'Load', boundaries: 'Local only', examples: ['src/a.js'], tests: [], testNote: 'None' }] }));
-  put('docs/reuse-map.md', 'stale');
+  put('.reuse/map.md', 'stale');
   mkdirSync(join(root, 'scripts'));
   mkdirSync(join(root, 'tools'));
-  copyFileSync('scripts/dev.sh', join(root, 'scripts/dev.sh'));
+  copyFileSync('scripts/lens-local.sh', join(root, 'scripts/lens-local.sh'));
   copyFileSync('scripts/storage-env.sh', join(root, 'scripts/storage-env.sh'));
   symlinkSync(resolve('tools/reuse'), join(root, 'tools/reuse'));
+  mkdirSync(join(root, 'llm-d/guides'), { recursive: true });
+  put('bin/kubectl', `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$LENS_TEST_ROOT/kubectl-calls"
+if [[ "\${LENS_TEST_KUBECTL_EXIT:-0}" != 0 ]]; then
+  echo "Cluster unavailable" >&2
+  exit "$LENS_TEST_KUBECTL_EXIT"
+fi
+printf '%s\\n' "$LENS_TEST_NODE_JSON"
+`);
+  chmodSync(join(root, 'bin/kubectl'), 0o755);
   execFileSync('git', ['init', '-q', root]);
   execFileSync('git', ['add', '.'], { cwd: root });
   execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'baseline'], { cwd: root });
   // Only service/environment boundaries are replaced. Real shell dispatch,
   // map generation, Git scope, validation and decision checks execute.
-  const run = command => spawnSync('bash', ['-c', `
-    source ./dev.sh
+  const run = (command, { args = [], env = {}, overrides = '', cwd = join(root, 'scripts') } = {}) => spawnSync('bash', ['-c', `
+    source "$1"
+    shift
     ensure_node() { :; }
     ensure_node_modules() { :; }
     ensure_venv() { :; }
+    cmd_check() { echo check >> "$ROOT_DIR/events"; }
     cmd_stop() { echo stop >> "$ROOT_DIR/events"; }
-    start_services() { echo start >> "$ROOT_DIR/events"; }
-    dev_main "$1"
-  `, 'test', command], { cwd: join(root, 'scripts'), encoding: 'utf8' });
+    cmd_clean() { printf 'clean:%s\\n' "$1" >> "$ROOT_DIR/events"; }
+    start_services() {
+      echo start >> "$ROOT_DIR/events"
+      "$LENS_TEST_NODE" -e 'console.log(JSON.stringify(Object.fromEntries(["TARGET_NODE","PRISM_K8S_TARGET_NODE","KUBECONFIG","PRISM_GPU_PCI_ALLOWLIST","LLM_D_BENCH_NAMESPACE_PREFIX","LLM_D_BENCH_KUBECTL_TIMEOUT_SECONDS"].map(key => [key, process.env[key] ?? null]))))' > "$ROOT_DIR/exported.json"
+    }
+    ${overrides}
+    lens_local_main "$@"
+  `, 'test', join(root, 'scripts/lens-local.sh'), command, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TARGET_NODE: '',
+      PRISM_K8S_TARGET_NODE: '',
+      PRISM_GPU_PCI_ALLOWLIST: '',
+      KUBECONFIG: undefined,
+      LLM_D_BENCH_NAMESPACE_PREFIX: undefined,
+      LLM_D_BENCH_KUBECTL_TIMEOUT_SECONDS: undefined,
+      LLM_D_BENCH_KUBECTL_PATH: join(root, 'bin/kubectl'),
+      LLM_D_ROOT: join(root, 'llm-d'),
+      LENS_TEST_ROOT: root,
+      LENS_TEST_NODE: process.execPath,
+      LENS_TEST_NODE_JSON: JSON.stringify({ metadata: { name: 'node-a' }, spec: {}, status: { conditions: [{ type: 'Ready', status: 'True' }] } }),
+      ...env,
+    },
+  });
   return { root, put, run };
 }
 
@@ -38,9 +73,99 @@ test('restart from scripts regenerates the map and validates it before restartin
   const { root, run } = setup(t);
   const result = run('restart');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(readFileSync(join(root, 'docs/reuse-map.md'), 'utf8'), /src\/a.js/);
+  assert.match(readFileSync(join(root, '.reuse/map.md'), 'utf8'), /src\/a.js/);
+  assert.equal(existsSync(join(root, 'docs')), false);
   assert.equal(readFileSync(join(root, 'events'), 'utf8'), 'stop\nstart\n');
   assert.equal(JSON.parse(readFileSync(join(root, '.cache/reuse/startup-report.json'), 'utf8')).status, 'CHECKED');
+});
+
+test('target flags override environment and export constraints without injecting deployment defaults', t => {
+  const { root, run } = setup(t);
+  const result = run('restart', {
+    args: ['--target-node', 'node-a', '--kubeconfig', 'cluster config.yaml'],
+    env: { TARGET_NODE: 'node-b', PRISM_K8S_TARGET_NODE: 'node-c', KUBECONFIG: '/old/config', PRISM_GPU_PCI_ALLOWLIST: '0000:01:00.0' },
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(readFileSync(join(root, 'events'), 'utf8'), 'stop\nstart\n');
+  assert.equal(readFileSync(join(root, 'kubectl-calls'), 'utf8'), '--request-timeout=30s get node node-a -o json\n');
+  assert.deepEqual(JSON.parse(readFileSync(join(root, 'exported.json'))), {
+    TARGET_NODE: 'node-a',
+    PRISM_K8S_TARGET_NODE: 'node-a',
+    KUBECONFIG: join(root, 'scripts/cluster config.yaml'),
+    PRISM_GPU_PCI_ALLOWLIST: '0000:01:00.0',
+    LLM_D_BENCH_NAMESPACE_PREFIX: null,
+    LLM_D_BENCH_KUBECTL_TIMEOUT_SECONDS: null,
+  });
+});
+
+test('environment target mode preserves kubeconfig file lists and leaves device selection to the backend', t => {
+  const { root, run } = setup(t);
+  const result = run('start', { env: { TARGET_NODE: 'node-a', KUBECONFIG: '/cluster/a:/cluster/b' }, cwd: root });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const exported = JSON.parse(readFileSync(join(root, 'exported.json')));
+  assert.equal(exported.PRISM_K8S_TARGET_NODE, 'node-a');
+  assert.equal(exported.KUBECONFIG, '/cluster/a:/cluster/b');
+  assert.equal(exported.PRISM_GPU_PCI_ALLOWLIST, '');
+  assert.equal(readFileSync(join(root, 'kubectl-calls'), 'utf8').split('\n').filter(Boolean).length, 1);
+});
+
+test('legacy target environment remains supported and check never starts services', t => {
+  const { root, run } = setup(t);
+  const result = run('check', { env: { PRISM_K8S_TARGET_NODE: 'node-a' } });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(readFileSync(join(root, 'events'), 'utf8'), 'check\n');
+  assert.ok(existsSync(join(root, 'kubectl-calls')));
+});
+
+for (const command of ['start', 'check']) test(`${command} without a target does not query Kubernetes or require a Guide checkout`, t => {
+  const { root, run } = setup(t);
+  const result = run(command, { env: { LLM_D_ROOT: '/missing', LLM_D_BENCH_KUBECTL_PATH: '/missing' } });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(!existsSync(join(root, 'kubectl-calls')));
+  if (command === 'start') assert.equal(JSON.parse(readFileSync(join(root, 'exported.json'))).KUBECONFIG, null);
+});
+
+for (const [name, env, overrides, message] of [
+  ['unreachable cluster', { LENS_TEST_KUBECTL_EXIT: '1' }, '', /not accessible/],
+  ['not ready', { LENS_TEST_NODE_JSON: '{"metadata":{"name":"node-a"},"status":{"conditions":[{"type":"Ready","status":"False"}]}}' }, '', /Ready and not cordoned/],
+  ['cordoned', { LENS_TEST_NODE_JSON: '{"metadata":{"name":"node-a"},"spec":{"unschedulable":true},"status":{"conditions":[{"type":"Ready","status":"True"}]}}' }, '', /Ready and not cordoned/],
+  ['missing conditions', { LENS_TEST_NODE_JSON: '{"metadata":{"name":"node-a"}}' }, '', /Ready and not cordoned/],
+  ['wrong node', { LENS_TEST_NODE_JSON: '{"metadata":{"name":"node-b"},"status":{"conditions":[{"type":"Ready","status":"True"}]}}' }, '', /Ready and not cordoned/],
+  ['malformed response', { LENS_TEST_NODE_JSON: 'not-json' }, '', /Ready and not cordoned/],
+  ['missing kubectl', { LLM_D_BENCH_KUBECTL_PATH: '/missing' }, '', /executable kubectl/],
+  ['missing jq', {}, 'command() { if [[ "$*" == "-v jq" ]]; then return 1; fi; builtin command "$@"; }', /require jq/],
+  ['missing checkout', { LLM_D_ROOT: '/missing' }, '', /containing guides/],
+]) test(`restart rejects ${name} before stopping existing services`, t => {
+  const { root, run } = setup(t);
+  const result = run('restart', { env: { TARGET_NODE: 'node-a', ...env }, overrides });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, message);
+  assert.ok(!existsSync(join(root, 'events')));
+});
+
+for (const [command, args, status] of [
+  ['restart', ['--target-node'], 2],
+  ['restart', ['--target-node', ''], 2],
+  ['restart', ['--kubeconfig', '--target-node', 'node-a'], 2],
+  ['restart', ['--target-node', 'INVALID_NODE'], 1],
+  ['restart', ['--target-config', 'unused.env'], 2],
+  ['restart', ['--yes'], 2],
+  ['stop', ['--target-node', 'node-a'], 2],
+  ['unknown', [], 2],
+]) test(`invalid invocation is rejected: ${command} ${args.join(' ')}`, t => {
+  const { root, run } = setup(t);
+  const result = run(command, { args });
+  assert.equal(result.status, status, result.stdout + result.stderr);
+  assert.ok(!existsSync(join(root, 'events')));
+  assert.ok(!existsSync(join(root, 'kubectl-calls')));
+});
+
+for (const command of ['stop', 'status', 'clean', 'install-node', '--help']) test(`${command} remains independent of target-node connectivity`, t => {
+  const { root, run } = setup(t);
+  const result = run(command, { args: command === 'clean' ? ['--yes'] : [], env: { TARGET_NODE: 'INVALID_NODE', LLM_D_BENCH_KUBECTL_PATH: '/missing' } });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(!existsSync(join(root, 'kubectl-calls')));
+  if (command === 'clean') assert.equal(readFileSync(join(root, 'events'), 'utf8'), 'clean:--yes\n');
 });
 
 test('invalid registration stops restart before touching running services', t => {

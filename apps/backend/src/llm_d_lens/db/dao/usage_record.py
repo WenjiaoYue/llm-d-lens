@@ -1,6 +1,6 @@
 """DAO for the per-request usage ledger.
 
-Design reference: docs/design/model-service-v2-design.md section 4.5.
+Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "workspaces": [
-    "apps/docs",
+    "docs/site",
     "apps/frontend",
     "apps/server",
     "packages/shared"

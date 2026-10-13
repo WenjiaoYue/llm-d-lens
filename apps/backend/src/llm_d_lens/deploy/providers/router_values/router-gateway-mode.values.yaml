@@ -3,7 +3,7 @@
 # The deployment keeps its EPP + InferencePool but runs NO proxy/gateway: the
 # cluster-shared Gateway (installed once at cluster creation, provider-selectable)
 # fronts it through the model service's HTTPRoute. See
-# docs/design/model-service-llmd-routing-design.zh-CN.md section 5.1.
+# docs/design/model-service-design.md section 5.1.
 router:
   proxy:
     enabled: false

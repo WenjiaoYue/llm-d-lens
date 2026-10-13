@@ -1,0 +1,54 @@
+---
+title: 模拟
+description: 向模型重放请求流量，检查延迟、吞吐量和错误。
+---
+
+使用 **Simulation（模拟）**，将请求轨迹数据集重放到模型服务或指定端点。
+
+## 创建模拟任务
+
+1. 打开 **Simulation**，点击 **New Task（新建任务）**。
+2. 在 **Benchmark & Endpoint** 中选择 **Benchmark tool（测试工具）**。
+3. 在 **Inference Endpoint（推理端点）**中，按下表选择 **Model Service** 或 **Endpoint URL**。
+4. 填写 **Model access token（访问令牌）**，检查解析出的 **Model（模型）**。
+5. 在 **Scenario & Prompt** 中选择场景和 **Trace dataset（轨迹数据集）**。未下载时点击 **Download dataset**。
+6. 数据集有时间线时，选择重放起止位置、缩放系数和持续时间。
+7. 在 **Load & Backend** 中检查 **Stream responses（流式响应）**；需要判断是否达标时，再填写 TTFT、TPOT 或错误率目标。
+8. 在 **Task Details** 中填写 **Task name（任务名称）**和可选描述。
+9. 点击 **Create Task（创建任务）**，打开新任务卡片查看进度。
+
+| 端点选项 | 需要提供 |
+| --- | --- |
+| **Model Service** | 已发布且健康的模型服务，以及个人模型访问令牌 |
+| **Endpoint URL** | 待测试的地址；服务要求认证时还需令牌 |
+
+没有服务或令牌时，先[发布模型服务](/tutorials/publish-a-model-service)。
+首次运行保留 **Advanced backend settings（高级后端设置）**。
+
+## 查看结果
+
+1. 打开任务卡片。
+2. 在 **Summary（摘要）**中检查任务状态、已完成请求和主要指标。
+3. 在 **Latency（延迟）**中查看 TTFT、TPOT 随时间的变化，在 **Throughput（吞吐量）**中查看处理速率。
+4. 打开 **Errors & Logs（错误与日志）**排查失败。
+5. 在 **Artifacts（产物）**中点击文件旁的 **Download（下载）**。
+
+缺失指标不是零。指标不可用时，先检查 **Task Log（任务日志）**，确认运行或采集是否失败。
+
+## 停止、重跑或删除任务
+
+| 目标 | 操作 |
+| --- | --- |
+| 停止运行中的任务 | 在卡片或详情页点击 **Stop（停止）** |
+| 再跑一次已结束的任务 | 点击 **Rerun（重跑）**，使用相同配置创建新任务 |
+| 删除已结束的任务 | 点击 **Delete（删除）**，核对弹窗后点击 **Delete Task** |
+
+删除前先下载需要保留的文件。
+
+## 查找历史任务
+
+1. 使用搜索、状态卡片、**Model** 或 **Dataset** 缩小范围。
+2. 按日期或端点筛选时，打开 **Advanced Filters**，填写条件并点击 **Apply Filters**。
+3. 使用 **Rows per page** 和分页按钮查看更多结果，**Clear Filters** 清除筛选。
+
+自动化运行见[模拟 API 参考](/api-reference/modules/simulation)。

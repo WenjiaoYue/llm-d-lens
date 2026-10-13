@@ -1,6 +1,6 @@
 """DAO backing the model-service token service.
 
-Design reference: docs/design/model-service-v2-design.md section 4.4.
+Design reference: docs/design/model-service-design.md#6-domain-model
 """
 
 from __future__ import annotations

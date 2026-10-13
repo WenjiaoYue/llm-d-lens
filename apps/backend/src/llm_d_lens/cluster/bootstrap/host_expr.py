@@ -10,7 +10,7 @@
 
 Every worker (and control-plane) node in a batch expanded from one range
 shares the same role selection / SSH credentials -- see
-``docs/design/CLUSTER_BOOTSTRAP_DESIGN.md`` §3.1 and ``service.py``.
+``docs/design/cluster-design.md#kubernetes-bootstrap`` §3.1 and ``service.py``.
 """
 
 from __future__ import annotations

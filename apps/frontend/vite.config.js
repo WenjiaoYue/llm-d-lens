@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import fs from 'fs'
 
-// When TLS_CERT_FILE/TLS_KEY_FILE are set (see scripts/dev.sh and
+// When TLS_CERT_FILE/TLS_KEY_FILE are set (see scripts/lens-local.sh and
 // scripts/generate-self-signed-cert.sh), serve the Vite dev server itself
 // over HTTPS too -- browsers only expose features like microphone access
 // (getUserMedia) in a "secure context" (HTTPS or http://localhost), so a

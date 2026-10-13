@@ -1,7 +1,7 @@
 """``Step 0`` of the cluster creation wizard: application-level database setup.
 
-See docs/design/cluster-creation-wizard-design.md section 4.0 and
-docs/design/sqlalchemy-data-access-layer-design.md section 4 for the full
+See docs/design/cluster-design.md#cluster-creation-wizard section 4.0 and
+docs/design/database-design.md#data-access-architecture section 4 for the full
 design. This module intentionally has nothing to do with any particular
 cluster -- it configures how the *Prism backend process itself* connects to
 its own database, a one-time, global (not per-cluster) step that gates the
@@ -68,7 +68,7 @@ class DatabaseSetupRequest(StrictModel):
     # Only meaningful when mode == "embedded": a password to enforce on the
     # embedded PostgreSQL superuser (see settings.py's
     # _harden_embedded_postgres_password). Optional -- omit for a
-    # password-less embedded database (e.g. scripts/dev.sh's local-dev use).
+    # password-less embedded database (e.g. scripts/lens-local.sh's local-dev use).
     embedded_password: str | None = Field(default=None, alias="embeddedPassword")
 
     @model_validator(mode="after")

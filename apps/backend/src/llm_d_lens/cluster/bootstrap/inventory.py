@@ -1,7 +1,7 @@
 """Render a Kubespray-compatible Ansible inventory + group_vars overrides
 from the node list collected in the bootstrap sub-wizard.
 
-See ``docs/design/CLUSTER_BOOTSTRAP_DESIGN.md`` section 4.2. Pure/side-effect-free
+See ``docs/design/cluster-design.md#kubernetes-bootstrap`` section 4.2. Pure/side-effect-free
 (besides writing the rendered files to a caller-supplied directory) so it
 can be unit tested without any real SSH/Ansible/Kubespray involved.
 """
@@ -16,7 +16,7 @@ import yaml
 from llm_d_lens.cluster.bootstrap.models import BootstrapNode
 
 #: Pinned to match the Kubespray checkout this design targets (see
-#: ``docs/design/CLUSTER_BOOTSTRAP_DESIGN.md`` section 4.1) so behaviour doesn't drift
+#: ``docs/design/cluster-design.md#kubernetes-bootstrap`` section 4.1) so behaviour doesn't drift
 #: silently if upstream changes its defaults.
 KUBESPRAY_NETWORK_PLUGIN = "calico"
 
@@ -83,7 +83,7 @@ def render_inventory(nodes: list[BootstrapNode]) -> dict:
 #: defensively merged into ``no_proxy`` whenever a proxy is configured,
 #: regardless of "auto" vs "custom" mode. CIDRs match Kubespray v2.31.0's
 #: own un-overridden defaults (``kube_service_addresses``/
-#: ``kube_pods_subnet``) -- see ``docs/design/CLUSTER_BOOTSTRAP_DESIGN.md`` §4.2.
+#: ``kube_pods_subnet``) -- see ``docs/design/cluster-design.md#kubernetes-bootstrap`` §4.2.
 _DEFAULT_NO_PROXY_ADDITIONS = [
     "localhost",
     "127.0.0.1",
