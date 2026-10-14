@@ -17,7 +17,7 @@ test('cluster session paths use Lens roots even when old path variables are set'
             const expected = path.join(root, relative, `${session}.yaml`);
             fs.mkdirSync(path.dirname(expected), { recursive: true });
             fs.writeFileSync(expected, 'test');
-            const code = `import { clusterSessionKubeconfig } from './src/services/clusterSession.ts'; process.stdout.write(clusterSessionKubeconfig('${session}') || 'missing');`;
+            const code = `import { clusterSessionKubeconfig } from ${JSON.stringify(new URL('../../src/services/clusterSession.ts', import.meta.url).href)}; process.stdout.write(clusterSessionKubeconfig('${session}') || 'missing');`;
             const output = execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code], {
                 env: { PATH: process.env.PATH, HOME: root, ...env }, encoding: 'utf8',
             });

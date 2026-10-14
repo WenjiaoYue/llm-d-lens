@@ -122,7 +122,9 @@ def standard_cluster_hardware(monkeypatch):
     monkeypatch.setattr("llm_d_lens.cluster.service.build_overview", overview)
 
 
-def test_standard_kubernetes_service_run_keeps_the_requested_name_in_run_provenance(monkeypatch, standard_cluster_hardware):
+def test_standard_kubernetes_service_run_keeps_the_requested_name_in_run_provenance(
+    monkeypatch, standard_cluster_hardware
+):
     captured = {}
 
     async def start_run(request, **_kwargs):

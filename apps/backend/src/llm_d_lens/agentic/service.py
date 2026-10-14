@@ -1097,9 +1097,7 @@ class AgenticDeploymentService:
         # approve path deterministic and ensures ConfigurationAdapter can turn
         # ``modelSecret`` into the provider's deployment policy.
         accelerator = cluster_accelerator(refreshed.cluster_snapshot.get("hardware") or {})
-        configuration = build_agentic_configuration(
-            run.request, selected, run.model_secret, accelerator=accelerator
-        )
+        configuration = build_agentic_configuration(run.request, selected, run.model_secret, accelerator=accelerator)
         configuration.provenance["cluster_ref"] = {
             "id": session.server_id,
             "name": session.server_id,

@@ -1,7 +1,9 @@
 """``model_service_gateway_operations`` table -- gateway ops audit/status.
 
 Backs ``llm_d_lens.model_service.gateway_contracts.GatewayOperation``.
-Design reference: docs/design/model-service-design.md#model-service-gateway-deployment-and-operations-guide-llm-d-gateway-mode sections 4-6.
+Design reference:
+docs/design/model-service-design.md#model-service-gateway-deployment-and-operations-guide-llm-d-gateway-mode
+Sections 4-6.
 """
 
 from __future__ import annotations

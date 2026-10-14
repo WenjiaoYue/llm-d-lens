@@ -1,6 +1,7 @@
 """DAO for model-service gateway operations.
 
-Design reference: docs/design/model-service-design.md#model-service-gateway-deployment-and-operations-guide-llm-d-gateway-mode.
+Design reference:
+docs/design/model-service-design.md#model-service-gateway-deployment-and-operations-guide-llm-d-gateway-mode.
 """
 
 from __future__ import annotations

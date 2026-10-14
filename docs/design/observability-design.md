@@ -761,8 +761,12 @@ All models use `StrictModel` (`extra="forbid"`) consistently with
 ```python
 AcceleratorType = Literal["intel_gpu"]
 GpuAccess = Literal["dra", "plugin"]
-AcceleratorStatus = Literal["unknown", "absent", "installing", "ready", "degraded", "unsupported", "unreachable"]
-ComponentStatus = Literal["ready", "progressing", "degraded", "missing", "external", "unknown"]
+AcceleratorStatus = Literal[
+    "unknown", "absent", "installing", "ready", "degraded", "unsupported", "unreachable"
+]
+ComponentStatus = Literal[
+    "ready", "progressing", "degraded", "missing", "external", "unknown"
+]
 OperationStatus = Literal["queued", "running", "succeeded", "failed"]
 ```
 
@@ -825,7 +829,9 @@ class AccessModeAvailability(StrictModel):
 
 class AcceleratorStatusResponse(StrictModel):
     accelerator: AcceleratorType
-    access_mode: GpuAccess | None = None  # current or most recently installed mode; None when absent/unknown
+    access_mode: GpuAccess | None = (
+        None  # current or most recently installed mode; None when absent/unknown
+    )
     access_modes: list[AccessModeAvailability] = Field(default_factory=list)
     cluster_reachable: bool
     context: str | None = None

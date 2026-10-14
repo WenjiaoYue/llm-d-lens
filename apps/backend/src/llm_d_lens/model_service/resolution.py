@@ -6,7 +6,8 @@ deployment execution, so they only ever reach a backend that is continuously
 health-probed (``ModelService.probe_members``) and currently authorized for
 the caller -- a raw deployment execution's own ready-ness has no such live
 signal. This module centralizes that resolution so both callers share one
-implementation (see docs/design/model-service-design.md#model-service-gateway-deployment-and-operations-guide-llm-d-gateway-mode).
+implementation (see
+docs/design/model-service-design.md#model-service-gateway-deployment-and-operations-guide-llm-d-gateway-mode).
 """
 
 from __future__ import annotations

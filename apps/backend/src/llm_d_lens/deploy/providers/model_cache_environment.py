@@ -31,7 +31,7 @@ _HF_OFFLINE_ENVIRONMENT = {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
 
 
 def model_cache_environment(
-  model_source: str, *, mount_path: str = MODEL_CACHE_MOUNT_PATH, cache_mounted: bool = False, offline: bool = True
+    model_source: str, *, mount_path: str = MODEL_CACHE_MOUNT_PATH, cache_mounted: bool = False, offline: bool = True
 ) -> dict[str, str]:
     """Return the Hugging Face environment for a model-serving Pod.
 
@@ -43,7 +43,7 @@ def model_cache_environment(
     returns an empty mapping so it keeps resolving online.
     """
     if model_source == "auto-cache":
-      return {"HF_HOME": mount_path, **(_HF_OFFLINE_ENVIRONMENT if offline else {})}
+        return {"HF_HOME": mount_path, **(_HF_OFFLINE_ENVIRONMENT if offline else {})}
     if cache_mounted:
         return dict(_HF_OFFLINE_ENVIRONMENT)
     return {}

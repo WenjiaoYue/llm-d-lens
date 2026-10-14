@@ -1808,12 +1808,15 @@ class ExternalIdentity:
     email: str = ""
     groups: tuple[str, ...] = ()  # external group identifiers
 
+
 class IdentityProvider(ABC):
     type: ClassVar[str]  # "local" | "ldap" | "oidc" | ...
     capabilities: ClassVar[ProviderCapabilities]
 
     @abstractmethod
-    async def authenticate(self, credentials: Credentials) -> ExternalIdentity | None: ...
+    async def authenticate(
+        self, credentials: Credentials
+    ) -> ExternalIdentity | None: ...
     @abstractmethod
     async def lookup(self, external_id: str) -> ExternalIdentity | None: ...
     async def search_users(self, query: str) -> list[ExternalIdentity]: ...

@@ -818,13 +818,21 @@ class ClusterRow(Base, DeclarativeDtoMixin):
     proxy_mode: Mapped[str] = mapped_column(String(16), default="auto")
     proxy_http_proxy: Mapped[str | None] = mapped_column(Text, nullable=True)
     # ... (the remaining proxy_*/llm_d_* columns follow the same pattern; see §5.4.1 for types)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
     version_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     __table_args__ = (UniqueConstraint("name", name="uq_clusters_name"),)
-    __mapper_args__ = {"version_id_col": version_id}  # enable SQLAlchemy optimistic locking; see §6.7.3
-    storage_volumes: Mapped[list["StorageVolumeRow"]] = relationship(back_populates="cluster")
+    __mapper_args__ = {
+        "version_id_col": version_id
+    }  # enable SQLAlchemy optimistic locking; see §6.7.3
+    storage_volumes: Mapped[list["StorageVolumeRow"]] = relationship(
+        back_populates="cluster"
+    )
 ```
 
 `id` is assigned separately by the DAO during `create()` (`uuid4().hex[:8]`) and is not included in `column_map` — `id` belongs to the "generation strategy," not to "moving DTO fields," and it is clearer to separate those responsibilities. The same applies to `version_id`: it is an infrastructure column for concurrency control and does not correspond to any DTO field, so it is also absent from `column_map` and is maintained automatically by SQLAlchemy during `flush()`; business code does not need to read or write it manually.
@@ -833,7 +841,9 @@ For Rule 3 (`JSONVariant` free-form fields), Rule 4 (arrays), and Rule 6 (JSONVa
 
 ```python
 JSONVariant = JSON().with_variant(JSONB, "postgresql")
-ArrayVariant = ARRAY(Text).with_variant(JSON, "sqlite")  # SQLite has no native array type, so degrade to JSON
+ArrayVariant = ARRAY(Text).with_variant(
+    JSON, "sqlite"
+)  # SQLite has no native array type, so degrade to JSON
 
 
 class DeploymentEvidenceRow(Base, DeclarativeDtoMixin):
@@ -851,7 +861,9 @@ class DeploymentEvidenceRow(Base, DeclarativeDtoMixin):
         "monitoring_setup": "monitoring_setup",  # Rule 3, nullable
         # ... (remaining columns follow the same pattern; see §5.4.8 for the full list)
     }
-    evidence_id: Mapped[str] = mapped_column(String(36), primary_key=True)  # DTO field name is execution_id
+    evidence_id: Mapped[str] = mapped_column(
+        String(36), primary_key=True
+    )  # DTO field name is execution_id
     artifact_configuration_artifact_ids: Mapped[list[str]] = mapped_column(ArrayVariant)
     artifact_rendered_payload_value: Mapped[dict] = mapped_column(JSONVariant)
     configuration_artifacts: Mapped[list] = mapped_column(JSONVariant)
@@ -878,7 +890,9 @@ class BaseDao:
             try:
                 yield session
             except StaleDataError as exc:
-                raise ConcurrentUpdateError("row was concurrently modified, retry the operation") from exc
+                raise ConcurrentUpdateError(
+                    "row was concurrently modified, retry the operation"
+                ) from exc
 
     @contextmanager
     def _read_only(self) -> Iterator[Session]:
@@ -893,7 +907,9 @@ class StorageVolumeDao(BaseDao):
     def create(self, volume: StorageVolume) -> StorageVolume:
         with self._transaction() as session:
             if session.get(StorageVolumeRow, volume.id) is not None:
-                raise StorageVolumeStoreError(f"storage volume already exists: {volume.id}")
+                raise StorageVolumeStoreError(
+                    f"storage volume already exists: {volume.id}"
+                )
             row = StorageVolumeRow.from_dto(volume)  # DTO → DAO, driven by column_map
             row.id = volume.id
             session.add(row)
@@ -906,7 +922,11 @@ class StorageVolumeDao(BaseDao):
 
     def list(self) -> list[StorageVolume]:
         with self._read_only() as session:
-            rows = session.scalars(select(StorageVolumeRow).order_by(StorageVolumeRow.created_at, StorageVolumeRow.id))
+            rows = session.scalars(
+                select(StorageVolumeRow).order_by(
+                    StorageVolumeRow.created_at, StorageVolumeRow.id
+                )
+            )
             return [row.to_dto() for row in rows]
 
     def save(self, volume: StorageVolume) -> StorageVolume:
@@ -923,7 +943,9 @@ class StorageVolumeDao(BaseDao):
 
     def delete(self, volume_id: str) -> None:
         with self._transaction() as session:
-            session.execute(delete(StorageVolumeRow).where(StorageVolumeRow.id == volume_id))
+            session.execute(
+                delete(StorageVolumeRow).where(StorageVolumeRow.id == volume_id)
+            )
 ```
 
 Each module keeps its original `XxxStoreError` exception type and `default_store()` singleton factory function, with only the internals pointing to the new DAO implementation, minimizing changes to callers (`router.py` / `service.py`); the new `ConcurrentUpdateError` is uniformly mapped to HTTP `409 Conflict` (add one exception handler in `llm_d_lens/api/errors.py`), and callers retry by convention (re-`get()` the latest row, replay business logic, then `save()` again).
@@ -942,9 +964,13 @@ def _resolve_cluster_id(provenance: dict) -> str | None:
 class DeploymentBatchDao(BaseDao):
     def create(self, run: DeploymentRun) -> DeploymentRun:
         with self._transaction() as session:
-            row = DeploymentBatchRow.from_dto(run, cluster_id=_resolve_cluster_id(run.provenance))
+            row = DeploymentBatchRow.from_dto(
+                run, cluster_id=_resolve_cluster_id(run.provenance)
+            )
             row.id = run.id
-            row.jobs = [DeploymentJobRow.from_dto(case, batch_id=run.id) for case in run.cases]
+            row.jobs = [
+                DeploymentJobRow.from_dto(case, batch_id=run.id) for case in run.cases
+            ]
             session.add(row)
         return run
 ```
@@ -972,11 +998,15 @@ class DeploymentBatchRow(Base, DeclarativeDtoMixin):
     cluster_id: Mapped[str | None] = mapped_column(
         ForeignKey("clusters.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    jobs: Mapped[list["DeploymentJobRow"]] = relationship(back_populates="batch", cascade="all, delete-orphan")
+    jobs: Mapped[list["DeploymentJobRow"]] = relationship(
+        back_populates="batch", cascade="all, delete-orphan"
+    )
 
     def to_dto(self) -> DeploymentRun:
         data = super().to_dto().model_dump(mode="json", by_alias=True)
-        data["cases"] = [job.to_dto().model_dump(mode="json", by_alias=True) for job in self.jobs]
+        data["cases"] = [
+            job.to_dto().model_dump(mode="json", by_alias=True) for job in self.jobs
+        ]
         return DeploymentRun.model_validate(data)
 ```
 
@@ -1063,7 +1093,9 @@ Optimistic locking assumes conflicts are low-probability events and relies on ca
 def mark_job_scheduled(self, job_id: str) -> DeploymentJob:
     with self._transaction() as session:
         row = session.execute(
-            select(DeploymentJobRow).where(DeploymentJobRow.id == job_id).with_for_update()
+            select(DeploymentJobRow)
+            .where(DeploymentJobRow.id == job_id)
+            .with_for_update()
         ).scalar_one()
         if row.status != "queued":
             raise DeploymentJobNotSchedulableError(job_id, row.status)

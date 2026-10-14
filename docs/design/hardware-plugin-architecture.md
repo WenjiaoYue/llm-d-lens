@@ -178,28 +178,44 @@ The authority is `llm_d_lens/hardware/profiles/*.json`, validated by schema.json
 ```python
 @dataclass(frozen=True)
 class HardwareProfile:
-    id: str                         # Canonical name: "intel-xpu" | "nvidia"
-    display_name: str               # "Intel GPU" | "NVIDIA GPU"
-    vendor: str                     # "intel" | "nvidia"
+    id: str  # Canonical name: "intel-xpu" | "nvidia"
+    display_name: str  # "Intel GPU" | "NVIDIA GPU"
+    vendor: str  # "intel" | "nvidia"
 
     # --- Naming alignment (see §10.4) ---
-    accelerator_keys: tuple[str, ...] = ()      # Lens/AIC key: ("xpu","intel_gpu") / ("cuda","nvidia")
-    benchmark_profile: str = ""                 # benchmark accelerator.profile: intel-xpu / nvidia
-    upstream_variant: str = ""                  # Upstream overlay directory + accelerator-variant labels: xpu / gpu
-    upstream_vendor: str = ""                   # accelerator-vendor labels: intel / nvidia
+    accelerator_keys: tuple[
+        str, ...
+    ] = ()  # Lens/AIC key: ("xpu","intel_gpu") / ("cuda","nvidia")
+    benchmark_profile: str = ""  # benchmark accelerator.profile: intel-xpu / nvidia
+    upstream_variant: str = (
+        ""  # Upstream overlay directory + accelerator-variant labels: xpu / gpu
+    )
+    upstream_vendor: str = ""  # accelerator-vendor labels: intel / nvidia
 
     # --- Resource model ---
-    request_model: str = "dra"                    # "dra" | "extended-resource"
-    device_classes: tuple[str, ...] = ()          # DRA: ("gpu.intel.com",) / ("gpu.nvidia.com",)
-    resource_prefixes: tuple[str, ...] = ()       # Extended resources: ("gpu.intel.com/",) / ("nvidia.com/gpu",)
-    monitor_resource_suffixes: tuple[str, ...] = ()   # Scheduling markers to exclude, such as "monitoring"
-    node_label_selector: Mapping[str, str] = {}        # {"intel.feature.node.kubernetes.io/gpu": "true"}
-    dranet_device_class: str | None = None             # "dranet-rdma" and other optional network devices
+    request_model: str = "dra"  # "dra" | "extended-resource"
+    device_classes: tuple[
+        str, ...
+    ] = ()  # DRA: ("gpu.intel.com",) / ("gpu.nvidia.com",)
+    resource_prefixes: tuple[
+        str, ...
+    ] = ()  # Extended resources: ("gpu.intel.com/",) / ("nvidia.com/gpu",)
+    monitor_resource_suffixes: tuple[
+        str, ...
+    ] = ()  # Scheduling markers to exclude, such as "monitoring"
+    node_label_selector: Mapping[
+        str, str
+    ] = {}  # {"intel.feature.node.kubernetes.io/gpu": "true"}
+    dranet_device_class: str | None = (
+        None  # "dranet-rdma" and other optional network devices
+    )
 
     # --- Access / Driver / Hardware presence ---
-    access_modes: tuple[str, ...] = ()                 # ("dra","plugin")
+    access_modes: tuple[str, ...] = ()  # ("dra","plugin")
     driver: DriverContribution | None = None
-    presence: HardwarePresence | None = None           # Blocking presence probe (§10.3 decision 17, identical for Intel/NVIDIA)
+    presence: HardwarePresence | None = (
+        None  # Blocking presence probe (§10.3 decision 17, identical for Intel/NVIDIA)
+    )
 
     # --- Telemetry ---
     telemetry: TelemetryContribution | None = None
@@ -208,7 +224,7 @@ class HardwareProfile:
     deployment: DeploymentContribution
 
     # --- Evaluation / Planning / UI ---
-    evaluation_profile: str = ""                       # = benchmark_profile
+    evaluation_profile: str = ""  # = benchmark_profile
     planning: PlanningContribution = field(default_factory=PlanningContribution)
     ui: UiContribution = field(default_factory=UiContribution)
 ```
@@ -219,22 +235,29 @@ Nested structures:
 @dataclass(frozen=True)
 class AccessModeDriver:
     """Installation settings for one access mode (device plugin / DRA / vendor-specific)."""
-    manifest_ref: str | None = None           # kustomize/helm ref
-    chart_version: str | None = None          # Helm chart version
-    repo: str | None = None                   # Helm repo
-    min_kubernetes_version: str | None = None # Minimum Kubernetes version for this mode
+
+    manifest_ref: str | None = None  # kustomize/helm ref
+    chart_version: str | None = None  # Helm chart version
+    repo: str | None = None  # Helm repo
+    min_kubernetes_version: str | None = (
+        None  # Minimum Kubernetes version for this mode
+    )
     daemonset_matchers: tuple[NameMatcher, ...] = ()  # name/namespace/label matching
-    monitoring_flag: str | None = None        # e.g. "-enable-monitoring"
+    monitoring_flag: str | None = None  # e.g. "-enable-monitoring"
     options: Mapping[str, Any] = field(default_factory=dict)  # Vendor-specific options
+
 
 @dataclass(frozen=True)
 class DriverContribution:
-    installer: str                     # "kustomize" | "helm"
-    modes: Mapping[str, AccessModeDriver] = field(default_factory=dict)  # key = access mode
-    nfd_manifest_refs: tuple[str, ...] = ()   # Prerequisites shared by both modes
+    installer: str  # "kustomize" | "helm"
+    modes: Mapping[str, AccessModeDriver] = field(
+        default_factory=dict
+    )  # key = access mode
+    nfd_manifest_refs: tuple[str, ...] = ()  # Prerequisites shared by both modes
 
     def mode(self, access_mode: str) -> AccessModeDriver | None:
         return self.modes.get(access_mode)
+
 
 @dataclass(frozen=True)
 class HardwarePresence:
@@ -244,42 +267,55 @@ class HardwarePresence:
     least one node label; if none appears, fail fast (e.g. 422) instead of
     letting the driver/plugin/telemetry sit at 0 ready pods for minutes.
     """
-    node_label_selector: Mapping[str, str]       # {"feature.node.kubernetes.io/pci-10de.present": "true"}
-    ensure_refs: tuple[str, ...] = ()            # NFD/NodeFeatureRule refs to apply first
+
+    node_label_selector: Mapping[
+        str, str
+    ]  # {"feature.node.kubernetes.io/pci-10de.present": "true"}
+    ensure_refs: tuple[str, ...] = ()  # NFD/NodeFeatureRule refs to apply first
     timeout_seconds: float = 90.0
     poll_interval_seconds: float = 5.0
 
+
 @dataclass(frozen=True)
 class TelemetryContribution:
-    provider_id: str | None            # Reuse monitoring/accelerator registry, e.g. "intel_gpu"
+    provider_id: str | None  # Reuse monitoring/accelerator registry, e.g. "intel_gpu"
     # Device/cluster metrics (XPUM/DCGM): complete PromQL for cluster pages
-    device_metrics: Mapping[str, str] = {}   # {"utilization":"DCGM_FI_DEV_GPU_UTIL", ...}
+    device_metrics: Mapping[
+        str, str
+    ] = {}  # {"utilization":"DCGM_FI_DEV_GPU_UTIL", ...}
     # Bare metric names, units, and extra matchers for selector injection by profiling/evaluate
     # Missing/empty metric means unsupported; callers skip it (empty disables)
     device_metric_sources: Mapping[str, DeviceMetricSource] = {}
     #   {"framebuffer_used": {"metric":"DCGM_FI_DEV_FB_USED","unit":"bytes",
     #                          "scale":1048576,"match":{}}}
-    label_schema: Mapping[str, str] = {}     # node/pci/device label-name mapping
-    allocation_join: str | None = None       # "dra" | "extended-resource" | "none"
+    label_schema: Mapping[str, str] = {}  # node/pci/device label-name mapping
+    allocation_join: str | None = None  # "dra" | "extended-resource" | "none"
     # Pod metrics (native vLLM, pod labels, no join; NVIDIA uses these for per-pod attribution)
-    pod_metrics: Mapping[str, str] = {}      # {"gpu_cache_usage":"vllm:gpu_cache_usage_perc", ...}
-    scrape_path: str | None = None           # Direct-scrape path template, e.g. namespace/service proxy
+    pod_metrics: Mapping[
+        str, str
+    ] = {}  # {"gpu_cache_usage":"vllm:gpu_cache_usage_perc", ...}
+    scrape_path: str | None = (
+        None  # Direct-scrape path template, e.g. namespace/service proxy
+    )
+
 
 @dataclass(frozen=True)
 class DeploymentContribution:
-    overlay_root: str                  # "guides/optimized-baseline/modelserver/{variant}/vllm"
-    arch: str                          # Upstream vendor directory: "xpu" | "gpu" (= upstream_variant)
-    device_class: str                  # DRA deviceClassName (required for request_model=dra)
-    claim_request_name: str            # "intel" | "nvidia" (required for request_model=dra)
+    overlay_root: str  # "guides/optimized-baseline/modelserver/{variant}/vllm"
+    arch: str  # Upstream vendor directory: "xpu" | "gpu" (= upstream_variant)
+    device_class: str  # DRA deviceClassName (required for request_model=dra)
+    claim_request_name: str  # "intel" | "nvidia" (required for request_model=dra)
     node_selector: Mapping[str, str] = {}
-    resource_name: str | None = None   # extended resource, e.g. "nvidia.com/gpu"
+    resource_name: str | None = None  # extended resource, e.g. "nvidia.com/gpu"
     supports_pci_allowlist: bool = False
+
 
 @dataclass(frozen=True)
 class PlanningContribution:
-    aic_system_patterns: tuple[str, ...] = ()   # Regexes matching AIC system names
+    aic_system_patterns: tuple[str, ...] = ()  # Regexes matching AIC system names
     default_backend: str = "vllm"
-    device_class_allow_pattern: str = ""        # Allowlist for Node planning
+    device_class_allow_pattern: str = ""  # Allowlist for Node planning
+
 
 @dataclass(frozen=True)
 class UiContribution:
@@ -299,8 +335,12 @@ class HardwareProvider(Protocol):
     async def ensure_presence(self, *, cluster_id: str | None) -> None: ...
 
     # Driver installation (Tier 2a, monitoring/gpu_driver)
-    async def driver_status(self, access_mode: str, *, cluster_id: str | None) -> dict: ...
-    async def install_driver(self, access_mode: str, *, cluster_id: str | None) -> dict: ...
+    async def driver_status(
+        self, access_mode: str, *, cluster_id: str | None
+    ) -> dict: ...
+    async def install_driver(
+        self, access_mode: str, *, cluster_id: str | None
+    ) -> dict: ...
 
     # Optional telemetry provider (Tier 2b, delegated to monitoring/accelerator registry)
     def telemetry_provider_id(self) -> str | None: ...

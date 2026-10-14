@@ -25,7 +25,7 @@ build: ## Build the frontend
 test: test-js test-python ## Run Node and Python tests
 
 test-js: ## Run frontend and Node API unit tests
-	node --import tsx --test $$(find apps/frontend/src apps/server/testing packages/shared/src -type f \( -name '*.test.js' -o -name '*.test.jsx' -o -name '*.test.ts' \))
+	TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx --test $$(find apps/frontend/src apps/server/testing packages/shared/src -type f \( -name '*.test.js' -o -name '*.test.jsx' -o -name '*.test.ts' \))
 	npm run reuse:test
 
 PYTHON ?= .venv/bin/python

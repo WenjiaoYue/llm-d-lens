@@ -79,7 +79,6 @@ from llm_d_lens.evaluation.timing import benchmark_timing
 from llm_d_lens.evaluation.workflow_state import TERMINAL_EVALUATION_STATUSES as _TERMINAL_EVALUATE_STATUSES
 from llm_d_lens.hardware.resolver import (
     resolve_by_accelerator_key,
-    resolve_by_device_class,
     resolve_by_node_label,
     resolve_by_resource,
     resolve_configuration_profile,

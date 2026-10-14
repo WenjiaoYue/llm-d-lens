@@ -64,7 +64,12 @@ def _resolved_facts(*, free_gpu_count=4, aic_predictions=()) -> ResolvedPlanning
     )
     return ResolvedPlanningFacts(
         facts=facts,
-        cluster_snapshot={"hardware": {"availableGpuCount": free_gpu_count, "accelerators": [{"id": "nvidia", "gpuCount": free_gpu_count}]}},
+        cluster_snapshot={
+            "hardware": {
+                "availableGpuCount": free_gpu_count,
+                "accelerators": [{"id": "nvidia", "gpuCount": free_gpu_count}],
+            }
+        },
         evidence=[PlanningEvidence(id="cluster-overview:cluster-a", source="cluster-overview", status="available")],
     )
 

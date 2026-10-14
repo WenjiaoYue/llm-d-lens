@@ -240,7 +240,8 @@ async def create_standard_kubernetes_service_run(
 ):
     """Create the current vLLM implementation of a Standard service run."""
     try:
-        from llm_d_lens.cluster import registry, service as cluster_service
+        from llm_d_lens.cluster import registry
+        from llm_d_lens.cluster import service as cluster_service
         from llm_d_lens.cluster.sessions import require_active_session
         from llm_d_lens.deploy.providers.hardware_profile import cluster_accelerator
 

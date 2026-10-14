@@ -12,8 +12,8 @@ __all__ = ["app"]
 
 
 def __getattr__(name: str):
-	if name != "app":
-		raise AttributeError(name)
-	from .main import app
+    if name != "app":
+        raise AttributeError(name)
+    from .main import app
 
-	return app
+    return app

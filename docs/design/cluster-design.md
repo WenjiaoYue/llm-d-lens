@@ -241,6 +241,7 @@ class DatabaseStatus(StrictModel):
     """Response of `GET /api/v1/system/database`; only exposes whether it is
     configured and which mode, and never echoes `database_url`
     (which may contain a password)."""
+
     configured: bool
     mode: Literal["external", "embedded"] | None = None
     # In external mode, redacted display info (host/port/dbname), for read-only
@@ -280,7 +281,9 @@ class Cluster:
     proxy: ProxyConfig | None = None  # new; see below
     llm_d_ref: str | None = None  # new: llm-d version or commit SHA
     llm_d_lensmark_ref: str | None = None  # new: llm-d-benchmark version or commit SHA
-    data_plane: DataPlaneVersions | None = None  # new: model-service data-plane version set
+    data_plane: DataPlaneVersions | None = (
+        None  # new: model-service data-plane version set
+    )
 ```
 
 ```python
@@ -289,11 +292,11 @@ class DataPlaneVersions:
     """Pinned version set for the model-service data plane; components are
     compatibility-constrained, so they are selected as a group."""
 
-    gateway_provider: str | None = None    # istio | gke | agentgateway | envoy-ai-gateway
+    gateway_provider: str | None = None  # istio | gke | agentgateway | envoy-ai-gateway
     gateway_version: str | None = None
-    gie_version: str | None = None         # GAIE / Gateway API CRD release
-    router_version: str | None = None      # llm-d Router (EPP / Proxy) chart or image
-    ipp_version: str | None = None         # llm-d-inference-payload-processor chart or image
+    gie_version: str | None = None  # GAIE / Gateway API CRD release
+    router_version: str | None = None  # llm-d Router (EPP / Proxy) chart or image
+    ipp_version: str | None = None  # llm-d-inference-payload-processor chart or image
 ```
 
 ```python
@@ -310,7 +313,9 @@ class ProxyConfig:
     detected_http_proxy: str | None = None
     detected_https_proxy: str | None = None
     detected_no_proxy: str | None = None
-    detected_at: str | None = None  # ISO timestamp of the most recent successful/failed detection
+    detected_at: str | None = (
+        None  # ISO timestamp of the most recent successful/failed detection
+    )
     detection_error: str | None = None  # human-readable reason when detection fails
 ```
 
@@ -353,11 +358,14 @@ class ProxyConfigDTO(StrictModel):
 class HfTokenSecretCreateRequest(StrictModel):
     """Standalone "create HF Token Secret" request, not attached to a specific
     Model Cache entry."""
+
     namespace: str = Field(min_length=1, max_length=253)
     # Default name includes a short UUID suffix to avoid name collisions; users
     # can also provide their own, in which case it must be unique within the
     # namespace.
-    name: str = Field(default_factory=lambda: f"hf-token-{uuid4().hex[:8]}", max_length=253)
+    name: str = Field(
+        default_factory=lambda: f"hf-token-{uuid4().hex[:8]}", max_length=253
+    )
     token: str = Field(min_length=1)
 
 
@@ -377,9 +385,13 @@ class ModelCacheSeedRequest(StrictModel):
     """
 
     hf_token_secret: HfTokenSecretCreateRequest = Field(alias="hfTokenSecret")
-    repo_id: str = Field(alias="repoId", pattern=_REPO_ID_PATTERN)  # reuse model_cache regex
+    repo_id: str = Field(
+        alias="repoId", pattern=_REPO_ID_PATTERN
+    )  # reuse model_cache regex
     revision: str = Field(default="main")
-    storage: str | StorageVolumeCreateRequest  # existing volume id, or complete create-volume form
+    storage: (
+        str | StorageVolumeCreateRequest
+    )  # existing volume id, or complete create-volume form
 
 
 class ClusterRecord(StrictModel):
@@ -390,12 +402,17 @@ class ClusterRecord(StrictModel):
     ready: bool = False
     proxy: ProxyConfigDTO = Field(default_factory=ProxyConfigDTO)  # new
     llm_d_ref: str | None = Field(default=None, alias="llmDRef")  # new
-    llm_d_lensmark_ref: str | None = Field(default=None, alias="llmDBenchmarkRef")  # new
-    data_plane: DataPlaneVersionsDTO | None = Field(default=None, alias="dataPlane")  # new
+    llm_d_lensmark_ref: str | None = Field(
+        default=None, alias="llmDBenchmarkRef"
+    )  # new
+    data_plane: DataPlaneVersionsDTO | None = Field(
+        default=None, alias="dataPlane"
+    )  # new
 
 
 class DataPlaneVersionsDTO(StrictModel):
     """Pinned version set for the model-service data plane; selected as a group, see 4.3."""
+
     gateway_provider: str | None = Field(default=None, alias="gatewayProvider")
     gateway_version: str | None = Field(default=None, alias="gatewayVersion")
     gie_version: str | None = Field(default=None, alias="gieVersion")
@@ -406,9 +423,18 @@ class DataPlaneVersionsDTO(StrictModel):
 class ClusterProvisioningStep(StrictModel):
     """Status of a provisioning substep, used by the frontend to render the progress view."""
 
-    id: Literal["proxy-detection", "storage", "model-cache", "llm-d-repo", "llm-d-benchmark-repo", "data-plane"]
+    id: Literal[
+        "proxy-detection",
+        "storage",
+        "model-cache",
+        "llm-d-repo",
+        "llm-d-benchmark-repo",
+        "data-plane",
+    ]
     status: Literal["skipped", "pending", "running", "ready", "failed"] = "skipped"
-    detail: str | None = None  # human-readable current action, e.g. "cloning llm-d@<sha>"
+    detail: str | None = (
+        None  # human-readable current action, e.g. "cloning llm-d@<sha>"
+    )
     failure_detail: str | None = Field(default=None, alias="failureDetail")
 
 
@@ -1270,11 +1296,23 @@ class BootstrapNode:
 @dataclass
 class BootstrapJob:
     id: str  # uuid4
-    phase: Literal["queued", "preflight", "provisioning", "running", "kubeconfig_ready", "succeeded", "failed"]
+    phase: Literal[
+        "queued",
+        "preflight",
+        "provisioning",
+        "running",
+        "kubeconfig_ready",
+        "succeeded",
+        "failed",
+    ]
     nodes: list[BootstrapNode]
-    inventory_dir: Path  # temporary dir, containing inventory.yml + group_vars + artifacts/
+    inventory_dir: (
+        Path  # temporary dir, containing inventory.yml + group_vars + artifacts/
+    )
     log_tail: str  # truncated tail of ansible-playbook output
-    kubeconfig_text: str | None = None  # only present on succeeded, one-time consumption
+    kubeconfig_text: str | None = (
+        None  # only present on succeeded, one-time consumption
+    )
     created_at: str
 ```
 Store it in a pure in-memory `dict[str, BootstrapJob]`, following the pattern of

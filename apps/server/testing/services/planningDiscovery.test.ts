@@ -37,7 +37,7 @@ test('selected sessions use the Python read boundary and never send kubeconfig p
     try {
         const code = `
             import assert from 'node:assert/strict';
-            import { queryCluster } from './src/services/planningDiscovery.ts';
+            import { queryCluster } from ${JSON.stringify(new URL('../../src/services/planningDiscovery.ts', import.meta.url).href)};
             const config = process.env.LENS_DATA_DIR + '/credentials/clusters/cluster_sessions/${id}.yaml';
             let calls = 0;
             globalThis.fetch = async (url, init) => {

@@ -273,7 +273,9 @@ async def test_placement_accepts_overlay_when_delegate_applied_it(monkeypatch, t
     overlay.mkdir()
     delegate = AsyncMock()
     delegate.render.return_value = GuideDeploymentArtifact(
-        guide_id="optimized-baseline", artifact_hash="hash", manifest_ref=str(overlay),
+        guide_id="optimized-baseline",
+        artifact_hash="hash",
+        manifest_ref=str(overlay),
         deployment_contract={"placementApplied": True},
     )
     adapter = ConfigurationManifestAdapter(delegate, _Runner(), "llm-d-bench-", 30, tmp_path)

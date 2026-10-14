@@ -364,18 +364,21 @@ def _rendered_container(adapter, overlay: Path, runtime: dict) -> tuple[dict, di
 async def test_render_applies_placement_inside_kustomize_overlay(monkeypatch, tmp_path: Path):
     adapter, overlay = _adapter(tmp_path)
     _write_model_overlay(overlay)
-    monkeypatch.setattr(adapter, "_deployment_parameters", Mock(return_value=(_deployment_parameters(), "Qwen/Qwen3-0.6B", _runtime())))
-    artifact = await adapter.render(
-        adapter.discover(), {"_placement": {"replicas": "spread"}}
+    monkeypatch.setattr(
+        adapter, "_deployment_parameters", Mock(return_value=(_deployment_parameters(), "Qwen/Qwen3-0.6B", _runtime()))
     )
+    artifact = await adapter.render(adapter.discover(), {"_placement": {"replicas": "spread"}})
 
     assert Path(artifact.manifest_ref).is_dir()
     assert artifact.deployment_contract["placementApplied"] is True
     document = next(
-        item for item in yaml.safe_load_all((Path(artifact.manifest_ref) / "manifest.yaml").read_text())
+        item
+        for item in yaml.safe_load_all((Path(artifact.manifest_ref) / "manifest.yaml").read_text())
         if item.get("kind") == "Deployment"
     )
-    assert document["spec"]["template"]["spec"]["affinity"]["podAntiAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"]
+    assert document["spec"]["template"]["spec"]["affinity"]["podAntiAffinity"][
+        "requiredDuringSchedulingIgnoredDuringExecution"
+    ]
 
 
 def test_auto_cache_serving_pod_can_download_missing_snapshot(tmp_path):
