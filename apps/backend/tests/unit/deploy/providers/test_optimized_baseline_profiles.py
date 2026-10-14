@@ -1,6 +1,6 @@
 import hashlib
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
@@ -71,6 +71,7 @@ def _adapter(tmp_path: Path) -> tuple[OptimizedBaselineGuideAdapter, Path]:
         endpoint_service_port=80,
         baseline_service_name="modelserver",
         baseline_service_port=8000,
+        accelerator="intel-xpu",
         rendered_overlay_root=root,
     )
     return OptimizedBaselineGuideAdapter(
@@ -282,11 +283,14 @@ spec:
   replicas: 1
   template:
     spec:
+      resourceClaims:
+        - name: model-claim
+          resourceClaimTemplateName: model-claim
       containers:
         - name: modelserver
           args:
             - "Qwen/Qwen3-0.6B"
-          env:
+          env: []
           volumeMounts:
             - name: unrelated
               mountPath: /tmp
@@ -313,7 +317,9 @@ spec:
 def _write_model_overlay(overlay: Path) -> None:
     (overlay / "patch-vllm.yaml").write_text(_MODEL_PATCH, encoding="utf-8")
     (overlay / "resource-claim-template.yaml").write_text(_MODEL_CLAIM, encoding="utf-8")
-    (overlay / "kustomization.yaml").write_text("resources:\n  - patch-vllm.yaml\n", encoding="utf-8")
+    (overlay / "kustomization.yaml").write_text(
+        "resources:\n  - patch-vllm.yaml\n  - resource-claim-template.yaml\n", encoding="utf-8"
+    )
 
 
 def _deployment_parameters() -> dict[str, int | None]:
@@ -329,6 +335,7 @@ def _deployment_parameters() -> dict[str, int | None]:
 def _runtime(**overrides) -> dict:
     runtime = {
         "image": "example/vllm:1",
+        "image_mode": "prebuilt",
         "resolved_mount": None,
         "environment": {},
         "mount_host_path": "",
@@ -343,13 +350,35 @@ def _runtime(**overrides) -> dict:
 def _rendered_container(adapter, overlay: Path, runtime: dict) -> tuple[dict, dict[str, str | None]]:
     _write_model_overlay(overlay)
     path = adapter._render_overlay(_deployment_parameters(), "Qwen/Qwen3-0.6B", runtime)
-    patch = yaml.safe_load((path / "patch-vllm.yaml").read_text(encoding="utf-8"))
+    patch = next(
+        doc
+        for doc in yaml.safe_load_all((path / "manifest.yaml").read_text(encoding="utf-8"))
+        if doc.get("kind") == "Deployment"
+    )
     container = patch["spec"]["template"]["spec"]["containers"][0]
     entries = container.get("env") or []
     return container, {item["name"]: item.get("value") for item in entries}
 
 
-def test_auto_cache_serving_pod_runs_huggingface_offline(tmp_path):
+@pytest.mark.asyncio
+async def test_render_applies_placement_inside_kustomize_overlay(monkeypatch, tmp_path: Path):
+    adapter, overlay = _adapter(tmp_path)
+    _write_model_overlay(overlay)
+    monkeypatch.setattr(adapter, "_deployment_parameters", Mock(return_value=(_deployment_parameters(), "Qwen/Qwen3-0.6B", _runtime())))
+    artifact = await adapter.render(
+        adapter.discover(), {"_placement": {"replicas": "spread"}}
+    )
+
+    assert Path(artifact.manifest_ref).is_dir()
+    assert artifact.deployment_contract["placementApplied"] is True
+    document = next(
+        item for item in yaml.safe_load_all((Path(artifact.manifest_ref) / "manifest.yaml").read_text())
+        if item.get("kind") == "Deployment"
+    )
+    assert document["spec"]["template"]["spec"]["affinity"]["podAntiAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"]
+
+
+def test_auto_cache_serving_pod_can_download_missing_snapshot(tmp_path):
     adapter, overlay = _adapter(tmp_path)
     _, environment = _rendered_container(
         adapter,
@@ -365,8 +394,8 @@ def test_auto_cache_serving_pod_runs_huggingface_offline(tmp_path):
         ),
     )
     assert environment["HF_HOME"] == "/model-cache"
-    assert environment["HF_HUB_OFFLINE"] == "1"
-    assert environment["TRANSFORMERS_OFFLINE"] == "1"
+    assert "HF_HUB_OFFLINE" not in environment
+    assert "TRANSFORMERS_OFFLINE" not in environment
 
 
 def test_huggingface_source_serving_pod_stays_online(tmp_path):

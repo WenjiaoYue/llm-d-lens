@@ -8,6 +8,12 @@
 
 """Public FastAPI application for the Prism Python backend."""
 
-from .main import app
-
 __all__ = ["app"]
+
+
+def __getattr__(name: str):
+	if name != "app":
+		raise AttributeError(name)
+	from .main import app
+
+	return app

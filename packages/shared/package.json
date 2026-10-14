@@ -8,6 +8,7 @@
   },
   "exports": {
     "./catalog": "./src/catalog/modelCatalog.js",
+    "./hardware/profiles": "./src/hardware/profiles.js",
     "./evaluation/guide-settings": "./src/evaluation/guideSettings.js",
     "./evaluation/managed-environment": "./src/evaluation/managedEnvironment.js"
   }

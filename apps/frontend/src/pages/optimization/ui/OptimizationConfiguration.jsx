@@ -1,3 +1,6 @@
+import { guideVariantOptions, selectedGuideVariant } from '../../evaluation/model/capabilities.js';
+import { useHardwareProfiles } from '../../../shared/lib/useHardwareProfiles.js';
+import { getHardwareProfiles } from '../../clusters';
 import { validateImportManifest } from '../../evaluation';
 import { OptimizationComparisonTree, ResourceBasisControl } from '../../evaluation';
 import { recommendationBudget, selectedOptimizationPlan, withRecommendationBudget } from '../../evaluation';
@@ -28,13 +31,14 @@ import { ConfigurationValidationContext, focusConfigurationError } from '../../e
 import { validateConfigurationInputs, configurationServerErrors } from '../../evaluation';
 import { TopologyPreview, YamlPreview } from '../../evaluation';
 import { StorageVolumeSelect } from '../../../shared/ui/StorageVolumeSelect';
-import { acceleratorVariantForHardware, DEFAULT_RUNTIME_IMAGES, isDefaultRuntimeImage } from '../../evaluation';
+import { listDeploymentNodeLabels } from './OptimizationWorkspace/remoteDeployBackend';
+import { acceleratorVariantForHardware, aicSystemNameForHardware, DEFAULT_RUNTIME_IMAGES, isDefaultRuntimeImage } from '../../evaluation';
 
 const PREFILL_KEY = 'prism_evaluate_prefill_workloads';
 const ARTIFACT_KEY = 'prism_evaluate_configuration_artifact';
 const INTENT_KEY = 'prism_evaluate_pending_intent';
 const MODEL_MARKET_DRAFT_KEY = 'prism_model_market_draft';
-const DEFAULT_RUNTIME_IMAGE = DEFAULT_RUNTIME_IMAGES.xpu;
+const DEFAULT_RUNTIME_IMAGE = '';
 
 const inputClass =
     'mt-1 h-9 w-full border border-slate-700 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-cyan-500';
@@ -131,6 +135,8 @@ async function resolveClusterSession(clusterId) {
 
 
 export default function OptimizationConfiguration({ onNavigate, onCancel, onPublished, sharedContext, initialGuide, initialArtifact, initialOptimizationSelection, editorResources, onBusyChange, singleConfiguration = false, embedded = false }) {
+    const hardwareProfiles = useHardwareProfiles(getHardwareProfiles);
+    const [sourceCapabilities, setSourceCapabilities] = useState(null);
     const [modelMarketDraft] = useState(() => {
         if (embedded) return null;
         try {
@@ -219,6 +225,13 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
     const [guideVariant, setGuideVariant] = useState('vllm');
     const [customRows, setCustomRows] = useState([]);
     const [guideSettings, setGuideSettings] = useState({});
+    const [placementReplicas, setPlacementReplicas] = useState(() => initialArtifact?.deployable_configuration?.provenance?.placement?.replicas || 'prefer-same-node');
+    const [placementNodeLabel, setPlacementNodeLabel] = useState(() => {
+        const label = initialArtifact?.deployable_configuration?.provenance?.placement?.nodeLabel;
+        return label ? JSON.stringify(label) : '';
+    });
+    const [nodeLabels, setNodeLabels] = useState([]);
+    const [nodeLabelError, setNodeLabelError] = useState('');
     const customParametersText = JSON.stringify(customRows);
     const [maxModelLen, setMaxModelLen] = useState(() => sharedContext?.maxModelLen ?? '');
     const [maxNumSeqs, setMaxNumSeqs] = useState('');
@@ -245,7 +258,6 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
     const [uploadError, setUploadError] = useState('');
 
     // AIC state.
-    const [aicSystem] = useState('b60');
     const [aicBackend] = useState('vllm');
     const [aicLoading, setAicLoading] = useState(false);
     const [aicError, setAicError] = useState('');
@@ -296,6 +308,9 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
     useEffect(() => {
         const content = initialArtifact?.deployable_configuration?.content;
         if (!content) return;
+        const placement = initialArtifact.deployable_configuration.provenance?.placement;
+        setPlacementReplicas(placement?.replicas || 'prefer-same-node');
+        setPlacementNodeLabel(placement?.nodeLabel ? JSON.stringify(placement.nodeLabel) : '');
         const editorSource = initialArtifact.deployable_configuration.provenance?.editor_source;
         if (editorSource) {
             setGuideSourceMode(editorSource.guideSourceMode || 'official');
@@ -328,6 +343,18 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         setCustomRows(configurationCustomRows(content));
         setGuideSettings(content.guideSettings || {});
     }, [initialArtifact]);
+
+    useEffect(() => {
+        if (placementReplicas !== 'same-node' || !selectedClusterId) return undefined;
+        const controller = new AbortController();
+        listDeploymentNodeLabels(selectedClusterId, controller.signal).then((items) => {
+            setNodeLabels(items);
+            setNodeLabelError('');
+        }).catch((error) => {
+            if (!controller.signal.aborted) { setNodeLabels([]); setNodeLabelError(error.message); }
+        });
+        return () => controller.abort();
+    }, [placementReplicas, selectedClusterId]);
 
     useEffect(() => {
         if (!modelMarketDraft) return;
@@ -527,7 +554,6 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                     guides: (payload.guides || []).map((guide) => {
                         const deploymentCapability = supported.get(guide.id) || null;
                         const allowedAccelerators = new Set(deploymentCapability?.accelerators || []);
-                        const allowedModelServers = new Set(deploymentCapability?.model_servers || []);
                         return {
                             ...guide,
                             deploymentCapability,
@@ -535,7 +561,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                                 .filter((accelerator) => allowedAccelerators.has(accelerator.id))
                                 .map((accelerator) => ({
                                     ...accelerator,
-                                    modelServers: (accelerator.modelServers || []).filter((server) => allowedModelServers.has(server.id)),
+                                    modelServers: (accelerator.modelServers || []),
                                 }))
                                 .filter((accelerator) => accelerator.modelServers.length) : guide.accelerators,
                         };
@@ -554,20 +580,11 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                 });
                 // Pick a variant valid for the selected cluster's accelerator, so
                 // an NVIDIA cluster never keeps the Intel XPU `vllm`/`vllm-rdma`.
-                const capability = guide?.deploymentCapability;
                 const requestedVariant = initialTarget.variant;
                 let defaultVariant = requestedVariant || '';
-                if (guide?.id === 'tiered-prefix-cache') {
-                    const tieredVariants = capability?.variants || [];
-                    defaultVariant = requestedVariant && tieredVariants.includes(requestedVariant)
-                        ? requestedVariant
-                        : (capability?.evaluation?.default_variant || tieredVariants[0] || '');
-                } else if (guide?.id === 'pd-disaggregation') {
-                    const pdVariants = capability?.variants_by_accelerator?.[accelerator?.id] || [];
-                    defaultVariant = requestedVariant && pdVariants.includes(requestedVariant)
-                        ? requestedVariant
-                        : (pdVariants[0] || '');
-                }
+                const discoveredVariants = modelServer?.variants || [];
+                defaultVariant = requestedVariant && discoveredVariants.includes(requestedVariant)
+                    ? requestedVariant : (discoveredVariants.includes('base') ? 'base' : discoveredVariants[0] || '');
                 setGuideVariant(defaultVariant);
                 if (!pendingIntent?.baseline_types && !pendingIntent?.baseline_type) {
                     setBaselineTypes(guide?.id === 'precise-prefix-cache-routing' ? ['kubernetes-service'] : []);
@@ -582,7 +599,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
     const selectedGuide = guides.find((item) => item.id === selection.guide);
     const accelerators = useMemo(() => selectedGuide?.accelerators || [], [selectedGuide]);
     const selectedAccelerator = accelerators.find((item) => item.id === selection.accelerator);
-    const modelServers = selectedAccelerator?.modelServers || [];
+    const modelServers = useMemo(() => selectedAccelerator?.modelServers || [], [selectedAccelerator]);
     const selectedModelServer = modelServers.find((item) => item.id === selection.modelServer);
     // Keep the Guide variant aligned with the selected cluster's hardware so a
     // GPU cluster never stays on the Intel XPU variant (and vice versa).
@@ -598,33 +615,28 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                 modelServer: current.modelServer || match.modelServers?.[0]?.id || '',
             }));
         }
-        if (selection.guide === 'pd-disaggregation') {
-            const variants = selectedGuide?.deploymentCapability?.variants_by_accelerator?.[preferred] || [];
-            if (variants.length && !variants.includes(guideVariant)) setGuideVariant(variants[0]);
-        }
-    }, [clusterHardware, selection.accelerator, selection.guide, selectedGuide, accelerators, guideVariant]);
+
+    }, [clusterHardware, selection.accelerator, selection.guide, selection.modelServer, selectedGuide, accelerators, guideVariant, hardwareProfiles]);
     // Same hardware alignment for the default runtime image: swap only between
     // the known per-vendor defaults so a user-entered image is never clobbered.
     useEffect(() => {
         const variant = acceleratorVariantForHardware(clusterHardware);
         if (!variant) return;
         setImage((current) => (
-            isDefaultRuntimeImage(current) && current !== DEFAULT_RUNTIME_IMAGES[variant]
+            (!current || isDefaultRuntimeImage(current)) && current !== DEFAULT_RUNTIME_IMAGES[variant]
                 ? DEFAULT_RUNTIME_IMAGES[variant]
                 : current
         ));
-    }, [clusterHardware]);
+    }, [clusterHardware, hardwareProfiles]);
     // Guide variants available for the selected cluster hardware. PD's variant
     // set depends on the accelerator (NVIDIA GPU: the vLLM infra-provider
     // overlay such as `base`; Intel XPU: `vllm` / `vllm-rdma`).
-    const guideVariants = useMemo(() => {
-        if (selection.guide === 'tiered-prefix-cache') return selectedGuide?.deploymentCapability?.variants || [];
-        if (selection.guide === 'pd-disaggregation') {
-            const capability = selectedGuide?.deploymentCapability;
-            return capability?.variants_by_accelerator?.[selection.accelerator] || capability?.variants || [];
-        }
-        return selectedModelServer?.variants || [];
-    }, [selection.guide, selectedGuide, selectedModelServer, selection.accelerator]);
+    const variantOptions = useMemo(() => guideVariantOptions(modelServers, selection.modelServer), [modelServers, selection.modelServer]);
+    const guideVariants = variantOptions.map(option => option.value);
+    const variantLabel = value => variantOptions.find(option => option.value === value)?.label || value;
+    useEffect(() => {
+        setGuideVariant(current => selectedGuideVariant(variantOptions, current));
+    }, [variantOptions]);
     const unavailableGuideVariants = useMemo(
         () => (selection.guide === 'pd-disaggregation'
             ? selectedGuide?.deploymentCapability?.unavailable_variants_by_accelerator?.[selection.accelerator] || []
@@ -723,9 +735,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
             accelerator: accelerator?.id || '',
             modelServer: sharedContext?.modelServer?.toLowerCase() || accelerator?.modelServers?.[0]?.id || '',
         });
-        if (guide === 'pd-disaggregation') setGuideVariant('vllm');
-        else if (guide === 'tiered-prefix-cache') setGuideVariant(next?.deploymentCapability?.variants?.includes('native/cpu/base') ? 'native/cpu/base' : next?.deploymentCapability?.variants?.[0] || '');
-        else setGuideVariant('');
+        setGuideVariant('');
         setBaselineTypes(guide === 'precise-prefix-cache-routing' ? ['kubernetes-service'] : []);
     };
     const selectAccelerator = (accelerator) => {
@@ -784,7 +794,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         customParameters: customRows,
         gpuMemoryUtilization: (selection.modelServer === 'vllm' && gpuMemoryUtilization !== '' ? Number(gpuMemoryUtilization) : undefined),
         runtimeImage: image.trim(),
-        guideVariant: ['pd-disaggregation', 'tiered-prefix-cache'].includes(guideSelection.guide) ? guideVariant : '',
+        guideVariant: guideVariant,
         clusterSessionId: current.sessionId,
         environment: { mode: 'current', kubernetesMode: 'required' },
     });
@@ -801,11 +811,15 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
     useEffect(() => { setPlanResult(null); setServerFieldErrors([]); }, [previewInputs]);
 
     useEffect(() => {
+        setSourceCapabilities(null);
         if (guideSourceMode !== 'official' || !selection.guide || !selection.accelerator || !selection.modelServer) return undefined;
+        let active = true;
         const timer = window.setTimeout(() => {
-            prepareGuideSource({ ...selection, guideVariant, clusterId: selectedClusterId }).catch(() => {});
+            prepareGuideSource({ ...selection, guideVariant, clusterId: selectedClusterId })
+                .then(result => { if (active) setSourceCapabilities(result.capabilities || null); })
+                .catch(() => { if (active) setSourceCapabilities(null); });
         }, 250);
-        return () => window.clearTimeout(timer);
+        return () => { active = false; window.clearTimeout(timer); };
     }, [guideSourceMode, selection, guideVariant, selectedClusterId]);
 
     const showServerErrors = (messages) => {
@@ -814,6 +828,20 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         setValidationSubmitted(true);
         if (mapped.length) window.requestAnimationFrame(() => focusConfigurationError(editorRef.current, mapped));
         return messages.filter(message => !mapped.some(error => error.message === message));
+    };
+
+    const refreshHardwareSnapshot = async () => {
+        if (sharedContext?.refreshClusterHardware) return sharedContext.refreshClusterHardware();
+        if (!selectedClusterId) return clusterHardware;
+        setClusterHardwareLoading(true);
+        try {
+            const overview = await loadClusterOverview(selectedClusterId);
+            const hardware = overview?.kubernetes?.hardware || null;
+            setClusterHardware(hardware);
+            return hardware;
+        } finally {
+            setClusterHardwareLoading(false);
+        }
     };
 
     const generate = async (requestedBasis = resourceBasis) => {
@@ -828,8 +856,16 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
             window.requestAnimationFrame(() => focusConfigurationError(editorRef.current, configurationInputErrors));
             return;
         }
+        let currentHardware;
+        try {
+            currentHardware = await refreshHardwareSnapshot();
+        } catch (error) {
+            setPlanResult(null);
+            setPlanError(error.message || 'Could not refresh cluster capacity before generating YAML.');
+            return;
+        }
         const requiredCards = Math.max(1, ...topologyPreviewVariants.map(row => row.gpuCount));
-        const selectedBudget = recommendationBudget(clusterHardware, requestedBasis);
+        const selectedBudget = recommendationBudget(currentHardware, requestedBasis);
         if (selectedBudget < requiredCards) {
             setPlanResult(null);
             setPlanError(`Insufficient resources: this configuration requires ${requiredCards} cards; the selected budget is ${selectedBudget}. Reduce replicas / TP or select a sufficient budget.`);
@@ -845,7 +881,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
             }
             if (configurationInputErrors.length) throw new Error(configurationInputErrors.map(error => error.message).join(' '));
             const current = await requireSelectedCluster();
-            const result = await planInSession(withRecommendationBudget(planningRequest(current, topologyPreviewVariants[0].replicaCount, topologyPreviewVariants[0].tpCount, topologyPreviewVariants[0].prefillReplicaCount, topologyPreviewVariants[0].prefillTpCount), clusterHardware, requestedBasis));
+            const result = await planInSession(withRecommendationBudget(planningRequest(current, topologyPreviewVariants[0].replicaCount, topologyPreviewVariants[0].tpCount, topologyPreviewVariants[0].prefillReplicaCount, topologyPreviewVariants[0].prefillTpCount), currentHardware, requestedBasis));
             setPlanResult(result.validation?.errors?.length ? null : result);
             const globalErrors = showServerErrors(result.validation?.errors || []);
             if (globalErrors.length) setPlanError(globalErrors.join(' '));
@@ -901,7 +937,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                         ...runtimeControlOverrides({ maxModelLen, maxNumSeqs, gpuMemoryUtilization, blockSize, maxNumBatchedTokens }, selection.modelServer),
                         ...customParameters,
                     ],
-                    guide_variant: ['pd-disaggregation', 'tiered-prefix-cache'].includes(workload.guide) ? guideVariant : undefined,
+                    guide_variant: guideVariant,
                     runtime: {
                         image, imageMode, buildSourceUrl, modelServer: selection.modelServer, resourceBasis,
                         modelPvcClaimName: selectedModelCacheVolume?.pvcName || '',
@@ -938,6 +974,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                     { ...rendered.deployable_configuration, provenance: {
                         ...rendered.deployable_configuration.provenance,
                         editor_source: { guideSourceMode, localGuidePath, remoteGuideRepository, remoteGuideRef, remoteGuidePath },
+                        placement: { replicas: placementReplicas, ...(placementReplicas === 'same-node' && placementNodeLabel ? { nodeLabel: JSON.parse(placementNodeLabel) } : {}) },
                         configuration_validation: variantPlan.validation,
                     } },
                     `${slug(workload.guide)}-${isPd ? `p${variant.prefillReplicaCount}d${variant.replicaCount}-ptp${variant.prefillTpCount}-dtp${variant.tpCount}` : `r${variant.replicaCount}-tp${variant.tpCount}`}-${Date.now().toString(36)}.yaml`,
@@ -1050,7 +1087,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         const workload = {
             id: `${slug(selection.guide)}-${Date.now().toString(36)}`,
             guide: selection.guide,
-            guide_variant: ['pd-disaggregation', 'tiered-prefix-cache'].includes(selection.guide) ? guideVariant : '',
+            guide_variant: guideVariant,
             model: model.trim(),
             mount_path: '',
             replicas: reps,
@@ -1084,8 +1121,13 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
 
     const runAic = async (pdOnly = false) => {
         const availableGpus = budget;
+        const aicSystem = aicSystemNameForHardware(clusterHardware);
         if (!connectedCluster || clusterHardwareLoading) {
             setAicError('Wait for the selected cluster capacity check to finish.');
+            return;
+        }
+        if (!aicSystem) {
+            setAicError('AIConfigurator has no system mapping for the selected cluster hardware. Add it to the hardware profile.');
             return;
         }
         if (availableGpus < 1) {
@@ -1097,7 +1139,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         setAicCandidates(null);
         const workload = { model: model.trim(), isl: 1024, osl: 256 };
         const searchConfig = {
-            aicSystemName: aicSystem.trim(),
+            aicSystemName: aicSystem,
             aicBackendName: aicBackend,
             aicDatabaseMode: 'SILICON',
             totalGpus: availableGpus,
@@ -1126,7 +1168,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         const isPd = candidate.topologyMode === 'disagg' || Boolean(candidate.prefillTp || candidate.prefillReplicas);
         const guideId = isPd ? 'pd-disaggregation' : 'optimized-baseline';
         const guide = guides.find((item) => item.id === guideId && item.deploymentCapability);
-        const preferredAccelerator = /bmg|max_|xpu|b60|pvc/i.test(aicSystem) ? 'xpu' : 'gpu';
+        const preferredAccelerator = acceleratorVariantForHardware(clusterHardware) || selection.accelerator;
         const accelerator = guide?.accelerators?.find((item) => item.id === preferredAccelerator) || guide?.accelerators?.[0];
         const modelServer = accelerator?.modelServers?.find((item) => item.id === aicBackend) || accelerator?.modelServers?.[0];
         if (!guide || !accelerator || !modelServer) {
@@ -1336,6 +1378,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                         <div className="mb-4 border-l-2 border-emerald-400/70 bg-emerald-500/5 px-3 py-2">
                             <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-300">Guide template</h3>
                         </div>
+                        {!['pd-disaggregation', 'tiered-prefix-cache'].includes(selection.guide) && guideVariants.length > 1 && <label className={labelClass}>Guide variant<select className={inputClass} value={guideVariant} onChange={event => setGuideVariant(event.target.value)}>{guideVariants.map(variant => <option key={variant} value={variant}>{variantLabel(variant)}</option>)}</select></label>}
                         {catalogError && (
                             <div className="mb-3 flex items-center gap-2 border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-200">
                                 <AlertTriangle className="h-4 w-4" /> {catalogError}
@@ -1369,10 +1412,10 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                             </div>
                         )}
                         {selection.guide === 'pd-disaggregation' && <div className="mt-3 grid gap-3 md:grid-cols-2">
-                                <ConfigurationField field="guideVariant"><span className={labelClass}>P/D Guide variant</span><select className={inputClass} value={guideVariant} onChange={(event) => { setGuideVariant(event.target.value); setGuideSettings(current => ({ routerValues: current.routerValues || '' })); }}>{guideVariants.map((variant) => <option key={variant} value={variant}>{variant === 'vllm-rdma' ? 'vLLM + RDMA overlay' : variant === 'base' ? 'vLLM (base)' : variant === 'vllm' ? 'vLLM (XPU)' : variant}</option>)}{unavailableGuideVariants.map((item) => <option key={item.id} value={item.id} disabled>{`${item.label} (unavailable)`}</option>)}</select><FieldHelp>Set NIC count in Cache & network. Network selectors and alignment constraints come from the selected Guide.</FieldHelp></ConfigurationField>
+                                <ConfigurationField field="guideVariant"><span className={labelClass}>P/D Guide variant</span><select className={inputClass} value={guideVariant} onChange={(event) => { setGuideVariant(event.target.value); setGuideSettings(current => ({ routerValues: current.routerValues || '' })); }}>{guideVariants.map((variant) => <option key={variant} value={variant}>{variantLabel(variant)}</option>)}{unavailableGuideVariants.map((item) => <option key={item.id} value={item.id} disabled>{`${item.label} (unavailable)`}</option>)}</select><FieldHelp>Set NIC count in Cache & network. Network selectors and alignment constraints come from the selected Guide.</FieldHelp></ConfigurationField>
                             </div>}
                         {selection.guide === 'tiered-prefix-cache' && <div className="mt-3 grid gap-3 md:grid-cols-2">
-                                <ConfigurationField field="guideVariant"><span className={labelClass}>Tiered-prefix-cache variant</span><select className={inputClass} value={guideVariant} onChange={(event) => { setGuideVariant(event.target.value); setGuideSettings(current => ({ routerValues: current.routerValues || '' })); }}>{guideVariants.map((variant) => <option key={variant} value={variant}>{variant === 'base' ? 'HBM-only baseline' : variant === 'native/cpu/base' ? 'Native CPU offload · capacity from Guide' : variant === 'lmcache-connector/cpu/base' ? 'LMCache CPU offload · capacity from Guide' : variant}</option>)}</select><FieldHelp>Create separate base and offload artifacts, then select both in one Evaluation for a direct pairwise comparison.</FieldHelp></ConfigurationField>
+                                <ConfigurationField field="guideVariant"><span className={labelClass}>Tiered-prefix-cache variant</span><select className={inputClass} value={guideVariant} onChange={(event) => { setGuideVariant(event.target.value); setGuideSettings(current => ({ routerValues: current.routerValues || '' })); }}>{guideVariants.map((variant) => <option key={variant} value={variant}>{variantLabel(variant)}</option>)}</select><FieldHelp>Create separate base and offload artifacts, then select both in one Evaluation for a direct pairwise comparison.</FieldHelp></ConfigurationField>
 
                             </div>}
                         <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -1403,7 +1446,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                                 </ConfigurationField>
                                 <ConfigurationField field="remoteGuidePath" className="md:col-span-3">
                                     <span className={labelClass}>YAML or Kustomization path in repository</span>
-                                    <input className={inputClass} value={remoteGuidePath} placeholder="guides/optimized-baseline/modelserver/xpu/vllm/kustomization.yaml"
+                                    <input className={inputClass} value={remoteGuidePath} placeholder="Path to the selected Guide YAML or Kustomization"
                                         onChange={(event) => { setRemoteGuidePath(event.target.value); setPlanResult(null); }} />
                                 </ConfigurationField>
                             </>}
@@ -1444,6 +1487,16 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                         <details className="configuration-disclosure group/advanced mt-4 overflow-hidden rounded-xl border border-cyan-500/40">
                             <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-cyan-100 [&::-webkit-details-marker]:hidden"><ChevronRight aria-hidden="true" className="float-right mt-1 h-4 w-4 text-cyan-300 transition-transform group-open/advanced:rotate-90" />Advanced settings <span className="ml-2 text-xs text-slate-500">{customRows.length + Object.values({ maxModelLen, maxNumSeqs, gpuMemoryUtilization, blockSize, maxNumBatchedTokens, ...guideSettings }).filter(value => value != null && String(value).trim()).length} overrides</span><span className="mt-1 block text-xs font-normal leading-5 text-slate-400">Optional runtime tuning, environment variables, cache, and routing. Leave blank to use Guide defaults.</span></summary>
                             <div className="space-y-6 border-t border-slate-700/70 p-5">
+                            <section><h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Pod placement</h3><div className="mt-3 grid gap-4 md:grid-cols-2">
+                                <label className="block"><span className={labelClass}>Replica placement</span><select className={inputClass} value={placementReplicas} onChange={(event) => { setPlacementReplicas(event.target.value); setPlacementNodeLabel(''); }}>
+                                    <option value="prefer-same-node">Prefer one node (default)</option>
+                                    <option value="same-node">Require one node</option>
+                                    <option value="balanced">Distribute evenly across nodes</option>
+                                    <option value="spread">Require separate nodes</option>
+                                </select></label>
+                                {placementReplicas === 'spread' && <p className="text-xs text-amber-300 md:col-span-2">Requires one eligible node per replica. Extra replicas stay Pending if there are not enough nodes.</p>}
+                                {placementReplicas === 'same-node' && <label className="block"><span className={labelClass}>Node label (optional)</span><select className={inputClass} value={placementNodeLabel} onChange={(event) => setPlacementNodeLabel(event.target.value)}><option value="">Any eligible node</option>{nodeLabels.map((label) => <option key={JSON.stringify(label)} value={JSON.stringify(label)}>{label.key}={label.value}</option>)}</select>{nodeLabelError && <span role="alert" className="mt-1 block text-xs text-red-300">Unable to load node labels: {nodeLabelError}</span>}</label>}
+                            </div></section>
                             {selection.modelServer === 'vllm' && <>
                                 <section><h3 className="text-xs font-semibold uppercase tracking-wide text-violet-300">Runtime batching</h3><p className="mt-2 text-xs text-slate-400">Batching controls for the generated model-server YAML. Leave blank to use Guide defaults.</p><div className="mt-4 grid gap-4 md:grid-cols-2"><ConfigurationField field="blockSize"><span className={labelClass}>Block size (tokens)</span><input type="number" min="1" className={inputClass} value={blockSize} placeholder="Guide default" onChange={(event) => setBlockSize(event.target.value)} /><FieldHelp>vLLM --block-size. Use a value supported by the selected runtime image and accelerator.</FieldHelp></ConfigurationField>
 <ConfigurationField field="maxNumBatchedTokens"><span className={labelClass}>Max batched tokens</span><input type="number" min="1" className={inputClass} value={maxNumBatchedTokens} placeholder="Guide default" onChange={(event) => setMaxNumBatchedTokens(event.target.value)} /><FieldHelp>vLLM --max-num-batched-tokens. Leave blank to keep the Guide batching configuration.</FieldHelp></ConfigurationField></div></section>
@@ -1474,9 +1527,9 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                             </div>
 
                             </section>
-                            {((selection.guide === 'tiered-prefix-cache' && ['native/cpu/base', 'lmcache-connector/cpu/base'].includes(guideVariant)) || (selection.guide === 'pd-disaggregation' && guideVariant === 'vllm-rdma') || guideSettings.cacheCpuGiB || guideSettings.rdmaNicCount) && <section className="border-t border-slate-800 pt-4"><h3 className="text-sm font-medium text-slate-200">Cache &amp; network</h3><div className="mt-3 grid gap-3 md:grid-cols-2">
-                                {((selection.guide === 'tiered-prefix-cache' && ['native/cpu/base', 'lmcache-connector/cpu/base'].includes(guideVariant)) || guideSettings.cacheCpuGiB) && <ConfigurationField field="cacheCpuGiB" className="block"><span className={labelClass}>CPU cache capacity per pod (GiB)</span><input type="number" min="0.1" step="0.1" className={inputClass} value={guideSettings.cacheCpuGiB ?? ''} placeholder="Guide default" onChange={event => setGuideSettings(current => ({ ...current, cacheCpuGiB: event.target.value }))} /></ConfigurationField>}
-                                {((selection.guide === 'pd-disaggregation' && guideVariant === 'vllm-rdma') || guideSettings.rdmaNicCount) && <ConfigurationField field="rdmaNicCount" className="block"><span className={labelClass}>RDMA NICs per pod</span><input type="number" min="1" step="1" className={inputClass} value={guideSettings.rdmaNicCount ?? ''} placeholder="Guide default" onChange={event => setGuideSettings(current => ({ ...current, rdmaNicCount: event.target.value }))} /><FieldHelp>Independent of TP. The Guide's NIC selectors and alignment constraints are preserved.</FieldHelp></ConfigurationField>}
+                            {(sourceCapabilities?.cacheCpuGiB || sourceCapabilities?.rdmaNicCount || guideSettings.cacheCpuGiB || guideSettings.rdmaNicCount) && <section className="border-t border-slate-800 pt-4"><h3 className="text-sm font-medium text-slate-200">Cache &amp; network</h3><div className="mt-3 grid gap-3 md:grid-cols-2">
+                                {(sourceCapabilities?.cacheCpuGiB || guideSettings.cacheCpuGiB) && <ConfigurationField field="cacheCpuGiB" className="block"><span className={labelClass}>CPU cache capacity per pod (GiB)</span><input type="number" min="0.1" step="0.1" className={inputClass} value={guideSettings.cacheCpuGiB ?? ''} placeholder="Guide default" onChange={event => setGuideSettings(current => ({ ...current, cacheCpuGiB: event.target.value }))} /></ConfigurationField>}
+                                {(sourceCapabilities?.rdmaNicCount || guideSettings.rdmaNicCount) && <ConfigurationField field="rdmaNicCount" className="block"><span className={labelClass}>RDMA NICs per pod</span><input type="number" min="1" step="1" className={inputClass} value={guideSettings.rdmaNicCount ?? ''} placeholder="Guide default" onChange={event => setGuideSettings(current => ({ ...current, rdmaNicCount: event.target.value }))} /><FieldHelp>Independent of TP. The Guide's NIC selectors and alignment constraints are preserved.</FieldHelp></ConfigurationField>}
                             </div></section>}
                             <section className="border-t border-slate-800 pt-4"><h3 className="text-sm font-medium text-slate-200">Router configuration <span className="text-xs text-slate-500">{guideSettings.routerValues?.trim() ? 'Customized' : 'Guide default'}</span></h3><div className="mt-3"><ConfigurationField field="routerValues" className="block"><span className={labelClass}>Router values (YAML overrides)</span><textarea aria-label="Router values" rows={4} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 font-mono text-xs text-slate-200" value={guideSettings.routerValues ?? ''} placeholder={'router:\n  epp:\n    replicas: 1'} onChange={event => setGuideSettings(current => ({ ...current, routerValues: event.target.value }))} /><FieldHelp>Merged over this Guide's router values and saved with the configuration. Precise routing keeps tokenizer identity and index block size aligned with the model server.</FieldHelp></ConfigurationField></div></section>
                             </div>

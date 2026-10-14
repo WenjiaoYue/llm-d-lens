@@ -25,6 +25,15 @@ The small run checks that benchmarking works. For a performance comparison,
 [set evaluation parameters](/evaluation/parameters) to increase the load.
 The token is used for this run and is not saved for future retries.
 
+The creation wizard refreshes the selected cluster's **Available** accelerator
+count every five seconds while the tab is visible and again when you return.
+Counts reflect Kubernetes allocations, so queued work may not reduce the count
+until a deployment allocates devices. Refreshes keep your inputs and the last
+successful count if a request temporarily fails. If setup reports **Unable to
+continue** because no valid cluster is selected or Software Versions have not
+been downloaded, use **Select or manage a cluster**, prepare the cluster, then
+select it again in Evaluation.
+
 ## Compare deployment configurations
 
 1. Open **Evaluation → New Task** and choose **Deploy configurations**.
@@ -39,6 +48,20 @@ The token is used for this run and is not saved for future retries.
 **View YAML** lets you inspect a saved configuration. Editing its YAML saves a new
 configuration and keeps the original.
 
+Evaluation deployments and generated baselines use the selected configuration's
+hardware profile and accelerator request type (DRA or extended resource). The
+profile also supplies benchmark device metrics, labels, scaling and allocation
+attribution. Missing telemetry remains unavailable rather than using another
+hardware family's metrics. For official Guide sources, prepare the selected
+llm-d checkout before choosing a nested variant; inspect generated YAML and
+source provenance before deployment. A custom runtime image remains an override.
+
+New P/D Disaggregation configurations start with concurrency 1 / 16 requests and
+8 / 32 requests for each token-length pair. Optimized baseline and Precise
+prefix-cache routing start with 3 and 10 requests/s for 60 seconds each; Tiered
+prefix cache starts with 1 and 1.5 requests/s for 60 seconds each. Add stages for
+a larger sweep. Existing saved configurations retain their settings.
+
 ## Complete the full benchmark wizard
 
 Some entry points open **New Benchmark Task** rather than the compact task dialog.
@@ -50,6 +73,27 @@ Some entry points open **New Benchmark Task** rather than the compact task dialo
 5. Continue to **Execution plan**, check the target list and execution order, and click **Start Evaluation**.
 
 Existing-service runs skip configuration design and do not create a deployment.
+
+## Estimate workload time
+
+New optimized-baseline and precise-prefix routing tasks default to a
+**Lightweight check** of 24 measured requests per target and worker, with 512
+shared input tokens, 128 unique input tokens and 64 output tokens. Select **Full
+routing workload** for a longer performance evaluation. Existing saved tasks
+keep their workload and timeout settings on retry.
+
+**Timeout mode** defaults to **Automatic (workload-based)**. Its per-invocation
+budget includes setup and safety allowances, ranges from 15 minutes to 4 hours,
+and falls back to 2 hours when there is no supported estimate. **Manual limit**
+keeps your chosen hard limit and warns if it is shorter than the estimate. The
+estimated range covers each benchmark target, not installation, deployment or
+final analysis; it is based on throughput assumptions, not measured hardware.
+Repository profiles, custom YAML, unsupported harnesses and multi-turn workloads
+show no estimate. During execution a compact badge above the result tabs shows
+remaining time or **Taking longer than estimated**; it disappears after completion.
+Warm-up and matrix points each have their own limit. Rate-stage duration is the
+offered traffic window; queued requests can finish later. Parallel instances
+multiply the request count.
 
 ## Read the results
 
@@ -72,6 +116,13 @@ No ratio means there is not enough comparable data, or the baseline is zero.
 Reported stable request rates cover only the loads tested. Add higher load stages
 in a new run to test more capacity.
 
+In **Resources during benchmark**, saved topology, resource charts and Pod
+ranking remain visible even without request/token samples. Missing traffic is
+marked explicitly; device allocation failures can have a reason even when engine
+metrics exist. Plugin device attribution needs kubelet-reported, profile-recognized
+device identities. Collection corrects for the Prometheus clock offset when
+querying the saved window; older results are not recollected.
+
 ## Investigate a failed or slow task
 
 1. Open **Results → Benchmark logs** to inspect benchmark output and diagnostics.
@@ -81,6 +132,16 @@ in a new run to test more capacity.
 
 Progress updates automatically. Use **Refresh deployment status and details**
 when you need a new deployment readiness check.
+
+Before traffic starts, Evaluation waits for healthy Prometheus scrapes and two
+inference gauge samples for each discovered serving Pod, plus a healthy target
+for a discovered EPP service. Monitor creation alone does not establish readiness.
+The `preparing-monitoring` deadline uses the resolved benchmark timeout budget;
+legacy runs without one use 600 seconds. If readiness times out, check Monitor
+selection, Prometheus reloads and targets, then retry. This also applies to
+existing endpoints. Exit 137 means SIGKILL, not necessarily out-of-memory;
+check for an explicit Kubernetes `OOMKilled` reason. A local backend restart
+interrupts active evaluations, which can be retried after services return.
 
 ## Retry, resume or stop a run
 
@@ -97,6 +158,13 @@ Wait for stopping and cleanup to finish. Cancelling a case also stops dependent
 cases that share its deployment. Successful cases are normally kept on retry,
 but a lost shared deployment can require its candidate to run again.
 
+Backends sharing evaluation records must also share
+`LENS_DATA_DIR/metadata/evaluations/locks` on a filesystem supporting `flock`,
+and all must run the updated code. Starting another backend does not relaunch a
+live owner's task. Cancel, retry and delete requests sent to a different owner
+return HTTP `409` without changing records or cluster resources; send them to
+the backend executing that evaluation.
+
 ## Export results or delete a task
 
 1. Open **Results** and click **Download Report** to save the report.
@@ -111,3 +179,10 @@ Evaluation normally cleans up deployments it creates. A keep-deployment option
 retains successful candidates, not independent baselines; retained candidates
 continue using cluster resources. Exports do not include secret values or all
 external datasets and dependencies.
+
+The creation wizard itself does not offer a retention checkbox: it cleans up
+deployments created from its configurations. A task shows **Succeeded** after
+benchmarking and comparison, while final cleanup continues in the background;
+accelerators may still be allocated. Cleanup failures are recorded separately
+without changing the successful result. Deleting the task waits for in-flight
+cleanup before removing its history.

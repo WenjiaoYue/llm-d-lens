@@ -4,6 +4,16 @@
 
 This is a starting point for discovery, not a complete function inventory. Source code, callers, and tests are authoritative. See the [reuse development guide](../docs/design/reuse-workflow.md) for usage.
 
+## router-pd-plugin-compatibility
+
+Adapt legacy P/D plugin configurations to Router 0.11 while preserving source snapshots and disaggregation decisions.
+
+- Entry point: [apps/backend/src/llm_d_lens/configuration/router_compatibility.py](../apps/backend/src/llm_d_lens/configuration/router_compatibility.py)
+- Symbols: `compatible_router_values`
+- Boundaries: Only known Router 0.11 endpoint-picker runtimes are adapted. The profile handler owns former header handling; deciderPluginName maps to deciders.prefill. Conflicting decisions and custom legacy header parameters are rejected. Node planning mirrors this contract; Python validation and bundle installation share this implementation. Original asset checksums are retained and installed derived values are recorded separately.
+- Examples: [apps/server/src/services/guideDeploymentBundle.ts](../apps/server/src/services/guideDeploymentBundle.ts), [apps/backend/src/llm_d_lens/configuration/guide_settings.py](../apps/backend/src/llm_d_lens/configuration/guide_settings.py), [apps/backend/src/llm_d_lens/deploy/providers/deployment_bundle.py](../apps/backend/src/llm_d_lens/deploy/providers/deployment_bundle.py), [apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py](../apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py)
+- Tests: [apps/backend/tests/unit/configuration/test_router_compatibility.py](../apps/backend/tests/unit/configuration/test_router_compatibility.py), [apps/server/testing/services/guideDeploymentBundle.test.ts](../apps/server/testing/services/guideDeploymentBundle.test.ts), [apps/backend/tests/unit/deploy/providers/test_pd_disaggregation.py](../apps/backend/tests/unit/deploy/providers/test_pd_disaggregation.py)
+
 ## public-ai-provider-transport
 
 Enforce public HTTPS destinations for external AI providers and pin outbound requests to validated IP addresses by default; explicitly trusted egress proxies may receive the original hostname.
@@ -14,23 +24,33 @@ Enforce public HTTPS destinations for external AI providers and pin outbound req
 - Examples: [apps/backend/src/llm_d_lens/ai_providers/client.py](../apps/backend/src/llm_d_lens/ai_providers/client.py), [apps/backend/src/llm_d_lens/ai_providers/router.py](../apps/backend/src/llm_d_lens/ai_providers/router.py)
 - Tests: [apps/backend/tests/unit/ai_providers/test_service.py](../apps/backend/tests/unit/ai_providers/test_service.py), [apps/backend/tests/unit/ai_providers/test_client.py](../apps/backend/tests/unit/ai_providers/test_client.py)
 
+## deployment-placement-presets
+
+Apply replica placement presets across rendered Kubernetes modelserver Pod templates in one manifest.
+
+- Entry point: [apps/backend/src/llm_d_lens/deploy/providers/target_node.py](../apps/backend/src/llm_d_lens/deploy/providers/target_node.py)
+- Symbols: `validate_placement`, `apply_placement`
+- Boundaries: Modelserver Deployments in one rendered manifest share a placement group; non-modelserver workloads do not join it. Required Pod affinity keeps their Pods on one node, required anti-affinity separates them, hostname topology spread balances them with maxSkew 1, and preferred affinity favors co-location without blocking cross-node scheduling. LeaderWorkerSet does not support the balanced or separate-node preset. An optional selected node label further limits the same-node preset. Existing accelerator claims keep TP devices in each modelserver Pod; LeaderWorkerSet leader/worker Pods receive a soft same-node preference.
+- Examples: [apps/backend/src/llm_d_lens/deploy/providers/configuration_manifest.py](../apps/backend/src/llm_d_lens/deploy/providers/configuration_manifest.py), [apps/backend/src/llm_d_lens/deploy/providers/optimized_baseline.py](../apps/backend/src/llm_d_lens/deploy/providers/optimized_baseline.py), [apps/backend/src/llm_d_lens/deploy/router.py](../apps/backend/src/llm_d_lens/deploy/router.py)
+- Tests: [apps/backend/tests/unit/deploy/providers/test_configuration_manifest.py](../apps/backend/tests/unit/deploy/providers/test_configuration_manifest.py), [apps/backend/tests/unit/deploy/providers/test_optimized_baseline_profiles.py](../apps/backend/tests/unit/deploy/providers/test_optimized_baseline_profiles.py)
+
 ## deploy-hardware-profile
 
-Resolve the deployment hardware identity (DRA device class, claim request name, overlay variant, accelerator support) from the registered profile, and return the profile-owned model-server runtime image (repository and version) with normalization of stored managed images, using literal fallbacks. Also resolves router_topology (the per-guide router-values directory some Guides split by topology, e.g. single-host vs a multi-host LeaderWorkerSet), defaulting to single-host for every profile that does not set it.
+Resolve deployment hardware identity, model-server runtime images, source Kustomization variants and profile-owned router topology, defaulting to single-host when unset.
 
 - Entry point: [apps/backend/src/llm_d_lens/deploy/providers/hardware_profile.py](../apps/backend/src/llm_d_lens/deploy/providers/hardware_profile.py)
-- Symbols: `active_profile`, `device_class`, `claim_request_name`, `overlay_variant`, `accelerator_supported`, `request_model`, `requires_dra_claim`, `resource_name`, `runtime_image`, `pin_runtime_image`, `set_accelerator_request`, `router_topology`
-- Boundaries: Deploy rendering only. Profile semantics live in llm_d_lens.hardware; this module picks the deploy accelerator key ('xpu') and exposes fallbacks for discovery failures. Model-server image repository and version are data in the profile, never hardcoded here. Do not add guide-specific logic here.
+- Symbols: `active_profile`, `device_class`, `claim_request_name`, `overlay_variant`, `accelerator_supported`, `request_model`, `requires_dra_claim`, `resource_name`, `runtime_image`, `pin_runtime_image`, `set_accelerator_request`, `guide_overlays`, `default_guide_variant`, `router_topology`
+- Boundaries: Deploy rendering only. Profile semantics live in llm_d_lens.hardware; unknown hardware stays neutral. Profiles own managed images and resource identities; selected upstream source owns guide variants. Never mutate NIC requests as accelerator requests.
 - Examples: [apps/backend/src/llm_d_lens/deploy/providers/baseline_vllm.py](../apps/backend/src/llm_d_lens/deploy/providers/baseline_vllm.py), [apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py](../apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py), [apps/backend/src/llm_d_lens/deploy/providers/gpu_selection.py](../apps/backend/src/llm_d_lens/deploy/providers/gpu_selection.py), [apps/backend/src/llm_d_lens/deploy/runtime/composition.py](../apps/backend/src/llm_d_lens/deploy/runtime/composition.py)
-- Tests: [apps/backend/tests/unit/deploy/providers/test_hardware_profile.py](../apps/backend/tests/unit/deploy/providers/test_hardware_profile.py)
+- Tests: [apps/backend/tests/unit/deploy/providers/test_hardware_profile.py](../apps/backend/tests/unit/deploy/providers/test_hardware_profile.py), [apps/backend/tests/unit/hardware/test_deployment_telemetry_contract.py](../apps/backend/tests/unit/hardware/test_deployment_telemetry_contract.py)
 
 ## node-hardware-profiles
 
 Node client for the hardware profile registry plus pure helpers that resolve the AIC accelerator and known DRA device classes from registered profiles.
 
 - Entry point: [apps/server/src/services/hardwareProfiles.ts](../apps/server/src/services/hardwareProfiles.ts)
-- Symbols: `loadHardwareProfiles`, `aicAcceleratorForSystem`, `isKnownDeviceClass`
-- Boundaries: Read-only, cached, non-blocking (returns the previous snapshot or [] on failure); callers keep their own regex defaults. Vendor names come from the backend registry, not this module.
+- Symbols: `loadHardwareProfiles`, `aicAcceleratorForSystem`, `isKnownDeviceClass`, `hardwareProfileSnapshot`
+- Boundaries: Read-only cached registry client; consumers use shared profile matching and remain neutral when hardware is unresolved.
 - Examples: [apps/server/src/routes/candidateSearch.ts](../apps/server/src/routes/candidateSearch.ts)
 - Tests: [apps/server/testing/services/hardwareProfiles.test.ts](../apps/server/testing/services/hardwareProfiles.test.ts)
 
@@ -49,7 +69,7 @@ Browser client for GET /api/v1/hardware/capabilities and a pure mapper from regi
 Map a benchmark run's accelerator profile/runtime to a display label (XPU/GPU/neutral) for chart titles and metric labels, and identify the profile-owned default model-server image repositories so hardware realignment never clobbers a custom image.
 
 - Entry point: [apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.js)
-- Symbols: `acceleratorValue`, `acceleratorDisplayLabel`, `utilizationLabel`, `DEFAULT_RUNTIME_IMAGES`, `MANAGED_RUNTIME_IMAGE_REPOSITORIES`, `runtimeImageRepository`, `runtimeImageForHardware`, `isDefaultRuntimeImage`
+- Symbols: `acceleratorValue`, `acceleratorDisplayLabel`, `utilizationLabel`, `DEFAULT_RUNTIME_IMAGES`, `MANAGED_RUNTIME_IMAGE_REPOSITORIES`, `runtimeImageRepository`, `runtimeImageForHardware`, `isDefaultRuntimeImage`, `setHardwareProfiles`, `acceleratorVariantForHardware`
 - Boundaries: Display and default-image selection only; no metric computation and no model-server version. The hardware profile owns the model-server repository/version; only repositories are tracked here. Unknown hardware falls back to the neutral 'GPU / XPU' wording.
 - Examples: [apps/frontend/src/pages/evaluation/ui/benchmark-results/ResourceExplorer.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/ResourceExplorer.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx), [apps/frontend/src/pages/evaluation/model/setup.js](../apps/frontend/src/pages/evaluation/model/setup.js)
 - Tests: [apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.test.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.test.js), [apps/frontend/src/pages/evaluation/model/setup.test.js](../apps/frontend/src/pages/evaluation/model/setup.test.js)
@@ -76,20 +96,20 @@ In-process hardware profile/provider registry populated once from bundled JSON a
 
 ## hardware-telemetry-query
 
-Build namespace/pod-scoped, unit-aware device PromQL from a hardware profile's telemetry.device_metric_sources, treating an empty or missing entry as disabled.
+Build namespace/pod-scoped, unit-aware device PromQL from a hardware profile's telemetry.device_metric_sources, treating an empty or missing entry as disabled. Parse direct device snapshots using declared labels, matchers, scales and tile aggregation.
 
 - Entry point: [apps/backend/src/llm_d_lens/hardware/telemetry.py](../apps/backend/src/llm_d_lens/hardware/telemetry.py)
-- Symbols: `device_metric_source`, `scoped_device_query`, `combined_device_query`
-- Boundaries: Reads profile config only; never hardcodes vendor metric names. device_metrics (full PromQL) stays the cluster-overview source; device_metric_sources carries the bare metric name, unit, scale and required label matchers for selector injection into profiling/evaluate queries. combined_device_query OR-combines one metric across profiles so only the vendor present returns samples; an empty metric means the hardware does not report it (skip). Does not decide readiness or units for the cluster page.
+- Symbols: `device_metric_source`, `scoped_device_query`, `combined_device_query`, `parse_device_metrics`, `workload_telemetry_profiles`
+- Boundaries: Reads profile config only; never hardcodes vendor metric names. device_metrics (full PromQL) stays the cluster-overview source; device_metric_sources carries the bare metric name, unit, scale and required label matchers for selector injection into profiling/evaluate queries. combined_device_query OR-combines one metric across profiles so only the vendor present returns samples; an empty metric means the hardware does not report it (skip). Does not decide readiness or units for the cluster page. Effective allocation joins are selected from telemetry.modes using actual workload resource requests.
 - Examples: [apps/backend/src/llm_d_lens/monitoring/profiling/service.py](../apps/backend/src/llm_d_lens/monitoring/profiling/service.py), [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
-- Tests: [apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py](../apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py)
+- Tests: [apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py](../apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py), [apps/backend/tests/unit/hardware/test_deployment_telemetry_contract.py](../apps/backend/tests/unit/hardware/test_deployment_telemetry_contract.py)
 
 ## hardware-profile-model
 
 Typed hardware profile contract: frozen dataclasses for each contribution plus the capabilities API response model.
 
 - Entry point: [apps/backend/src/llm_d_lens/hardware/models.py](../apps/backend/src/llm_d_lens/hardware/models.py)
-- Symbols: `DriverContribution`, `HardwarePresence`, `TelemetryContribution`, `DeploymentContribution`, `PlanningContribution`, `UiContribution`, `HardwareProfile`, `HardwareCapabilitiesResponse`
+- Symbols: `DriverContribution`, `HardwarePresence`, `TelemetryContribution`, `DeploymentContribution`, `PlanningContribution`, `UiContribution`, `HardwareProfile`, `HardwareCapabilitiesResponse`, `DeviceMetricSource`
 - Boundaries: Data model only. The authoritative form is profiles/*.json validated by schema.json; this module maps JSON to typed objects and back. Do not add resolver or vendor-specific logic here.
 - Examples: [apps/backend/src/llm_d_lens/hardware/registry.py](../apps/backend/src/llm_d_lens/hardware/registry.py), [apps/backend/src/llm_d_lens/hardware/discovery.py](../apps/backend/src/llm_d_lens/hardware/discovery.py), [apps/backend/src/llm_d_lens/hardware/service.py](../apps/backend/src/llm_d_lens/hardware/service.py)
 - Tests: [apps/backend/tests/unit/hardware/test_hardware.py](../apps/backend/tests/unit/hardware/test_hardware.py)
@@ -106,13 +126,13 @@ Load hardware profiles/providers from bundled JSON and entry points, validate pa
 
 ## hardware-profile-resolver
 
-Resolve a hardware profile by the identity a caller actually has: DRA device class, extended-resource key, node label, upstream variant, accelerator key or AIC system name.
+Resolve a hardware profile by the identity a caller actually has: DRA device class, extended-resource key, node label, upstream variant, accelerator key or AIC system name. Resolve saved deployment hardware and preserve source DRA or extended-resource requests for evaluation baselines.
 
 - Entry point: [apps/backend/src/llm_d_lens/hardware/resolver.py](../apps/backend/src/llm_d_lens/hardware/resolver.py)
-- Symbols: `resolve_by_device_class`, `resolve_by_resource`, `resolve_by_node_label`, `resolve_by_upstream_variant`, `resolve_by_accelerator_key`, `resolve_by_aic_system`, `require_accelerator`
+- Symbols: `resolve_by_device_class`, `resolve_by_resource`, `resolve_by_node_label`, `resolve_by_upstream_variant`, `resolve_by_accelerator_key`, `resolve_by_aic_system`, `require_accelerator`, `resolve_configuration_profile`, `configuration_resource_request`, `deployment_mode`
 - Boundaries: Read-only resolution. Unknown identity returns None so discovery can degrade; require_accelerator raises ACCELERATOR_NOT_REGISTERED for explicit use (design decision 4/D5). Callers must resolve by identity, not branch on vendor names.
 - Examples: [apps/backend/src/llm_d_lens/hardware/__init__.py](../apps/backend/src/llm_d_lens/hardware/__init__.py), [apps/backend/src/llm_d_lens/monitoring/accelerator/models.py](../apps/backend/src/llm_d_lens/monitoring/accelerator/models.py), [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py), [apps/backend/src/llm_d_lens/monitoring/profiling/xpu_metrics.py](../apps/backend/src/llm_d_lens/monitoring/profiling/xpu_metrics.py), [apps/backend/src/llm_d_lens/cluster/service.py](../apps/backend/src/llm_d_lens/cluster/service.py), [apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py](../apps/backend/src/llm_d_lens/monitoring/gpu_driver/service.py), [apps/backend/src/llm_d_lens/monitoring/accelerator/intel_gpu.py](../apps/backend/src/llm_d_lens/monitoring/accelerator/intel_gpu.py)
-- Tests: [apps/backend/tests/unit/hardware/test_hardware.py](../apps/backend/tests/unit/hardware/test_hardware.py)
+- Tests: [apps/backend/tests/unit/hardware/test_hardware.py](../apps/backend/tests/unit/hardware/test_hardware.py), [apps/backend/tests/unit/hardware/test_deployment_telemetry_contract.py](../apps/backend/tests/unit/hardware/test_deployment_telemetry_contract.py)
 
 ## json-http
 
@@ -133,6 +153,16 @@ Loading, error, retry, empty-state, and content presentation.
 - Boundaries: Presentation only. Request lifecycle, cancellation and retry policy belong to callers. Order is loading, error, empty, children. Optional loadingContent/errorContent/emptyContent preserve domain copy and actions. Callers decide whether refresh errors hide cached data.
 - Examples: [apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx](../apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx), [apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx](../apps/frontend/src/pages/storage/ui/StorageManagement/StorageManagementPage.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx)
 - Tests: [apps/frontend/src/shared/ui/AsyncState.test.jsx](../apps/frontend/src/shared/ui/AsyncState.test.jsx)
+
+## pod-placement-control
+
+Show a collapsed replica placement selector with scheduling guidance for Standard and Agentic model deployments.
+
+- Entry point: [apps/frontend/src/shared/ui/PodPlacementControl.jsx](../apps/frontend/src/shared/ui/PodPlacementControl.jsx)
+- Symbols: `PodPlacementControl`
+- Boundaries: Presentation only. The parent owns selection state and sends placement_replicas and optional placement_node_label; the control lists hostname labels from the selected cluster and the deployment backend validates the chosen label before scheduling.
+- Examples: [apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx](../apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx), [apps/frontend/src/pages/deployment/ui/AgenticDeploymentWorkspace.jsx](../apps/frontend/src/pages/deployment/ui/AgenticDeploymentWorkspace.jsx)
+- Tests: [apps/frontend/src/shared/ui/PodPlacementControl.test.jsx](../apps/frontend/src/shared/ui/PodPlacementControl.test.jsx)
 
 ## modal
 
@@ -536,13 +566,73 @@ Append deployment diagnostics independently of Kubernetes and register partial s
 
 ## deployment-routing-workload
 
-Fresh shared-prefix defaults for optimized and precise routing comparisons.
+Fresh lightweight shared-prefix defaults and explicit full routing workloads for optimized and precise comparisons.
 
 - Entry point: [apps/backend/src/llm_d_lens/deploy/capabilities.py](../apps/backend/src/llm_d_lens/deploy/capabilities.py)
 - Symbols: `shared_prefix_routing_workload`
-- Boundaries: New nested data per call. Provider goals, baselines, tiered-cache and PD workload definitions remain distinct.
+- Boundaries: New nested data per call. Defaults to 24 requests; full=True preserves the 780-request performance profile. Provider goals, baselines, tiered-cache and PD workload definitions remain distinct.
 - Examples: [apps/backend/src/llm_d_lens/deploy/capabilities.py](../apps/backend/src/llm_d_lens/deploy/capabilities.py)
 - Tests: [apps/backend/tests/unit/deploy/test_capabilities.py](../apps/backend/tests/unit/deploy/test_capabilities.py)
+
+## evaluation-benchmark-timing
+
+Estimate generated benchmark workload duration and resolve bounded automatic or explicit manual execution budgets.
+
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/timing.py](../apps/backend/src/llm_d_lens/evaluation/timing.py)
+- Symbols: `benchmark_timing`
+- Boundaries: Pure Evaluation-domain configuration heuristic, not measured hardware prediction. Includes request drain, parallel traffic and warmup; excludes deployment and final analysis. Unsupported workloads have unknown estimates. Explicit manual limits survive unchanged; automatic budgets are capped.
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_timing.py](../apps/backend/tests/unit/evaluation/test_timing.py), [apps/backend/tests/contract/evaluation/test_api_contract.py](../apps/backend/tests/contract/evaluation/test_api_contract.py)
+
+## evaluation-benchmark-budget-api
+
+Expose benchmark timing previews and resolve the same execution budget at run creation.
+
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Symbols: `create_run`, `estimate_benchmark_timing`
+- Boundaries: Evaluation API adaptation over benchmark_timing. Preview is pure configuration analysis; run creation retains existing target validation, authorization and tracked execution. Explicit manual limits are preserved.
+- Examples: [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.jsx), [apps/backend/src/llm_d_lens/evaluation/execution.py](../apps/backend/src/llm_d_lens/evaluation/execution.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_timing.py](../apps/backend/tests/unit/evaluation/test_timing.py), [apps/backend/tests/contract/evaluation/test_api_contract.py](../apps/backend/tests/contract/evaluation/test_api_contract.py)
+
+## evaluation-benchmark-settings
+
+Apply benchmark presets, count planned traffic and validate benchmark form values.
+
+- Entry point: [apps/frontend/src/pages/evaluation/model/benchmarkSettings.js](../apps/frontend/src/pages/evaluation/model/benchmarkSettings.js)
+- Symbols: `applyBenchmarkPreset`, `benchmarkSummary`, `benchmarkIssues`
+- Boundaries: Pure Evaluation form logic. Counts include targets and parallel instances, exclude warm-up, and leave unsupported workloads unknown. Null or omitted execution timeout means automatic; backend validation remains authoritative.
+- Examples: [apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx), [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/model/benchmarkSettings.test.js](../apps/frontend/src/pages/evaluation/model/benchmarkSettings.test.js)
+
+## evaluation-benchmark-inputs
+
+Compose workload, traffic, SLO, timeout and timing-preview controls for Evaluation creation surfaces.
+
+- Entry point: [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.jsx)
+- Symbols: `BenchmarkInputs`
+- Boundaries: Controlled Evaluation form. Uses shared benchmark settings and timing components; workload selection and submission stay with callers. Full routing traffic is explicit and preset objects are cloned before editing.
+- Examples: [apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.test.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.test.jsx)
+
+## evaluation-benchmark-timing-display
+
+Display shared backend timing estimates before submission and an optional compact remaining-time badge during execution.
+
+- Entry point: [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.jsx)
+- Symbols: `BenchmarkTiming`
+- Boundaries: Uses authenticated Evaluation transport for debounced previews and visibility-aware polling for runtime display. Compact mode shows only remaining time and hides terminal runs; configuration previews retain detailed budgets. Does not infer hardware throughput, whole-workflow ETA or request progress. Handles unavailable estimates and overruns without false countdowns.
+- Examples: [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.jsx), [apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx](../apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.test.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.test.jsx), [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.test.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkInputs.test.jsx)
+
+## evaluation-benchmark-time-values
+
+Format backend timing estimates, elapsed time and active phase deadlines for Evaluation views.
+
+- Entry point: [apps/frontend/src/pages/evaluation/model/benchmarkSettings.js](../apps/frontend/src/pages/evaluation/model/benchmarkSettings.js)
+- Symbols: `benchmarkTimeDisplay`, `formatBenchmarkMinutes`
+- Boundaries: Pure presentation of persisted timing and timestamps. Terminal runs stop counting, unknown workloads stay unknown and overdue estimates do not claim zero remaining. No request-progress inference.
+- Examples: [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.test.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/BenchmarkTiming.test.jsx)
 
 ## remote-repository-preparation
 
@@ -944,7 +1034,7 @@ Shared periodic page-data refresh hook with quiet refreshes, unmount cleanup, hi
 - Entry point: [apps/frontend/src/shared/lib/usePolling.js](../apps/frontend/src/shared/lib/usePolling.js)
 - Symbols: `usePolling`
 - Boundaries: Use this for server-state freshness instead of a full page reload or an ad-hoc setInterval. Default interval is 5s; gate with enabled when there is nothing to watch (e.g. only while a download is in flight). Callbacks should refresh quietly — keep existing rows and reuse the page's load({ quiet: true }) instead of a full-page loading state — and must not disturb filters, form input, selected rows or open dialogs. Specialized loops with cancellation/streaming semantics (port-forward, logs, clocks) may keep their own timer but must still pause when hidden and clean up on unmount.
-- Examples: [apps/frontend/src/pages/administration/ui/UsersPage.jsx](../apps/frontend/src/pages/administration/ui/UsersPage.jsx), [apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx](../apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx), [apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx](../apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx)
+- Examples: [apps/frontend/src/pages/administration/ui/UsersPage.jsx](../apps/frontend/src/pages/administration/ui/UsersPage.jsx), [apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx](../apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx), [apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx](../apps/frontend/src/pages/ai-providers/ui/AIProvidersPage.jsx), [apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx](../apps/frontend/src/pages/deployment/ui/DeploymentManagement/DeploymentManagementPage.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationDashboard.jsx), [apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx](../apps/frontend/src/pages/model-cache/ui/ModelCache/ModelCachePage.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx)
 - Tests: No dedicated unit test: this repo has no jsdom/testing-library setup, so the timer, visibility-pause and overlap guards are covered indirectly by the pages that use usePolling plus the type/build checks.
 
 ## agentic-deployment-workspace
@@ -1297,6 +1387,16 @@ Evaluation case request construction, submission correlation, and result collect
 - Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
 - Tests: [apps/backend/tests/unit/evaluation/test_execution.py](../apps/backend/tests/unit/evaluation/test_execution.py), [apps/backend/tests/unit/evaluation/test_cancellation.py](../apps/backend/tests/unit/evaluation/test_cancellation.py), [apps/backend/tests/unit/evaluation/test_kubernetes_service_baseline.py](../apps/backend/tests/unit/evaluation/test_kubernetes_service_baseline.py)
 
+## evaluation-workflow-completion
+
+Publish successful evaluation results before final owned-deployment cleanup finishes.
+
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Symbols: `_run_case_benchmark`, `_execute_evaluation`, `delete_workflow_run`
+- Boundaries: Evaluation orchestration only. All cases must succeed before report and completion time are published. Existing tracked orchestration continues final cleanup, records cleanup errors separately and preserves successful outcomes. Intermediate cleanup still precedes later independent cases; shared-pod baselines retain deployment ownership. Deletion waits for in-flight cleanup to prevent history recreation. Explicit cancellation semantics are unchanged.
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_deployments.py](../apps/backend/tests/unit/evaluation/test_deployments.py), [apps/backend/tests/unit/evaluation/test_cancellation.py](../apps/backend/tests/unit/evaluation/test_cancellation.py), [apps/backend/tests/unit/evaluation/test_kubernetes_service_baseline.py](../apps/backend/tests/unit/evaluation/test_kubernetes_service_baseline.py)
+
 ## evaluation-target-submission
 
 Evaluation endpoint resolution and domain HTTP submission.
@@ -1322,7 +1422,7 @@ Evaluation metric labels, units, and comparison directions.
 Evaluation response DTOs and existing Problem Details error declarations.
 
 - Entry point: [apps/backend/src/llm_d_lens/evaluation/api_models.py](../apps/backend/src/llm_d_lens/evaluation/api_models.py)
-- Symbols: `EvaluationResponse`, `BenchmarkDefaultsResponse`, `BenchmarkRunResponse`, `EvaluationCaseResponse`, `EvaluationWorkflowResponse`, `BenchmarkRunListResponse`, `EvaluationWorkflowListResponse`, `EvaluationCaseDetailsResponse`, `EvaluationDetailsResponse`, `EvaluationCancelResponse`, `EvaluationProblem`, `evaluation_problem_responses`
+- Symbols: `EvaluationResponse`, `BenchmarkDefaultsResponse`, `BenchmarkPhaseTiming`, `BenchmarkTimingResponse`, `BenchmarkRunResponse`, `EvaluationCaseResponse`, `EvaluationWorkflowResponse`, `BenchmarkRunListResponse`, `EvaluationWorkflowListResponse`, `EvaluationCaseDetailsResponse`, `EvaluationDetailsResponse`, `EvaluationCancelResponse`, `EvaluationProblem`, `evaluation_problem_responses`
 - Boundaries: Preserve existing routes, operation IDs, items envelopes, explicit nulls and legacy extensions. Exclude unset optional fields during serialization. Domain requests remain models.py; DB persistence wrappers are not HTTP DTOs.
 - Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
 - Tests: [apps/backend/tests/contract/evaluation/test_api_contract.py](../apps/backend/tests/contract/evaluation/test_api_contract.py)
@@ -1352,7 +1452,7 @@ Construct immutable edited Evaluation YAML configurations, provenance, and both 
 Evaluation requests for standalone benchmarks, simple workflows, and multi-configuration evaluations.
 
 - Entry point: [apps/backend/src/llm_d_lens/evaluation/models.py](../apps/backend/src/llm_d_lens/evaluation/models.py)
-- Symbols: `EvaluateRunRequest`, `EvaluateWorkflowRequest`, `EvaluationCreateRequest`
+- Symbols: `BenchmarkSpec`, `EvaluateRunRequest`, `EvaluateWorkflowRequest`, `EvaluationCreateRequest`
 - Boundaries: Separate operation semantics; preserve existing defaults, validation and API operation IDs. Router re-exports legacy imports.
 - Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py), [apps/backend/src/llm_d_lens/evaluation/execution.py](../apps/backend/src/llm_d_lens/evaluation/execution.py)
 - Tests: [apps/backend/tests/unit/evaluation/test_models.py](../apps/backend/tests/unit/evaluation/test_models.py), [apps/backend/tests/unit/evaluation/test_execution.py](../apps/backend/tests/unit/evaluation/test_execution.py), [apps/backend/tests/contract/evaluation/test_api_contract.py](../apps/backend/tests/contract/evaluation/test_api_contract.py)
@@ -1519,13 +1619,13 @@ Administration page to view stored-secret master key status and rotate the key o
 
 ## model-cache-offline-serving-environment
 
-Return the Hugging Face environment that makes a cache-backed model server load from the mounted Model Cache without contacting huggingface.co at startup.
+Return the Hugging Face environment for model servers with a mounted cache, including optional online first-use downloads into writable caches.
 
 - Entry point: [apps/backend/src/llm_d_lens/deploy/providers/model_cache_environment.py](../apps/backend/src/llm_d_lens/deploy/providers/model_cache_environment.py)
 - Symbols: `model_cache_environment`
-- Boundaries: Deploy providers only. auto-cache gets HF_HOME=/model-cache plus HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1; any other source goes offline only when cache_mounted is true (shared-path, ad-hoc mountPath, including P/D disaggregation, precise-prefix-cache-routing and tiered-prefix-cache). A source with no cache mount stays online so it can download. Requires the cache to be complete for the served model revision because offline startup cannot fall back to a download.
+- Boundaries: Deploy providers only. auto-cache gets HF_HOME=/model-cache plus offline flags by default; Standard baseline vLLM and the optimized-baseline, P/D disaggregation, precise-prefix-cache-routing and tiered-prefix-cache providers pass offline=false for writable caches to resolve and download missing snapshots. Other sources go offline only when cache_mounted is true (shared-path or ad-hoc mountPath). A source with no cache mount stays online. Offline startup requires a complete snapshot for the served revision.
 - Examples: [apps/backend/src/llm_d_lens/deploy/providers/optimized_baseline.py](../apps/backend/src/llm_d_lens/deploy/providers/optimized_baseline.py), [apps/backend/src/llm_d_lens/deploy/providers/baseline_vllm.py](../apps/backend/src/llm_d_lens/deploy/providers/baseline_vllm.py), [apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py](../apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py), [apps/backend/src/llm_d_lens/deploy/providers/precise_prefix_cache_routing.py](../apps/backend/src/llm_d_lens/deploy/providers/precise_prefix_cache_routing.py), [apps/backend/src/llm_d_lens/deploy/providers/helm_kustomize.py](../apps/backend/src/llm_d_lens/deploy/providers/helm_kustomize.py)
-- Tests: [apps/backend/tests/unit/deploy/providers/test_model_cache_environment.py](../apps/backend/tests/unit/deploy/providers/test_model_cache_environment.py), [apps/backend/tests/unit/deploy/providers/test_baseline_vllm.py](../apps/backend/tests/unit/deploy/providers/test_baseline_vllm.py), [apps/backend/tests/unit/deploy/providers/test_optimized_baseline_profiles.py](../apps/backend/tests/unit/deploy/providers/test_optimized_baseline_profiles.py), [apps/backend/tests/unit/deploy/providers/test_precise_prefix_cache_routing.py](../apps/backend/tests/unit/deploy/providers/test_precise_prefix_cache_routing.py), [apps/backend/tests/unit/deploy/providers/test_helm_kustomize.py](../apps/backend/tests/unit/deploy/providers/test_helm_kustomize.py)
+- Tests: [apps/backend/tests/unit/deploy/providers/test_model_cache_environment.py](../apps/backend/tests/unit/deploy/providers/test_model_cache_environment.py), [apps/backend/tests/unit/deploy/providers/test_baseline_vllm.py](../apps/backend/tests/unit/deploy/providers/test_baseline_vllm.py), [apps/backend/tests/unit/deploy/providers/test_optimized_baseline_profiles.py](../apps/backend/tests/unit/deploy/providers/test_optimized_baseline_profiles.py), [apps/backend/tests/unit/deploy/providers/test_pd_disaggregation.py](../apps/backend/tests/unit/deploy/providers/test_pd_disaggregation.py), [apps/backend/tests/unit/deploy/providers/test_precise_prefix_cache_routing.py](../apps/backend/tests/unit/deploy/providers/test_precise_prefix_cache_routing.py), [apps/backend/tests/unit/deploy/providers/test_helm_kustomize.py](../apps/backend/tests/unit/deploy/providers/test_helm_kustomize.py)
 
 ## admin-managed-hugging-face-environment
 
@@ -1556,3 +1656,143 @@ Resolve a Model Service group id to the deployment execution id and published mo
 - Boundaries: Model Service domain only; raises on missing/unauthorized groups or groups with no active member. Does not perform HTTP routing itself — callers (Evaluation, Simulation) still resolve the execution through their own existing deployment-mode endpoint logic using the returned execution id.
 - Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py), [apps/backend/src/llm_d_lens/simulation/service.py](../apps/backend/src/llm_d_lens/simulation/service.py)
 - Tests: [apps/backend/tests/unit/model_service/test_resolution.py](../apps/backend/tests/unit/model_service/test_resolution.py)
+
+## hardware-profile-matching
+
+Shared profile identity, managed image and source overlay matching for Node and browser deployment consumers.
+
+- Entry point: [packages/shared/src/hardware/profiles.js](../packages/shared/src/hardware/profiles.js)
+- Symbols: `profileForKey`, `profileForHardware`, `profileForResource`, `imageRepository`, `managedImageProfile`, `overlayRoot`, `matchOverlayPath`
+- Boundaries: Pure data helpers. No vendor tables or network access. Source variants remain discovered from actual Kustomization files.
+- Examples: [apps/server/src/routes/guidePlanning.ts](../apps/server/src/routes/guidePlanning.ts), [apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.js)
+- Tests: [apps/server/testing/services/guideCatalog.test.ts](../apps/server/testing/services/guideCatalog.test.ts), [apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.test.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.test.js)
+
+## hardware-profile-hook
+
+Load registry capabilities and notify React consumers when hardware defaults become available.
+
+- Entry point: [apps/frontend/src/shared/lib/useHardwareProfiles.js](../apps/frontend/src/shared/lib/useHardwareProfiles.js)
+- Symbols: `useHardwareProfiles`
+- Boundaries: Composes the existing cached hardware API client; components retain user selections and custom images.
+- Examples: [apps/frontend/src/pages/optimization/ui/OptimizationConfiguration.jsx](../apps/frontend/src/pages/optimization/ui/OptimizationConfiguration.jsx), [apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx](../apps/frontend/src/pages/evaluation/ui/EvaluationTaskWizard.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.test.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/acceleratorDisplay.test.js)
+
+## profile-device-attribution
+
+Build profile-defined telemetry queries and attribute DRA device metrics to pods by node and PCI identity.
+
+- Entry point: [apps/backend/src/llm_d_lens/monitoring/profiling/xpu_metrics.py](../apps/backend/src/llm_d_lens/monitoring/profiling/xpu_metrics.py)
+- Symbols: `xpum_queries`, `device_allocations`, `aggregate_xpum`, `plugin_device_allocations`
+- Boundaries: Retains the historical module name. Hardware identity, labels and scaling come from profiles; callers own query transport. Plugin allocation requires kubelet allocatedResourcesStatus and a profile-declared PCI resource ID pattern; missing or ambiguous identities produce no attribution.
+- Examples: [apps/backend/src/llm_d_lens/monitoring/profiling/service.py](../apps/backend/src/llm_d_lens/monitoring/profiling/service.py)
+- Tests: [apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py](../apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py)
+
+## source-guide-planning
+
+Discover upstream guide entry points and render hardware-aware deployment plans.
+
+- Entry point: [apps/server/src/routes/guidePlanning.ts](../apps/server/src/routes/guidePlanning.ts)
+- Symbols: `catalogFromPaths`, `selectManifestPaths`, `planDocuments`, `runtimeClassForAccelerator`, `isAcceleratorDeviceClass`, `resolveAcceleratorVariant`, `validateManifestCapacity`
+- Boundaries: Profiles own hardware settings; selected source owns variants; cluster state supplies actual resource availability.
+- Examples: [apps/server/testing/routes/guideConfiguration.test.ts](../apps/server/testing/routes/guideConfiguration.test.ts)
+- Tests: [apps/server/testing/services/guideCatalog.test.ts](../apps/server/testing/services/guideCatalog.test.ts), [apps/server/testing/routes/guidePlanning.test.ts](../apps/server/testing/routes/guidePlanning.test.ts)
+
+## profile-pci-selectors
+
+Render accelerator PCI selectors from profile attribute configuration and run-selected devices.
+
+- Entry point: [apps/backend/src/llm_d_lens/deploy/providers/gpu_selection.py](../apps/backend/src/llm_d_lens/deploy/providers/gpu_selection.py)
+- Symbols: `gpu_device_selectors`
+- Boundaries: No vendor defaults; reject PCI filtering when the selected profile lacks support.
+- Examples: [apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py](../apps/backend/src/llm_d_lens/deploy/providers/pd_disaggregation.py)
+- Tests: [apps/backend/tests/unit/deploy/providers/test_hardware_profile.py](../apps/backend/tests/unit/deploy/providers/test_hardware_profile.py)
+
+## evaluation-guide-variants
+
+Build readable Guide options from source-discovered runtimes and preserve valid sibling and nested selections.
+
+- Entry point: [apps/frontend/src/pages/evaluation/model/capabilities.js](../apps/frontend/src/pages/evaluation/model/capabilities.js)
+- Symbols: `guideVariantOptions`, `selectedGuideVariant`
+- Boundaries: Guide planning only. Source manifests determine support; directory names and vendor tables do not.
+- Examples: [apps/frontend/src/pages/optimization/ui/OptimizationConfiguration.jsx](../apps/frontend/src/pages/optimization/ui/OptimizationConfiguration.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/model/capabilities.test.js](../apps/frontend/src/pages/evaluation/model/capabilities.test.js)
+
+## guide-manifest-settings
+
+Derive cache and NIC controls from rendered Guide connectors and profile-declared NIC classes.
+
+- Entry point: [apps/server/src/services/modelServerConfiguration.ts](../apps/server/src/services/modelServerConfiguration.ts)
+- Symbols: `configureCpuCache`, `guideSettingsCapabilities`
+- Boundaries: Guide planning only. Source manifests determine support; directory names and vendor tables do not.
+- Examples: [apps/server/src/routes/guidePlanning.ts](../apps/server/src/routes/guidePlanning.ts)
+- Tests: [apps/server/testing/services/guideCatalog.test.ts](../apps/server/testing/services/guideCatalog.test.ts)
+
+## evaluation-harness-watch
+
+Observe only the current benchmark invocation and preserve its Pod container exit states for diagnostics.
+
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/harness_watch.py](../apps/backend/src/llm_d_lens/evaluation/harness_watch.py)
+- Symbols: `watch_harness`, `pod_failure`
+- Boundaries: Evaluation supplies a fresh harness.podLabel per CLI invocation, shared by upstream rendering, cleanup and waits. Watch and polling use the same selector and reject mismatched events. Exit 137 alone does not establish OOM. Legacy callers without a label retain the upstream default.
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_harness_watch.py](../apps/backend/tests/unit/evaluation/test_harness_watch.py), [apps/backend/tests/unit/evaluation/test_matrix.py](../apps/backend/tests/unit/evaluation/test_matrix.py)
+
+## evaluation-serving-monitoring-readiness
+
+Wait for discovered serving pods and EPP monitoring before benchmark traffic.
+
+- Entry point: [apps/backend/src/llm_d_lens/monitoring/profiling/service.py](../apps/backend/src/llm_d_lens/monitoring/profiling/service.py)
+- Symbols: `wait_for_deployment_metrics`
+- Boundaries: Scoped Prometheus reads; all serving pods need healthy targets and two inference gauge samples. Zero timeout checks once; cancellation propagates. Hardware telemetry remains profile-driven. Evaluate owns the total timeout and pre-traffic failure.
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_benchmark_parity.py](../apps/backend/tests/unit/evaluation/test_benchmark_parity.py)
+
+## evaluation-recorded-flow
+
+Adapt saved case monitoring into recorded flow and explicit traffic availability.
+
+- Entry point: [apps/frontend/src/pages/evaluation/ui/benchmark-results/historicalFlow.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/historicalFlow.js)
+- Symbols: `historicalFlow`, `historicalFlows`
+- Boundaries: Never infer traffic from CPU, memory or device data. Preserve real zero values, case windows and serving roles; resource-only evidence carries an explanation.
+- Examples: [apps/frontend/src/pages/evaluation/ui/benchmark-results/BenchmarkLiveFlow.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/BenchmarkLiveFlow.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/ui/benchmark-results/historicalFlow.test.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/historicalFlow.test.js), [apps/frontend/src/pages/evaluation/ui/benchmark-results/BenchmarkLiveFlow.test.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/BenchmarkLiveFlow.test.jsx)
+
+## evaluation-window-observability
+
+Collect persisted benchmark-window resource, serving and routing telemetry with separate traffic availability.
+
+- Entry point: [apps/backend/src/llm_d_lens/monitoring/profiling/service.py](../apps/backend/src/llm_d_lens/monitoring/profiling/service.py)
+- Symbols: `collect_benchmark_observability`
+- Boundaries: Hardware queries derive from profiles. Aggregate status reports any saved samples; flow_status and flow_reason explicitly distinguish resource-only evidence. Evaluate retains preparation state and marks resource-only collection partial. No reconstruction of missing historical traffic.
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/monitoring/profiling/test_benchmark_observability.py](../apps/backend/tests/unit/monitoring/profiling/test_benchmark_observability.py), [apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py](../apps/backend/tests/unit/monitoring/profiling/test_benchmark_xpu.py)
+
+## evaluation-recorded-monitoring-panel
+
+Render live or recorded deployment monitoring while preserving saved topology and resource measurements when traffic samples are missing.
+
+- Entry point: [apps/frontend/src/pages/evaluation/ui/benchmark-results/BenchmarkLiveFlow.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/BenchmarkLiveFlow.jsx)
+- Symbols: `BenchmarkLiveFlow`
+- Boundaries: Composes existing FlowMap, historicalFlows and ResourceExplorer. Recorded resources use the complete case window; missing traffic remains missing. Parent owns navigation to the Resources section.
+- Examples: [apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx](../apps/frontend/src/pages/evaluation/ui/OptimizationEvaluationDetails.jsx)
+- Tests: [apps/frontend/src/pages/evaluation/ui/benchmark-results/BenchmarkLiveFlow.test.jsx](../apps/frontend/src/pages/evaluation/ui/benchmark-results/BenchmarkLiveFlow.test.jsx), [apps/frontend/src/pages/evaluation/ui/benchmark-results/historicalFlow.test.js](../apps/frontend/src/pages/evaluation/ui/benchmark-results/historicalFlow.test.js)
+
+## evaluation-process-ownership
+
+Exclude duplicate evaluation executors and cross-process control mutations using kernel-managed locks shared by backend instances.
+
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/ownership.py](../apps/backend/src/llm_d_lens/evaluation/ownership.py)
+- Symbols: `evaluation_lock`, `owned_execution`, `owned_control`
+- Boundaries: Evaluation lifecycle only. All instances sharing records must share LENS_DATA_DIR on a filesystem with flock semantics and run the updated code. Locks span asynchronous cleanup, survive local nested controls, and are never unlinked. Shared deployment consumers exclude automatic cleanup; independent data directories are not coordinated.
+- Examples: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_ownership.py](../apps/backend/tests/unit/evaluation/test_ownership.py)
+
+## evaluation-startup-recovery
+
+Recover interrupted evaluation records without interrupting tasks owned by another backend sharing the data directory.
+
+- Entry point: [apps/backend/src/llm_d_lens/evaluation/router.py](../apps/backend/src/llm_d_lens/evaluation/router.py)
+- Symbols: `reconcile_evaluate_runs`
+- Boundaries: Startup hook re-reads records under workflow and benchmark locks. Live owners are skipped; orphaned attempts retain interruption evidence and eligible workflows are scheduled through the same owned execution entry points. Requires shared flock-capable LENS_DATA_DIR across participating updated backends.
+- Examples: [apps/backend/src/llm_d_lens/api/main.py](../apps/backend/src/llm_d_lens/api/main.py)
+- Tests: [apps/backend/tests/unit/evaluation/test_ownership.py](../apps/backend/tests/unit/evaluation/test_ownership.py), [apps/backend/tests/unit/evaluation/test_cancellation.py](../apps/backend/tests/unit/evaluation/test_cancellation.py), [apps/backend/tests/unit/evaluation/test_artifact_storage.py](../apps/backend/tests/unit/evaluation/test_artifact_storage.py)

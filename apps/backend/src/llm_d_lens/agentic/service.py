@@ -17,7 +17,10 @@ from llm_d_lens.capacity import ValidationParams, evaluate_capacity
 from llm_d_lens.cluster.sessions import require_active_session
 from llm_d_lens.configuration.models import ModelSecretConfiguration
 from llm_d_lens.deploy.application import deployment_run_manager
-from llm_d_lens.deploy.contracts import DeploymentRunCreateRequest
+from llm_d_lens.deploy.contracts import DeploymentRunCreateRequest, RuntimeBinding
+from llm_d_lens.deploy.providers.hardware_profile import cluster_accelerator
+from llm_d_lens.deploy.providers.target_node import validate_placement
+from llm_d_lens.infrastructure.kubernetes import list_resources
 
 from .configuration import build_agentic_configuration
 from .facts import resolve_planning_facts
@@ -719,6 +722,9 @@ class AgenticDeploymentService:
             "osl": profile.mean_output_tokens if profile else 256,
         }
         config = arguments.get("searchConfig") or {}
+        aic_system_name = config.get("aicSystemName")
+        if not aic_system_name:
+            return candidates, facts
         predictions = list(facts.aic_predictions)
         updated = []
         for candidate in candidates:
@@ -736,7 +742,7 @@ class AgenticDeploymentService:
                     gpu_count=candidate.required_gpus,
                     mean_input_tokens=int(workload.get("isl") or facts.context_length),
                     mean_output_tokens=int(workload.get("osl") or 256),
-                    aic_system_name=config.get("aicSystemName") or "b60",
+                    aic_system_name=aic_system_name,
                     aic_backend_name=config.get("aicBackendName") or "vllm",
                     aic_database_mode=config.get("aicDatabaseMode") or "SILICON",
                     tp=candidate.tensor_parallel_size,
@@ -1026,6 +1032,17 @@ class AgenticDeploymentService:
             raise ValueError("only an awaiting approval Agentic deployment can be approved")
 
         session = require_active_session(run.request.cluster_session_id)
+        placement = {"replicas": run.request.placement_replicas}
+        if run.request.placement_node_label:
+            placement["nodeLabel"] = run.request.placement_node_label
+        validate_placement(placement)
+        if run.request.placement_node_label:
+            nodes = await list_resources("nodes", cluster_id=session.server_id)
+            label = run.request.placement_node_label
+            if not any(
+                (node.get("metadata") or {}).get("labels", {}).get(label["key"]) == label["value"] for node in nodes
+            ):
+                raise ValueError("selected node label is not present in the cluster")
         selected = next(candidate for candidate in run.candidates if candidate.id == run.selected_candidate.id)
         refreshed = await resolve_planning_facts(
             session.server_id,
@@ -1079,7 +1096,10 @@ class AgenticDeploymentService:
         # Use the credential policy captured during planning.  This keeps the
         # approve path deterministic and ensures ConfigurationAdapter can turn
         # ``modelSecret`` into the provider's deployment policy.
-        configuration = build_agentic_configuration(run.request, selected, run.model_secret)
+        accelerator = cluster_accelerator(refreshed.cluster_snapshot.get("hardware") or {})
+        configuration = build_agentic_configuration(
+            run.request, selected, run.model_secret, accelerator=accelerator
+        )
         configuration.provenance["cluster_ref"] = {
             "id": session.server_id,
             "name": session.server_id,
@@ -1089,6 +1109,7 @@ class AgenticDeploymentService:
         deployment = await deployment_run_manager.start_run(
             DeploymentRunCreateRequest(
                 configurations=[configuration],
+                runtime_binding=RuntimeBinding(placement=placement),
                 provenance={
                     "deployment_source": {"kind": "agentic-deployment"},
                     "cluster_session_id": session.id,

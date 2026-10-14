@@ -17,6 +17,8 @@ def build_agentic_configuration(
     request: StandardKubernetesServiceRequest,
     candidate: PlannedCandidate,
     model_secret: ModelSecretConfiguration | None = None,
+    *,
+    accelerator: str | None = None,
 ) -> DeployableConfiguration:
     """Create a provider-owned configuration without rendering or deploying it."""
     selected_request = request.model_copy(
@@ -26,7 +28,7 @@ def build_agentic_configuration(
         }
     )
     if candidate.provider_ref == "baseline-vllm":
-        configuration = build_standard_kubernetes_service_configuration(selected_request)
+        configuration = build_standard_kubernetes_service_configuration(selected_request, accelerator=accelerator)
         if model_secret is not None and model_secret.mode != "none":
             content = {
                 **configuration.content,
@@ -43,7 +45,7 @@ def build_agentic_configuration(
     from llm_d_lens.deploy.providers.hardware_profile import runtime_image
 
     runtime = {
-        "image": runtime_image(),
+        "image": runtime_image(accelerator=accelerator),
         "imageMode": "use-upstream-image",
         "modelSource": "auto-cache",
     }
@@ -63,6 +65,7 @@ def build_agentic_configuration(
     }
     content = {
         "model": {"name": request.model},
+        **({"hardware_profile": accelerator} if accelerator else {}),
         "decode": decode,
         "runtime": runtime,
         "customParameters": [

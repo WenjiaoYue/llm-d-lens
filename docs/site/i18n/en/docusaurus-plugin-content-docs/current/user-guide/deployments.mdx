@@ -5,11 +5,40 @@ description: Find deployments, check readiness, view logs and remove unused serv
 
 Open **Deployments** to check whether a model is ready, inspect a failure, or manage an existing deployment.
 
+P/D deployments using Router 0.11 automatically adapt legacy plugin settings when
+created or retried. The original configuration is retained, and deployment
+diagnostics record the effective Router values. A legacy `disagg-headers-handler`
+entry is replaced by the profile handler's built-in header handling; the saved
+prefill/decode decision is preserved. A conflicting old and new decider setting
+must be corrected before deployment.
+
+## Hardware profiles and guide variants
+
+Deployment rendering resolves hardware through the profile registry. The selected
+profile supplies the runtime image, scheduling labels, accelerator resource request
+and PCI-selection capability. Custom runtime images remain user-controlled; unknown
+hardware does not silently select another vendor's defaults.
+
+Guide variants come from actual Kustomization entry points in the selected llm-d
+repository revision, including nested overlays. Changing hardware or source can
+change the available variants. A listed overlay can still require cluster resources
+such as NIC device classes, storage or runtime support; planning validates these
+requirements before deployment.
+
+The deployment list cancels superseded filter requests so older results cannot replace the current selection. Cluster names are shown when available, with IDs as a fallback. Deletion still requires the displayed confirmation phrase and preserves the namespace choice; while deletion is pending, submission and dialog dismissal are disabled.
+
+When specifying an operator preference for deployment planning, use English, such as
+`prefer prefix cache`, `more GPU for performance`, or `use fewer GPU resources`.
+The deterministic planner matches English preference keywords; Chinese keyword aliases
+are no longer supported.
+
 ## Open the deployment creation flow
 
 1. In the left navigation, open **Deployments**.
 2. In the page header, click **Create**.
 3. Follow [Create a deployment](/user-guide/model-market). The new deployment appears in this list after submission.
+
+In **Advanced**, open **Advanced settings** in the configuration editor and select **Replica placement**. The default prefers one node but can use others when necessary. The presets group all model-server Pods in the same rendered deployment manifest, including separate Prefill and Decode Deployments; router Pods are excluded. **Require one node** keeps the group on the same node; optionally select a live Node label to restrict eligible nodes. **Distribute evenly across nodes** balances the group across eligible nodes using hostname topology spread (up to one Pod of skew); Pods may remain Pending if the balance cannot be maintained with available capacity. **Require separate nodes** needs one eligible node per Pod in the group and leaves extra Pods Pending if there are not enough nodes. Neither distribution preset supports LeaderWorkerSet workloads. The label list comes from the selected cluster. Standard and Agentic deployments use the soft same-node replica preference without an affinity selector in their forms. Tensor-parallel devices are requested by each model-server Pod, so TP stays within that Pod; multi-Pod LeaderWorkerSet workers prefer the same node but can spread when necessary.
 
 ## Find a deployment in the list
 
@@ -93,3 +122,43 @@ is still unavailable, ask an administrator to check your cluster access or the
 deployment's sharing settings.
 
 To let applications call a ready deployment, [publish a model service](/tutorials/publish-a-model-service).
+
+## Related references
+
+In the deployment creation flow, expand **Why this option** under a validated alternative to see its AIC TTFT, TPOT, and throughput estimate when an exact-topology estimate is available. The estimate can appear even when the AIC candidate search finds no configuration satisfying the original SLO; in that case, the alternative still shows **SLO not met**. Alternatives without a matching estimate show that no exact AIC prediction is available.
+
+The **AI score** shown beside an agentic candidate is a relative ranking score out of 100; the highest-scoring candidate is normalized to 100. It is not a benchmark result, confidence level, or probability of meeting the SLO. A deterministic fallback shows **Deterministic score** instead.
+
+**Recalculate selection** works without an AI provider. It refreshes the recommendation
+using deterministic planning and the new preference; if AI scoring fails, the
+alternatives also retain deterministic scores.
+
+Agentic alternatives are checked using the selected vLLM GPU memory utilization
+and max model length. The same values are applied when the deployment starts;
+actual free KV cache is measured by vLLM at startup and may still be lower than
+the planning estimate.
+
+If you use the agentic planner from the deployment creation flow, see the [Architecture overview](/architecture) for how workload-guided planning works.
+
+
+## Verify profile-driven Guide configuration
+
+Choose a cluster with downloaded Software Versions and refresh the page. The
+hardware profile selects the Guide source root; the selected llm-d checkout
+supplies its model servers and Kustomization variants, including nested paths.
+Root overlays display as `Default (vllm)` or `Default (vllm-rdma)` instead of `.`.
+Selecting a sibling runtime variant remains stable while editing other fields.
+
+For official sources, cache and NIC controls appear after source preparation:
+CPU capacity requires a supported cache connector in the rendered containers;
+NIC count requires a claim matching the profile's NIC device class. Inspect the
+generated YAML and source provenance before deployment. Access-mode settings
+come from `deployment.modes`; DRA uses a device claim and plugin mode uses the
+declared extended resource. User-selected runtime images remain overrides.
+
+In Evaluation results, open Resources during benchmark. Device allocation
+failures display a reason even when engine metrics are available. Plugin device
+metrics require kubelet-reported, profile-recognized device identities; an
+exporter alone cannot establish which devices belong to the workload. Profile
+file edits require restarting the development services and refreshing the page;
+this is not a live JSON editor. Existing saved results are not recollected.

@@ -17,7 +17,7 @@ from llm_d_lens.deploy.providers.guide_adapter import (
     ValidationResult,
 )
 from llm_d_lens.deploy.providers.hardware_profile import accelerator_supported
-from llm_d_lens.deploy.providers.target_node import configured_target_node, write_pinned_manifest
+from llm_d_lens.deploy.providers.target_node import apply_placement, configured_target_node, write_pinned_manifest
 from llm_d_lens.infrastructure.artifacts.manifests import (
     DEPLOYMENT_MANIFEST_DIR,
     text_checksum,
@@ -132,6 +132,32 @@ class ConfigurationManifestAdapter:
             )
 
         artifact = instrument_manifest(artifact, self._output_root)
+        placement = overrides.get("_placement")
+        if placement is not None and not artifact.deployment_contract.get("placementApplied"):
+            if not isinstance(placement, dict) or not artifact.manifest_ref or Path(artifact.manifest_ref).is_dir():
+                raise ValueError("placement requires a rendered Kubernetes manifest file")
+            rendered, changed = apply_placement(Path(artifact.manifest_ref).read_text(encoding="utf-8"), placement)
+            checksum = text_checksum(rendered)
+            directory = self._output_root / checksum.removeprefix("sha256:")
+            directory.mkdir(parents=True, exist_ok=True)
+            path = directory / "manifest.yaml"
+            if path.is_file() and path.read_text(encoding="utf-8") != rendered:
+                raise ValueError("checksum-addressed placement manifest drift detected")
+            path.write_text(rendered, encoding="utf-8")
+            register_artifacts(
+                directory,
+                owner_type="deployment-manifest",
+                owner_id=checksum.removeprefix("sha256:"),
+                retention_class="configuration",
+            )
+            artifact = replace(
+                artifact,
+                manifest_ref=str(path),
+                manifest_checksum=checksum,
+                artifact_hash=stable_hash(
+                    {"provider_artifact": artifact.artifact_hash, "placement": placement, "workloads": changed}
+                ),
+            )
         if artifact.manifest_ref and artifact.manifest_checksum:
             saved_path = Path(artifact.manifest_ref)
             if saved_path.is_file() and saved_path.resolve().is_relative_to(self._output_root.resolve()):

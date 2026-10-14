@@ -20,6 +20,13 @@ No cluster or cache available? [Add a cluster](/user-guide/clusters),
 [create cache storage](/user-guide/storage), and [download the model](/user-guide/model-cache).
 If the model is missing from the selected cache, download it there before returning.
 
+Before creating the deployment, expand **Pod placement** below **vLLM parameters**
+to choose **Replica placement**. **Prefer one node** favors co-location without
+requiring it. **Require one node** reveals an optional **Node** selector populated
+from the selected cluster; selecting a node constrains replicas to its hostname.
+**Distribute evenly across nodes** and **Require separate nodes** can leave Pods
+Pending if there are too few eligible nodes or insufficient capacity.
+
 ## Choose a different deployment mode
 
 | Mode | Choose it when |
@@ -53,6 +60,13 @@ again. A resource or network error during generation must be resolved before dep
 6. Click **Generate recommendation**.
 7. Under **Validated alternatives**, expand **Why this option** to compare resource use and estimated performance.
 8. Click **Deploy recommendation** on the option you choose. Track startup on **Deployments**.
+
+Before generating a recommendation, expand **Pod placement** below **Workload
+estimate** to choose a placement preset. **Require one node** also allows a
+hostname selection. The chosen preset and node are applied when you approve a
+candidate. Prefill and Decode model-server Pods in a P/D deployment share one
+placement group; routing Pods do not. LeaderWorkerSet candidates do not support
+the balanced or separate-node presets.
 
 To change the recommendation, enter your revised preference below the alternatives
 and click **Recalculate selection**. This also works without an external AI provider.

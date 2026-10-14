@@ -64,7 +64,7 @@ def _resolved_facts(*, free_gpu_count=4, aic_predictions=()) -> ResolvedPlanning
     )
     return ResolvedPlanningFacts(
         facts=facts,
-        cluster_snapshot={"hardware": {"availableGpuCount": free_gpu_count}},
+        cluster_snapshot={"hardware": {"availableGpuCount": free_gpu_count, "accelerators": [{"id": "nvidia", "gpuCount": free_gpu_count}]}},
         evidence=[PlanningEvidence(id="cluster-overview:cluster-a", source="cluster-overview", status="available")],
     )
 
@@ -130,6 +130,7 @@ def test_create_writes_a_redacted_append_only_planning_snapshot(monkeypatch, tmp
 
 def test_approve_publishes_configuration_then_starts_existing_deploy(monkeypatch):
     service = AgenticDeploymentService()
+    monkeypatch.setenv("PRISM_DEPLOY_ACCELERATOR", "intel-xpu")
     session = SimpleNamespace(id="a" * 36, server_id="cluster-a")
     monkeypatch.setattr("llm_d_lens.agentic.service.require_active_session", lambda _session_id: session)
     planning_lengths = []
@@ -155,7 +156,21 @@ def test_approve_publishes_configuration_then_starts_existing_deploy(monkeypatch
         return SimpleNamespace(id="deploy-run-1")
 
     monkeypatch.setattr("llm_d_lens.agentic.service.deployment_run_manager.start_run", start_run)
-    run = asyncio.run(service.create(_request(max_model_len=32768, gpu_memory_utilization=0.6)))
+
+    async def nodes(*_args, **_kwargs):
+        return [{"metadata": {"labels": {"kubernetes.io/hostname": "smc-22"}}}]
+
+    monkeypatch.setattr("llm_d_lens.agentic.service.list_resources", nodes)
+    run = asyncio.run(
+        service.create(
+            _request(
+                max_model_len=32768,
+                gpu_memory_utilization=0.6,
+                placement_replicas="same-node",
+                placement_node_label={"key": "kubernetes.io/hostname", "value": "smc-22"},
+            )
+        )
+    )
 
     approved = asyncio.run(service.approve(run.id))
 
@@ -166,8 +181,14 @@ def test_approve_publishes_configuration_then_starts_existing_deploy(monkeypatch
     assert planning_utilizations == [0.6, 0.6]
     assert run.selected_candidate.gpu_memory_utilization == 0.6
     assert saved["configuration"].content["decode"]["maxModelLen"] == 32768
+    assert saved["configuration"].content["runtime"]["image"] == "docker.io/vllm/vllm-openai:v0.30.0"
+    assert saved["configuration"].content["hardware_profile"] == "nvidia"
     assert saved["configuration"].content["decode"]["gpuMemoryUtilization"] == 0.6
     assert saved["configuration"].provenance["cluster_ref"]["session_id"] == session.id
+    assert saved["deployment"].runtime_binding.placement == {
+        "replicas": "same-node",
+        "nodeLabel": {"key": "kubernetes.io/hostname", "value": "smc-22"},
+    }
     assert saved["deployment"].provenance["agentic_deployment_run_id"] == run.id
 
 
@@ -772,7 +793,7 @@ def test_missing_aic_predictions_estimate_each_supported_candidate_for_ai_scorin
                     "tool": "search_candidates",
                     "arguments": {
                         "workload": {"isl": 1024, "osl": 256},
-                        "searchConfig": {},
+                        "searchConfig": {"aicSystemName": "h100_sxm"},
                     },
                 }
             ],
@@ -810,7 +831,12 @@ def test_relaxed_candidate_keeps_unknown_performance_when_estimate_fails(monkeyp
             "Qwen/Qwen3-8B",
             [candidate],
             facts,
-            [{"tool": "search_candidates", "arguments": {"workload": {}, "searchConfig": {}}}],
+            [
+                {
+                    "tool": "search_candidates",
+                    "arguments": {"workload": {}, "searchConfig": {"aicSystemName": "h100_sxm"}},
+                }
+            ],
         )
     )
 
@@ -919,12 +945,12 @@ def test_create_falls_back_when_ai_generator_mcp_is_unavailable(monkeypatch, tmp
     assert run.generator == "deterministic"
     assert run.generator_fallback_reason == reason
     assert run.generator_fallback_detail == detail
-    assert len(estimate_requests) == 3
-    assert all(candidate.performance_estimate_source == "aic_estimate" for candidate in run.candidates)
+    assert estimate_requests == []
+    assert all(candidate.performance_estimate_source != "aic_estimate" for candidate in run.candidates)
     snapshot = json.loads((tmp_path / run.planning_snapshot_path).read_text(encoding="utf-8"))
     assert snapshot["generator"]["fallback_detail"] == detail
     assert all(
-        candidate["performance_estimate_source"] == "aic_estimate" for candidate in snapshot["candidate_catalog"]
+        candidate["performance_estimate_source"] != "aic_estimate" for candidate in snapshot["candidate_catalog"]
     )
 
 
@@ -947,8 +973,8 @@ def test_missing_requested_provider_estimates_fallback_candidates(monkeypatch):
     run = asyncio.run(service.create(_request(ai_provider_id="provider-1")))
 
     assert run.generator_fallback_reason == "provider_unavailable"
-    assert len(estimate_requests) == 3
-    assert all(candidate.performance_estimate_source == "aic_estimate" for candidate in run.candidates)
+    assert estimate_requests == []
+    assert all(candidate.performance_estimate_source != "aic_estimate" for candidate in run.candidates)
 
 
 def test_generator_provider_http_error_is_not_classified_as_invalid_candidate_response():

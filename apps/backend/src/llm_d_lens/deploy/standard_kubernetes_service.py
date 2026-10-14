@@ -22,6 +22,8 @@ class StandardKubernetesServiceRequest(BaseModel):
     cluster_session_id: str = Field(min_length=36, max_length=36)
     replicas: int = Field(ge=1, le=32)
     tensor_parallel_size: int = Field(ge=1, le=16)
+    placement_replicas: Literal["prefer-same-node", "same-node", "balanced", "spread"] = "prefer-same-node"
+    placement_node_label: dict[str, str] | None = None
     storage_type: Literal["local-cache", "pvc", "model-cache"] = "local-cache"
     storage_volume_id: str = Field(default="", max_length=120)
     model_cache_path: str = Field(default_factory=lambda: str(Path.home() / ".cache"), min_length=1, max_length=1024)
@@ -41,12 +43,15 @@ class StandardKubernetesServiceRequest(BaseModel):
 
 def build_standard_kubernetes_service_configuration(
     request: StandardKubernetesServiceRequest,
+    *,
+    accelerator: str | None = None,
+    model_revision: str | None = None,
 ) -> DeployableConfiguration:
     """Build the immutable vLLM configuration currently used by Standard mode."""
     from llm_d_lens.deploy.providers.hardware_profile import runtime_image
 
     runtime: dict[str, object] = {
-        "image": runtime_image(),
+        "image": runtime_image(accelerator=accelerator),
         "imageMode": "pull-existing",
         "modelSource": "auto-cache",
     }
@@ -56,10 +61,12 @@ def build_standard_kubernetes_service_configuration(
         runtime["storageVolumeId"] = request.storage_volume_id
     elif request.storage_type == "local-cache":
         runtime["mountPath"] = request.model_cache_path
+        runtime["cacheOffline"] = False
     else:
         if not request.pvc_name:
             raise ValueError("pvc_name is required when storage_type is pvc")
         runtime["pvcName"] = request.pvc_name
+        runtime["cacheOffline"] = False
     if request.use_cluster_proxy:
         # The cluster's own saved proxy config is authoritative; explicit
         # request values override it, and resolve_proxy_env already falls back
@@ -87,6 +94,7 @@ def build_standard_kubernetes_service_configuration(
         runtime["environment"] = _model_environment({**os.environ, **proxy_overrides})
     content = {
         "model": {"name": request.model},
+        **({"hardware_profile": accelerator} if accelerator else {}),
         "decode": {
             "replicaCount": request.replicas,
             "tensorParallelSize": request.tensor_parallel_size,
@@ -128,6 +136,13 @@ def build_standard_kubernetes_service_configuration(
         {"target": "decode", "kind": "argument", "name": argument["name"], "value": argument["value"]}
         for argument in request.vllm_arguments
     )
+    requested_revisions = [argument["value"] for argument in request.vllm_arguments if argument["name"] == "revision"]
+    if model_revision and any(revision != model_revision for revision in requested_revisions):
+        raise ValueError("vLLM revision does not match the selected model cache entry")
+    if model_revision and model_revision != "main" and not requested_revisions:
+        content["customParameters"].append(
+            {"target": "decode", "kind": "argument", "name": "revision", "value": model_revision}
+        )
     return DeployableConfiguration(
         type="baseline",
         format="helm",

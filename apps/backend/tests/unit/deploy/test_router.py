@@ -23,6 +23,12 @@ router = importlib.import_module("llm_d_lens.deploy.router")
 executions = importlib.import_module("llm_d_lens.deploy.executions")
 
 
+def test_deployment_run_route_requires_request_body_not_cluster_query():
+    route = next(route for route in router.router.routes if route.path.endswith("/runs") and "POST" in route.methods)
+    assert route.endpoint is router.create_run
+    assert not [parameter for parameter in route.dependant.query_params if parameter.required]
+
+
 def test_standard_kubernetes_service_configuration_is_an_immutable_baseline_artifact():
     request = StandardKubernetesServiceRequest(
         model="Qwen/Qwen3-8B",
@@ -59,6 +65,7 @@ def test_standard_kubernetes_service_configuration_is_an_immutable_baseline_arti
         "imageMode": "pull-existing",
         "modelSource": "auto-cache",
         "mountPath": "/home/user/.cache",
+        "cacheOffline": False,
         "environment": {
             "HTTP_PROXY": "http://proxy.example:911",
             "HTTPS_PROXY": "http://proxy.example:911",
@@ -82,7 +89,40 @@ def test_standard_kubernetes_service_configuration_is_an_immutable_baseline_arti
     }
 
 
-def test_standard_kubernetes_service_run_keeps_the_requested_name_in_run_provenance(monkeypatch):
+def test_standard_configuration_uses_selected_accelerator_image(monkeypatch):
+    monkeypatch.setenv("PRISM_DEPLOY_ACCELERATOR", "intel-xpu")
+    request = StandardKubernetesServiceRequest(
+        model="Qwen/Qwen3-0.6B",
+        deployment_name="qwen3-standard",
+        cluster_session_id="a" * 36,
+        replicas=1,
+        tensor_parallel_size=1,
+    )
+
+    configuration = build_standard_kubernetes_service_configuration(request, accelerator="nvidia")
+
+    assert configuration.content["runtime"]["image"] == runtime_image(accelerator="nvidia")
+    assert configuration.content["hardware_profile"] == "nvidia"
+
+
+@pytest.fixture
+def standard_cluster_hardware(monkeypatch):
+    monkeypatch.setattr(
+        "llm_d_lens.cluster.sessions.require_active_session",
+        lambda _session_id: SimpleNamespace(server_id="cluster-a"),
+    )
+    monkeypatch.setattr(
+        "llm_d_lens.cluster.registry.require_cluster",
+        lambda _cluster_id: SimpleNamespace(id="cluster-a"),
+    )
+
+    async def overview(_cluster):
+        return {"hardware": {"accelerators": [{"id": "nvidia", "gpuCount": 2}]}}
+
+    monkeypatch.setattr("llm_d_lens.cluster.service.build_overview", overview)
+
+
+def test_standard_kubernetes_service_run_keeps_the_requested_name_in_run_provenance(monkeypatch, standard_cluster_hardware):
     captured = {}
 
     async def start_run(request, **_kwargs):
@@ -101,6 +141,94 @@ def test_standard_kubernetes_service_run_keeps_the_requested_name_in_run_provena
     asyncio.run(router.create_standard_kubernetes_service_run(request))
 
     assert captured["request"].provenance["deployment_name"] == "qwen3-standard"
+    assert captured["request"].configurations[0].content["runtime"]["image"] == runtime_image(accelerator="nvidia")
+    assert captured["request"].configurations[0].content["hardware_profile"] == "nvidia"
+    assert captured["request"].runtime_binding.placement == {"replicas": "prefer-same-node"}
+
+    request.placement_replicas = "balanced"
+    asyncio.run(router.create_standard_kubernetes_service_run(request))
+    assert captured["request"].runtime_binding.placement == {"replicas": "balanced"}
+
+
+def test_standard_run_uses_ready_cache_revision(monkeypatch, standard_cluster_hardware):
+    from llm_d_lens.model_cache import service as model_cache_service
+    from llm_d_lens.storage import service as storage_service
+
+    async def get_ready_volume(*_args, **_kwargs):
+        return SimpleNamespace(kind=StorageVolumeKind.LOCAL_DISK, purposes=[StorageVolumePurpose.MODEL_CACHE])
+
+    async def list_entries(**_kwargs):
+        return [
+            SimpleNamespace(
+                status="ready",
+                source=SimpleNamespace(huggingface=SimpleNamespace(repo_id="Qwen/Qwen3-0.6B", revision="v1")),
+            )
+        ]
+
+    captured = {}
+
+    async def start_run(request, **_kwargs):
+        captured["request"] = request
+        return request
+
+    monkeypatch.setattr(storage_service, "get_ready_volume", get_ready_volume)
+    monkeypatch.setattr(model_cache_service, "default_service", lambda: SimpleNamespace(list=list_entries))
+    monkeypatch.setattr(router.deployment_run_manager, "start_run", start_run)
+    request = StandardKubernetesServiceRequest(
+        model="Qwen/Qwen3-0.6B",
+        deployment_name="qwen",
+        cluster_session_id="a" * 36,
+        replicas=1,
+        tensor_parallel_size=1,
+        storage_type="model-cache",
+        storage_volume_id="storage-model-cache",
+        use_cluster_proxy=False,
+    )
+
+    asyncio.run(router.create_standard_kubernetes_service_run(request))
+
+    assert {"target": "decode", "kind": "argument", "name": "revision", "value": "v1"} in captured[
+        "request"
+    ].configurations[0].content["customParameters"]
+
+
+def test_standard_run_restricts_required_colocation_to_selected_node(monkeypatch, standard_cluster_hardware):
+    captured = {}
+
+    async def start_run(request, **_kwargs):
+        captured["request"] = request
+        return request
+
+    async def nodes(*_args, **_kwargs):
+        return [{"metadata": {"labels": {"kubernetes.io/hostname": "smc-22"}}}]
+
+    monkeypatch.setattr(router.deployment_run_manager, "start_run", start_run)
+    monkeypatch.setattr(
+        "llm_d_lens.cluster.sessions.require_active_session",
+        lambda _session_id: SimpleNamespace(server_id="cluster-a"),
+    )
+    monkeypatch.setattr(router, "current_principal", lambda _request: None)
+    monkeypatch.setattr(router, "require_cluster_access", lambda *_args: None)
+    monkeypatch.setattr(router, "list_resources", nodes)
+    request = StandardKubernetesServiceRequest(
+        model="Qwen/Qwen3-0.6B",
+        deployment_name="qwen3-standard",
+        cluster_session_id="a" * 36,
+        replicas=1,
+        tensor_parallel_size=1,
+        placement_replicas="same-node",
+        placement_node_label={"key": "kubernetes.io/hostname", "value": "smc-22"},
+    )
+
+    asyncio.run(router.create_standard_kubernetes_service_run(request))
+    assert captured["request"].runtime_binding.placement == {
+        "replicas": "same-node",
+        "nodeLabel": {"key": "kubernetes.io/hostname", "value": "smc-22"},
+    }
+
+    request.placement_node_label = {"key": "kubernetes.io/hostname", "value": "missing"}
+    with pytest.raises(HTTPException, match="selected node label is not present"):
+        asyncio.run(router.create_standard_kubernetes_service_run(request))
 
 
 def test_baseline_vllm_renders_boolean_arguments_as_cli_flags():
@@ -108,6 +236,7 @@ def test_baseline_vllm_renders_boolean_arguments_as_cli_flags():
 
     resources = BaselineVllmAdapter._resources(
         {
+            "accelerator": "intel-xpu",
             "model": "Qwen/Qwen3-0.6B",
             "image": "ghcr.io/llm-d/llm-d-xpu:v0.9.0",
             "replicas": 1,
@@ -157,6 +286,7 @@ def test_standard_kubernetes_service_configuration_uses_named_pvc_for_model_cach
     configuration = build_standard_kubernetes_service_configuration(request)
 
     assert configuration.content["runtime"]["pvcName"] == "shared-model-cache"
+    assert configuration.content["runtime"]["cacheOffline"] is False
     assert "mountPath" not in configuration.content["runtime"]
 
 
@@ -174,6 +304,7 @@ def test_standard_kubernetes_service_configuration_uses_registered_model_cache_s
     configuration = build_standard_kubernetes_service_configuration(request)
 
     assert configuration.content["runtime"]["storageVolumeId"] == "storage-model-cache"
+    assert "cacheOffline" not in configuration.content["runtime"]
     assert "mountPath" not in configuration.content["runtime"]
     assert "pvcName" not in configuration.content["runtime"]
 
@@ -188,6 +319,7 @@ def test_ready_model_cache_entry_exists_requires_matching_ready_huggingface_mode
         source=SimpleNamespace(huggingface=SimpleNamespace(repo_id="Qwen/Qwen3-0.6B")),
     )
 
+    assert router._ready_model_cache_entry([downloading_entry, ready_entry], "qwen/qwen3-0.6b") is ready_entry
     assert router._ready_model_cache_entry_exists([downloading_entry, ready_entry], "qwen/qwen3-0.6b")
 
 
@@ -197,7 +329,44 @@ def test_ready_model_cache_entry_exists_rejects_missing_model():
         source=SimpleNamespace(huggingface=SimpleNamespace(repo_id="TheBloke/Mistral-7B-Instruct-v0.2-GGUF")),
     )
 
+    assert router._ready_model_cache_entry([ready_entry], "Qwen/Qwen3-0.6B") is None
     assert not router._ready_model_cache_entry_exists([ready_entry], "Qwen/Qwen3-0.6B")
+
+
+def test_standard_model_cache_uses_downloaded_revision():
+    request = StandardKubernetesServiceRequest(
+        model="Qwen/Qwen3-0.6B",
+        deployment_name="qwen",
+        cluster_session_id="a" * 36,
+        replicas=1,
+        tensor_parallel_size=1,
+        storage_type="model-cache",
+        storage_volume_id="storage-model-cache",
+        use_cluster_proxy=False,
+    )
+
+    configuration = build_standard_kubernetes_service_configuration(request, model_revision="v1")
+
+    assert {"target": "decode", "kind": "argument", "name": "revision", "value": "v1"} in configuration.content[
+        "customParameters"
+    ]
+
+
+def test_standard_model_cache_rejects_conflicting_revision():
+    request = StandardKubernetesServiceRequest(
+        model="Qwen/Qwen3-0.6B",
+        deployment_name="qwen",
+        cluster_session_id="a" * 36,
+        replicas=1,
+        tensor_parallel_size=1,
+        storage_type="model-cache",
+        storage_volume_id="storage-model-cache",
+        vllm_arguments=[{"name": "revision", "value": "main"}],
+        use_cluster_proxy=False,
+    )
+
+    with pytest.raises(ValueError, match="revision does not match"):
+        build_standard_kubernetes_service_configuration(request, model_revision="v1")
 
 
 def test_standard_kubernetes_service_run_rejects_dynamic_pvc_model_cache_storage(monkeypatch):
@@ -335,6 +504,7 @@ def test_baseline_vllm_renders_model_cache_pvc():
 
     resources = BaselineVllmAdapter._resources(
         {
+            "accelerator": "intel-xpu",
             "model": "Qwen/Qwen3-0.6B",
             "image": "ghcr.io/llm-d/llm-d-xpu:v0.9.0",
             "replicas": 1,
