@@ -7,16 +7,23 @@ description: 启动 Lens、部署模型并发送第一个请求。
 
 ## 1. 安装并打开 Lens
 
-在 Ubuntu x86_64 机器上执行：
+在 Ubuntu 22.04+（x86_64）机器上，无需克隆仓库即可运行在线安装器。
+将 `VERSION` 设为 `main` 或包含在线安装器的发布标签：
 
 ```bash
-git clone https://github.com/llm-d-incubation/llm-d-lens.git
-cd llm-d-lens
-./scripts/LensInstaller-Ubuntu-x86_64.sh
+VERSION=main && curl -fsSL "https://raw.githubusercontent.com/llm-d-incubation/llm-d-lens/${VERSION}/scripts/LensInstaller-Ubuntu-x86_64-online.sh" | bash
+```
+
+也可使用 `wget`：
+
+```bash
+VERSION=main && wget -qO- "https://raw.githubusercontent.com/llm-d-incubation/llm-d-lens/${VERSION}/scripts/LensInstaller-Ubuntu-x86_64-online.sh" | bash
 ```
 
 接受安装器默认值，或填写自己的安装目录和端口。
-完成后打开安装器打印的地址，使用打印的管理员凭据登录。
+完成后打开安装器打印的地址，使用自动生成的管理员凭据登录。
+安装器会打印保存凭据的 mode-600 文件路径；修改密码后该文件会被删除。
+提示从终端读取，校验源码后在当前目录保存安装器副本。安装目录必须是新建或空目录。
 从源码运行的方式见[安装指南](/installation)。
 
 ## 2. 添加集群并部署模型

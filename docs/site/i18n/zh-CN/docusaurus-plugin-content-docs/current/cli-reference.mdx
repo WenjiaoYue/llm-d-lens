@@ -56,8 +56,12 @@ TARGET_NODE=node-a KUBECONFIG="$HOME/.kube/config" scripts/lens-local.sh check
 | `lensctl.sh start` | 启动已安装部署的服务。 |
 | `lensctl.sh status` | 显示服务是否正在运行。 |
 | `lensctl.sh stop` | 停止已安装部署的服务。 |
+| `lensctl.sh uninstall` | 卸载；`--keep-data` / `--purge` 控制数据，`--keep-db` / `--purge-db` 控制内置数据库。 |
 
-## `LensInstaller-Ubuntu-x86_64.sh`
+## `LensInstaller-Ubuntu-x86_64-online.sh`
+
+从 main 或包含在线安装器的发布标签下载；脚本自行选择内嵌版本。
+只能安装到新建或空目录，不支持覆盖版本或就地升级。
 
 | 标志 | 用途 |
 | --- | --- |
@@ -68,9 +72,7 @@ TARGET_NODE=node-a KUBECONFIG="$HOME/.kube/config" scripts/lens-local.sh check
 | `--no-https` | 提供纯 HTTP 服务，而不是自动 HTTPS。 |
 | `--no-start` | 安装但不启动服务。 |
 | `--db-mode embedded\|external` | 使用内置数据库还是外部数据库。 |
-| `--uninstall` | 移除一个安装（默认保留数据）。 |
-| `--keep-data` / `--purge` | 配合 `--uninstall`：非交互式地保留或删除数据。 |
-| `--keep-db` / `--purge-db` | 配合 `--uninstall`：非交互式地保留或删除内嵌数据库。 |
+| `--no-apt` | 缺少系统依赖时直接失败，不使用 apt 安装。 |
 | `-h`、`--help` | 显示所有选项。 |
 
 完整用法参见[安装](/installation)和[升级](/upgrade)。

@@ -8,17 +8,26 @@ a model → publish a service → send a request**.
 
 ## 1. Install and open Lens
 
-On an Ubuntu x86_64 machine, run:
+On Ubuntu 22.04+ (x86_64), run the online installer without cloning the repository.
+Set `VERSION` to `main` or a release tag that contains the online installer:
 
 ```bash
-git clone https://github.com/llm-d-incubation/llm-d-lens.git
-cd llm-d-lens
-./scripts/LensInstaller-Ubuntu-x86_64.sh
+VERSION=main && curl -fsSL "https://raw.githubusercontent.com/llm-d-incubation/llm-d-lens/${VERSION}/scripts/LensInstaller-Ubuntu-x86_64-online.sh" | bash
+```
+
+Or use `wget`:
+
+```bash
+VERSION=main && wget -qO- "https://raw.githubusercontent.com/llm-d-incubation/llm-d-lens/${VERSION}/scripts/LensInstaller-Ubuntu-x86_64-online.sh" | bash
 ```
 
 Accept the installer defaults or enter your installation directory and ports.
-Open the URL printed at completion and sign in with the printed administrator
-credentials. To run from source instead, follow [Installation](/installation).
+Open the URL printed at completion and sign in with the auto-generated administrator
+credentials. The installer prints the path to a mode-600 file containing them;
+the file is removed when the password changes. Prompts are read from the terminal,
+and a copy of the installer is saved in the current directory after source validation.
+Use a new or empty installation directory. To run from source instead, follow
+[Installation](/installation).
 
 ## 2. Add a cluster and deploy a model
 
