@@ -6,13 +6,13 @@ import { pathToFileURL } from 'node:url';
 
 const han = /\p{Script=Han}/u;
 
-// Docusaurus i18n translation content (docs/docusaurus/i18n/<locale>/...) is
+// Chinese Docusaurus translations (docs/site/i18n/zh-CN/...) are
 // the one explicit, user-approved exception to the English-only policy: its
 // entire purpose is non-English, user-facing translated documentation and UI
 // strings for the published docs site. Everything else in the repository —
 // source, comments, commit/PR text, filenames, configuration — remains
-// English-only and is still fully scanned below.
-const i18nContentDir = /^docs\/docusaurus\/i18n\//;
+// English-only and is still fully scanned below, including i18n/en/.
+const i18nContentDir = /^docs\/site\/i18n\/zh-CN\//;
 
 // The locale picker must label each locale with its own self-endonym (the
 // universal convention used by every multilingual site: a language names
@@ -25,7 +25,7 @@ const i18nContentDir = /^docs\/docusaurus\/i18n\//;
 // stays free of literal Han glyphs.
 const zhCNSelfName = '\u7b80\u4f53\u4e2d\u6587';
 const localeLabelException = {
-  path: 'docs/docusaurus/docusaurus.config.ts',
+  path: 'docs/site/docusaurus.config.ts',
   line: new RegExp(`^\\s*'zh-CN':\\s*\\{\\s*label:\\s*'${zhCNSelfName}'\\s*\\},?$`),
 };
 

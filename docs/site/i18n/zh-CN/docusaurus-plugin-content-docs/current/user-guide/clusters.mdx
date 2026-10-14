@@ -1,0 +1,107 @@
+---
+title: 集群
+description: 连接 Kubernetes 集群、准备模型运行环境并管理节点。
+---
+
+创建存储和部署模型前，先添加集群。
+已有集群使用 kubeconfig 连接；没有集群时，可通过 Kubespray 在准备好的机器上创建。
+
+## 开始前：代理排除配置
+
+如果 Kubernetes 组件使用 HTTP(S) 代理，集群内部流量必须绕过代理。
+将 `NO_PROXY` 和 `no_proxy` 设为相同值，保留已有排除项，并包含本机回环地址、
+节点主机名/IP、API Server 地址、Service/Pod CIDR 和集群 DNS 后缀。
+示例（替换占位符；使用自定义集群域名时，相应替换 `cluster.local`）：
+
+```text
+localhost,127.0.0.1,::1,<node-hostnames-and-IPs>,<api-server-host>,<service-CIDR>,<pod-CIDR>,.svc,.svc.cluster.local,cluster.local
+```
+
+**确认配置在运行中的 `kube-apiserver` 进程上生效**，仅修改 shell 或 Lens 设置不够。
+kubeadm 集群在 `/etc/kubernetes/manifests/kube-apiserver.yaml` 中配置环境变量；
+kubelet 会重建静态 Pod，期间 API 访问会短暂中断。清单备份应放在该目录之外。
+仅配置 CIDR 不能排除以 Service DNS 名发起的请求；缺少域名排除项可能让 webhook
+请求经过代理，导致 TLS 错误或超时。
+
+## 从 kubeconfig 注册集群
+
+1. 打开 **Clusters（集群）**，点击 **Add（新增）**。
+2. 填写 **Cluster name（集群名称）**，保持 **I already have a kubeconfig（已有 kubeconfig）**，点击 **Browse（浏览）**选择文件。
+3. 点击 **Next（下一步）**。连接或版本检查失败时，先解决页面提示的问题。
+4. 在 **Network Proxy（网络代理）**中保留自动检测；需要指定代理时，选择 **Custom proxy for this cluster** 并填写代理信息。
+5. 在 **Model gateway（模型网关）**中保留 **Istio**，按下表检查地址。
+6. 在 **Accelerator（加速器）**中选择集群实际安装的加速器类型及驱动访问模式。
+7. 在 **llm-d stack（llm-d 技术栈）**中检查版本，点击 **Next**，等待源码下载和镜像准备完成。
+8. 在 **Model Cache（模型缓存）**中保留建议的 Secret 命名空间和名称，将 [Hugging Face 设置](https://huggingface.co/settings/tokens)中的令牌填入 **HuggingFace token**。需要同时准备缓存时，勾选 **Create a storage volume for model-cache on this cluster**，填写路径和容量。
+9. 点击 **Review（检查）**，核对摘要后点击 **Finish（完成）**。
+10. 等待各项操作完成，点击 **Done（结束）**。在列表中选择该集群，检查 **Workers（工作节点）**和 **Deployable GPU（可部署 GPU）**。
+
+| 模型网关字段 | 如何填写 |
+| --- | --- |
+| **Gateway exposed port (NodePort)** | 客户端调用模型时使用的端口 |
+| **Gateway host/IP** | 客户端可访问的主机名或 IP；留空由 Lens 推导 |
+| **Lens address** | 集群能访问的 Lens 主机名或 IP；自动填入的地址可达时保持不变 |
+| **Node inotify limit** | 没有管理员指定值时，保留初始值 |
+
+向导会在集群节点上安装软件并准备镜像。请只对有权管理的集群执行。
+准备步骤失败时，先解决对应错误，再完成向导。
+
+## 通过 Kubespray 创建新集群
+
+1. 打开 **Clusters → Add**，填写集群名称。
+2. 选择 **Bootstrap a new cluster via Kubespray（通过 Kubespray 创建新集群）**。
+3. 为每台机器填写 **Host(s)**、**Port**、**Role(s)**、**Username**，并提供 SSH 私钥或密码。点击 **Add node** 添加更多机器。
+4. **Network proxy for target nodes** 保持 **Auto** 可沿用各机器的代理；需要指定时选择 **Custom for these nodes**。
+5. 点击 **Run preflight（运行预检）**，修正失败项并重新检查，直到全部主机通过。
+6. 点击 **Start bootstrap（开始创建）**，查看执行进度。
+7. 生成的 kubeconfig 出现后，按上面的注册步骤继续，直到 **Finish** 和 **Done**。
+
+此操作会修改目标机器。开始前请确认主机地址和节点角色。
+
+## 修改集群设置
+
+1. 选择集群，点击 **Edit cluster（编辑集群）**。
+2. 修改名称、描述、代理或模型网关设置。
+3. 点击 **Save changes（保存更改）**，确认新值已显示。
+
+组件版本由 Lens 发布版本提供，不能在此处修改。
+
+<span id="model-gateway-prerequisites" />
+
+## 检查模型网关访问
+
+1. 在 **Clusters → Edit cluster** 中检查 **Gateway host/IP** 和 **Gateway exposed port**，确认它们是客户端可访问的地址。
+2. 打开 **Model services（模型服务）**，找到该集群的 **Gateway** 节点。
+3. 打开节点菜单：未安装时选择 **Install（安装）**；需要应用已保存设置时选择 **Reconcile（协调）**。
+4. 查看操作日志，然后[发布模型服务并发送请求](/tutorials/publish-a-model-service)。
+
+安装或请求失败时，参阅[故障排查](/troubleshooting)。
+创建和编辑向导当前提供 **Istio**；其他提供方的手动修复操作不属于正常注册步骤。
+
+## 查看集群健康状态和部署
+
+1. 在 **Clusters** 中选择集群。
+2. 检查 **Workers**、**CPU**、**Memory**、**Deployable GPU**、**VRAM**、**Disk** 和 **Monitoring**。
+3. 在 **Deployments** 中通过 **Copy endpoint（复制端点）**获取地址，或点击 **View Pods & Logs（查看 Pod 与日志）**检查部署。
+4. 打开部署的 **Monitoring（监控）**菜单，选择 **Open Grafana**、**Open Prometheus** 或 **Profiling（性能分析）**。
+
+日志筛选和命名空间删除操作见[管理部署](/user-guide/deployments)。
+
+## 设置节点维护模式
+
+1. 在集群的 **Workers** 列表中选中节点。
+2. 点击 **Enter maintenance mode（进入维护模式）**，核对节点名称，再点击 **Cordon nodes**。
+3. 维护结束后选中节点，点击 **Exit maintenance mode（退出维护模式）**，再确认 **Uncordon nodes**。
+
+**进入维护模式只阻止新 Pod 调度，不会停止或迁移已有 Pod。**
+需要停机或迁移负载时，请另行安排。
+
+## 删除集群注册
+
+1. 打开集群的 **Actions → Delete cluster（操作 → 删除集群）**。
+2. 核对集群名称和删除警告。
+3. 点击 **Delete（删除）**，确认注册记录从列表中消失。
+
+## 看不到集群
+
+请管理员检查你的集群分配。维护者管理已分配的集群，管理员可以管理所有集群。

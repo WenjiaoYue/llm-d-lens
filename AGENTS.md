@@ -5,12 +5,15 @@
 All repository-authored text must be English: documentation, comments, messages,
 UI labels, examples, tests, configuration, filenames, and agent instructions.
 The one explicit exception is published documentation translations under
-`docs/docusaurus/i18n/` — Docusaurus's i18n locale content (translated Markdown
+`docs/site/i18n/zh-CN/` — Docusaurus's Chinese locale content (translated Markdown
 docs, the standalone homepage, and UI strings such as the navbar/footer) for
 the bilingual (English/Chinese) docs site. Its whole purpose is non-English,
 user-facing content, so `npm run check:english` skips that directory; every
 other path, including source, comments, commit/PR text and configuration,
 remains English-only and is still fully scanned.
+
+English documentation also lives under `docs/site/i18n/en/`; it is not part of
+the translation exception and must pass the same English check as source code.
 Before every commit and before creating or updating a PR, agents MUST:
 
 1. Run `npm run check:english` over the entire repository, not only the diff.
@@ -23,19 +26,19 @@ Before every commit and before creating or updating a PR, agents MUST:
 
 The CI English check runs for every PR, including documentation-only changes.
 It scans tracked and untracked non-ignored text (excluding the
-`docs/docusaurus/i18n/` translation exception above); ignored dependencies,
+`docs/site/i18n/zh-CN/` translation exception above); ignored dependencies,
 runtime files and binary assets are outside this repository-text policy.
 
 ## Dev workflow
 
 After changing backend, frontend or Node code, **restart the local dev services
-automatically** (`scripts/dev.sh restart`) so the running app picks up the change —
+automatically** (`scripts/lens-local.sh restart`) so the running app picks up the change —
 do not wait to be asked. Then verify the change against the running services.
 
 ## Reuse before implementation
 
 Before adding or changing behavior, read [the reuse workflow](.agents/skills/workflow/SKILL.md)
-and [the capability map](docs/reuse-map.md). Apply it to frontend, Node, Python,
+and [the capability map](.reuse/map.md). Apply it to frontend, Node, Python,
 and development tooling. Documentation-only edits need reference checks, not a
 model download or duplicate scan.
 
@@ -66,7 +69,7 @@ model download or duplicate scan.
    `verify`, `check` and `verify-report` **only right before a commit**, so the
    pass reflects the final tree. See [Before you commit](#before-you-commit).
 
-`scripts/dev.sh start` and `restart` also regenerate and validate the map before
+`scripts/lens-local.sh start` and `restart` also regenerate and validate the map before
 starting/stopping services. This is a fallback, not a replacement for the coding
 agent's registration and validation responsibilities. Startup cannot infer an
 undocumented capability's business contract. Semantic vectors refresh on search.
@@ -82,14 +85,14 @@ cd /home/yi/coding/prism/new_cluster_creation/llm-d-prism
 for u in unit-10 unit-11 unit-13; do npm run reuse -- cover --task llmd-gateway-mode-migration --unit "$u" --outcome modified --summary "Model-cache downloads use the cluster's saved HF token (no token picker); topology column widths." >/dev/null 2>&1 && echo "cover $u"; done
 K='not (test_aliases_and_concurrent_downloads_share_commit or test_moving_branch_publishes_new_checkout_preserving_old or test_distinct_urls_are_isolated or test_ref_names_that_previously_collided_and_cached_commit_offline or test_published_deployment_names_scope_commands_and_smoke_test)'
 V(){ npm run reuse -- verify --task llmd-gateway-mode-migration "$@" >/dev/null 2>&1; }
-V --unit unit-13 -- .venv/bin/python -m pytest llm_d_bench/model_cache -q
+V --unit unit-13 -- .venv/bin/python -m pytest apps/backend/src/llm_d_lens/model_cache -q
 V --unit unit-10 --unit unit-14 -- npm run build
 V --unit unit-11 -- npm run docs:check
-V --unit unit-1 --unit unit-2 --unit unit-3 --unit unit-4 --unit unit-5 --unit unit-6 --unit unit-7 --unit unit-8 -- .venv/bin/python -m pytest llm_d_bench/model_service llm_d_bench/cluster -q -k "not (test_aliases_and_concurrent_downloads_share_commit or test_moving_branch_publishes_new_checkout_preserving_old or test_distinct_urls_are_isolated or test_ref_names_that_previously_collided_and_cached_commit_offline)"
-V --unit unit-9 -- .venv/bin/python -m pytest llm_d_bench/deploy -q -k "$K"
-V --unit unit-12 -- .venv/bin/python -m pytest llm_d_bench/api llm_d_bench/auth llm_d_bench/db -q -k "$K"
+V --unit unit-1 --unit unit-2 --unit unit-3 --unit unit-4 --unit unit-5 --unit unit-6 --unit unit-7 --unit unit-8 -- .venv/bin/python -m pytest apps/backend/src/llm_d_lens/model_service apps/backend/src/llm_d_lens/cluster -q -k "not (test_aliases_and_concurrent_downloads_share_commit or test_moving_branch_publishes_new_checkout_preserving_old or test_distinct_urls_are_isolated or test_ref_names_that_previously_collided_and_cached_commit_offline)"
+V --unit unit-9 -- .venv/bin/python -m pytest apps/backend/src/llm_d_lens/deploy -q -k "$K"
+V --unit unit-12 -- .venv/bin/python -m pytest apps/backend/src/llm_d_lens/api apps/backend/src/llm_d_lens/auth apps/backend/src/llm_d_lens/db -q -k "$K"
 V --unit unit-13 -- npm run reuse -- map
-V --unit unit-1 --unit unit-2 --unit unit-3 --unit unit-4 --unit unit-5 --unit unit-6 --unit unit-7 --unit unit-8 --unit unit-9 --unit unit-10 --unit unit-11 --unit unit-12 --unit unit-13 --unit unit-14 -- .venv/bin/python -m pytest llm_d_bench/model_service llm_d_bench/cluster llm_d_bench/deploy llm_d_bench/api llm_d_bench/auth llm_d_bench/db -q -k "$K"
+V --unit unit-1 --unit unit-2 --unit unit-3 --unit unit-4 --unit unit-5 --unit unit-6 --unit unit-7 --unit unit-8 --unit unit-9 --unit unit-10 --unit unit-11 --unit unit-12 --unit unit-13 --unit unit-14 -- .venv/bin/python -m pytest apps/backend/src/llm_d_lens/model_service apps/backend/src/llm_d_lens/cluster apps/backend/src/llm_d_lens/deploy apps/backend/src/llm_d_lens/api apps/backend/src/llm_d_lens/auth apps/backend/src/llm_d_lens/db -q -k "$K"
 node tools/reuse/cli.mjs check --task llmd-gateway-mode-migration --base a592fa579ce738dfa0637391bfedb02e47f8a9b0 --report .cache/reuse/report.json --json > /tmp/opencode/check.json 2>/dev/null
 node -e "
 const fs=require('fs'); const r=require('/tmp/opencode/check.json');
@@ -142,7 +145,7 @@ be applied when their description matches the requested work.
 | React, browser clients, hooks, styles or charts | [UI](.agents/skills/ui/SKILL.md) |
 | Node/Python APIs, domain services, persistence or tasks | [Backend](.agents/skills/backend/SKILL.md) |
 | Startup scripts, containers, CI deployment or cluster lifecycle | [Deployment](.agents/skills/deployment/SKILL.md) |
-| Table schemas, DAOs or Alembic migrations under `llm_d_bench/db/` | [Database](.agents/skills/database/SKILL.md) |
+| Table schemas, DAOs or Alembic migrations under `apps/backend/src/llm_d_lens/db/` | [Database](.agents/skills/database/SKILL.md) |
 | Authenticated routes, permissions, roles, scopes, ownership, resource sharing, sessions or login | [Auth](.agents/skills/auth/SKILL.md) |
 | A page, REST endpoint, or Python callable changed | [Keep the docs site in sync](#keep-the-docs-site-in-sync) below — update the matching Docusaurus doc page in the same task |
 
@@ -151,25 +154,25 @@ only when their contracts are relevant. Do not run model downloads for link edit
 
 ## Keep the docs site in sync
 
-Lens ships a Docusaurus documentation site under `docs/docusaurus/` (preview: `npm run
+Lens ships a Docusaurus documentation site under `docs/site/` (preview: `npm run
 docs:dev`; build/link-check: `npm run docs:check`), published to GitHub Pages
 at `https://llm-d-incubation.github.io/llm-d-lens/`. Every Lens frontend
 module has three doc surfaces, and a code change must update whichever of
 them its change affects, in the same task — do not defer this to a separate
 follow-up:
 
-1. **Frontend page behavior** (a React page/component under `src/`) →
+1. **Frontend page behavior** (a React page/component under `apps/frontend/src/`) →
    update the matching User Guide page at
-   `docs/docusaurus/docs/user-guide/<module>.mdx`.
+   `docs/site/i18n/en/docusaurus-plugin-content-docs/current/user-guide/<module>.mdx`.
 2. **A FastAPI/Node REST endpoint** (added, changed, removed) →
    update the `## Backend API` section of the matching module page at
-   `docs/docusaurus/docs/api-reference/modules/<module>.mdx`: keep its `### <endpoint
+   `docs/site/i18n/en/docusaurus-plugin-content-docs/current/api-reference/modules/<module>.mdx`: keep its `### <endpoint
    name>` entry and REST API tab (method, path, request/response fields and
    a real JSON example) accurate to the actual route and Pydantic/TS contract.
 3. **The underlying Python callable a REST endpoint uses** (service/DAO
    method signature, module path, or behavior change) → update that same
    `### <endpoint name>` entry's Python API tab on
-   `docs/docusaurus/docs/api-reference/modules/<module>.mdx` so the sample code still
+   `docs/site/i18n/en/docusaurus-plugin-content-docs/current/api-reference/modules/<module>.mdx` so the sample code still
    imports and calls the real function. Every Backend API row must keep a
    matching, concrete Python usage example — never leave one updated
    without the other.
@@ -187,13 +190,27 @@ fails on reported errors) and fix anything it surfaces before finishing the
 task. Documentation-only edits still follow the reuse workflow's
 reference-check guidance, not a full duplicate/model-download scan.
 
-Three pages are synced in from canonical sources outside `docs/docusaurus/docs/` by
-`docs/docusaurus/scripts/sync-external-docs.mjs` — `docs/design/agentic-deployment-architecture.zh-CN.md`,
-`docs/design/agentic-planning-evidence-and-rag.zh-CN.md`, and
-`CONTRIBUTING.md` — so edit those source files directly rather than their
-generated copies under `docs/docusaurus/docs/architecture/` and
-`docs/docusaurus/docs/resources/contributing.md` (gitignored, regenerated by
+Three pages are synced from two canonical sources outside `docs/site/i18n/en/docusaurus-plugin-content-docs/current/` by
+`docs/site/scripts/sync-external-docs.mjs`: the marked `architecture` and `evidence`
+parts of `docs/design/agentic-deployment-design.md`, plus `CONTRIBUTING.md`.
+The Agentic parts retain the existing published page URLs. Edit those source
+files directly rather than their
+generated copies under `docs/site/i18n/en/docusaurus-plugin-content-docs/current/architecture/` and
+`docs/site/i18n/en/docusaurus-plugin-content-docs/current/resources/contributing.md` (gitignored, regenerated by
 `npm run docs:dev` / `npm run docs:check`).
+
+## Design documentation ownership
+
+- Keep exactly one canonical design document per product module or shared domain
+  under `docs/design/`. Add related architecture, contracts and operations as
+  sections of that document, not sibling version, phase or subfeature designs.
+- Use lowercase, hyphen-separated English filenames ending in `.md`. Do not add
+  locale suffixes such as `zh-CN`; published translations belong in `docs/site/i18n/zh-CN/`.
+- Keep effective designs and constraints, not superseded proposals or historical
+  implementation snapshots. Extract still-valid content before removing an old design.
+- When renaming or merging, update incoming links, section references, source
+  comments, instruction files, ignore rules, docs sync inputs and CI path filters.
+  Preserve published documentation routes and validate destination anchors.
 
 
 ## Existing contracts
@@ -218,11 +235,11 @@ Hardware-specific behavior is data, not code. Vendor lists, accelerator labels,
 device metrics/queries, DCGM/GFD/device-plugin manifests, driver access modes,
 runtime images and accelerator variants must come from the hardware profile
 registry — never a hardcoded constant table, a hardcoded `'gpu'`/`'xpu'` default,
-or an `if vendor == …` branch in `llm_d_bench/`, `server/` or `src/`.
+or an `if vendor == …` branch in `apps/backend/src/llm_d_lens/`, `apps/server/src/` or `apps/frontend/src/`.
 
 - **Add a hardware, not a branch.** A new vendor or access mode is one profile
-  (`llm_d_bench/hardware/profiles/<vendor>.json`) plus, only when code is
-  required, one provider (`llm_d_bench/hardware/providers/<vendor>.py`). Follow
+  (`apps/backend/src/llm_d_lens/hardware/profiles/<vendor>.json`) plus, only when code is
+  required, one provider (`apps/backend/src/llm_d_lens/hardware/providers/<vendor>.py`). Follow
   [the hardware plugin architecture](docs/design/hardware-plugin-architecture.md)
   and the profile `schema.json`. Domains (cluster, deploy, evaluate, simulation,
   monitoring, profiling) and the frontend must not change to support it.
@@ -230,7 +247,7 @@ or an `if vendor == …` branch in `llm_d_bench/`, `server/` or `src/`.
   install/manifests and access `modes`, device discovery/DRF resources, monitoring
   images and dashboards, telemetry `device_metric_sources`, the default
   `deployment.runtime_image`, accelerator variants and capability gates.
-- **Consume the contract.** Backend: `llm_d_bench/hardware/` (registry, resolver,
+- **Consume the contract.** Backend: `apps/backend/src/llm_d_lens/hardware/` (registry, resolver,
   `telemetry.py`); API: `GET /api/v1/hardware/capabilities`; frontend:
   `ClusterMonitoringStack/hardwareProfilesBackend.js` and the cluster overview
   `hardware` summary. Derive the vendor, label and default from the connected

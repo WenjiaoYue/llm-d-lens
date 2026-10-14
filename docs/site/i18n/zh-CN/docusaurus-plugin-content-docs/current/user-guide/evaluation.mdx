@@ -1,0 +1,104 @@
+---
+title: 评估
+description: 压测模型服务或比较部署配置，查看并导出结果。
+---
+
+使用 **Evaluation（评估）**测量模型的响应速度和吞吐量。
+第一次建议对已发布的模型服务运行一个小负载，先确认流程可用。
+
+## 压测已有模型服务
+
+1. 打开 **Evaluation**，点击 **New Task（新建任务）**。
+2. 选择 **Use existing endpoint（使用现有端点）**。
+3. 选择 **Model service（模型服务）**，填写自己的 **Model access token（模型访问令牌）**。
+4. 点击 **Next**，进入 **Benchmark & comparison（基准测试与对比）**。
+5. 选择 **Custom workload（自定义负载）**，**Benchmark runner** 保持 **inference-perf**。
+6. 点击 **Add matrix**，再点击 **Add ISL/OSL point**，设置 ISL 为 `128`、OSL 为 `64`。点击 **Add concurrency stage**，设置并发 `1`、请求数 `10`，只保留这些行。
+7. 填写 **Task name（任务名称）**，**Traffic workers** 保持 `1`，点击 **Launch evaluation（启动评估）**。
+8. 在列表中找到新任务，点击 **Results（结果）**查看进度。
+
+只能选择已发布且健康的模型服务。列表为空时，先[发布部署](/tutorials/publish-a-model-service)。
+令牌在 **API keys** 页面创建。此流程不能直接填写部署 URL。
+
+小负载用于验证压测流程；正式比较性能时，参阅[设置评测参数](/evaluation/parameters)增加负载。
+令牌只用于本次运行，不会保存供以后重试使用。
+
+## 比较多个部署配置
+
+1. 打开 **Evaluation → New Task**，选择 **Deploy configurations（部署配置）**。
+2. 在 **Select（选择）**中勾选要比较的配置，使用相同集群和模型。
+3. 还没有配置时，点击 **Create configuration（创建配置）**，选择[评测方案](/evaluation/guides)、设置资源并生成 YAML。
+4. 检查并保存配置，回到任务弹窗，将它与其他候选配置一起选中。
+5. 点击 **Next**，进入 **Benchmark & comparison**。
+6. 选择套件，或按[参数指南](/evaluation/parameters)设置负载。所有候选使用相同的输入长度和负载。
+7. 核对候选方案和基线，点击 **Launch evaluation**。
+8. 产生测量结果后，打开 **Results → Compare（结果 → 对比）**。
+
+点击 **View YAML** 可检查保存的配置。编辑 YAML 会保存为新配置，原配置保留。
+
+## 使用完整的评估向导
+
+部分入口会打开 **New Benchmark Task（新建基准测试任务）**，而不是简短的任务弹窗。
+
+1. 在 **Evaluation Setup（评估设置）**中填写 **Task name（任务名称）**，选择使用现有端点或设计配置。
+2. 测试现有服务时选择服务并填写令牌；创建部署时选择集群、模型和缓存存储。
+3. 在 **Configurations（配置）**中添加或创建待测配置，再点击 **Continue to Benchmark**。
+4. 在 **Benchmark** 中按[参数指南](/evaluation/parameters)设置负载和性能目标。
+5. 进入 **Execution plan（执行计划）**，核对目标及执行顺序，点击 **Start Evaluation（开始评估）**。
+
+测试已有服务时会跳过配置设计，不创建部署。
+
+## 查看和比较结果
+
+1. 在 **Evaluation** 中按名称或状态找到任务，点击 **Results**。
+2. 在 **Benchmark results（基准测试结果）**中检查成功率、延迟和吞吐量。
+3. 在 **Compare** 中比较相同输入输出长度、并发数或请求速率的结果。
+4. 检查设定的性能目标是否通过，不要只看任务是否成功。
+5. 运行时查看 **Live monitoring（实时监控）**，结束后查看 **Recorded monitoring（历史监控）**，分析资源用量。
+
+| 指标 | 如何判断 |
+| --- | --- |
+| **TTFT** | 首个 token 的等待时间，越低越快 |
+| **TPOT** | 每个输出 token 的耗时，越低表示生成越快 |
+| **Output throughput** | 每秒输出 token 数，越高表示输出能力越强 |
+| **Success rate** | 先检查失败请求，再比较性能 |
+| **SLO** | 是否满足设置的延迟和成功率目标；缺少测量值不能算通过 |
+| Guide / 基线比值 | 吞吐量大于 1、延迟小于 1，分别表示 Guide 在该指标上更好 |
+
+没有比值表示可比较的数据不足，或基线为零。稳定请求速率只覆盖本次测试的负载范围；
+需要验证更高容量时，新建任务并增加负载阶段。
+
+## 排查失败或长时间未完成的任务
+
+1. 打开 **Results → Benchmark logs（基准测试日志）**，检查输出和诊断。
+2. 打开 **Deployments**，筛选 **Failed** 或 **Active**，点击对应项的 **Deploy logs（部署日志）**。
+3. 检查 Pod 日志、Kubernetes 事件和最近一次就绪检查。
+4. 修正错误后再重试。内存错误见[压测客户端 OOM](/troubleshooting#压测客户端-oom)。
+
+任务进度自动更新。需要重新检查部署是否就绪时，点击 **Refresh deployment status and details**。
+
+## 重试、继续或停止运行
+
+| 目标 | 操作 |
+| --- | --- |
+| 重试失败或取消的任务 | 点击任务卡片的 **Retry（重试）** |
+| 重试失败的部署项 | 打开 **Results → Deployments**，按提示填写重试令牌，再点击 **Retry** |
+| 继续暂停的项 | 点击 **Resume（恢复）** |
+| 停止正在运行的任务 | 使用任务卡片的 **Cancel task（取消任务）** |
+| 停止评估创建的部署项 | 点击 **Cancel benchmark & deployment** |
+| 停止对已有服务的压测 | 点击 **Cancel benchmark**；不会删除已发布服务 |
+
+请等待停止和清理完成。取消某项也会停止共享其部署的依赖项。
+重试通常保留成功结果；共享部署已丢失时，相关候选可能需要重新运行。
+
+## 导出结果或删除任务
+
+1. 打开 **Results**，点击 **Download Report（下载报告）**。
+2. 要将结果传入模拟流程，点击 **Send to Simulate & TCO**。
+3. 删除已结束的任务：回到列表，点击 **Delete task（删除任务）**并确认。
+
+**删除前先下载需要保留的结果。**删除任务会移除其结果和重试历史；
+只清理评估创建的部署，不会删除任务已保存的结果。
+
+评估默认清理自己创建的部署。保留部署选项只保留成功候选，不保留独立基线；
+保留的部署会继续占用集群资源。导出文件不包含密钥，也不会打包全部外部数据集和依赖。

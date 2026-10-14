@@ -19,14 +19,14 @@ Integrate `llm-d-planner`'s algorithms for parsing model parameters, estimating 
 ```mermaid
 flowchart TD
     subgraph PrismCore [sandbox-llm-d-prism core]
-        subgraph CapacityModule [In-tree llm_d_bench.capacity]
+        subgraph CapacityModule [In-tree llm_d_lens.capacity]
             CP[capacity_planner.py<br/>Capacity and memory estimation engine]
             CONST[vllm_constants.py<br/>Architecture-calibrated constants]
             VAL[validator.py<br/>Parameter validation and diagnostics]
         end
 
         subgraph LocalInputs [Local and cluster inputs]
-            MC[llm_d_bench.model_cache<br/>Prefer local config.json]
+            MC[llm_d_lens.model_cache<br/>Prefer local config.json]
             HF[huggingface_hub / transformers<br/>Optional remote fallback]
             CL[Cluster Overview<br/>Per-GPU VRAM / GPU count / availability]
         end
@@ -62,11 +62,11 @@ flowchart TD
 
 ## 4. Module structure
 
-Add a separate `capacity` module under `sandbox-llm-d-prism/llm_d_bench`:
+Add a separate `capacity` module under `sandbox-llm-d-prism/llm_d_lens`:
 
 ```text
 sandbox-llm-d-prism/
-└── llm_d_bench/
+└── llm_d_lens/
     └── capacity/
         ├── __init__.py               # Public API
         ├── vllm_constants.py         # In-tree activation and communication constants (Python dict; no file I/O)
@@ -99,7 +99,7 @@ Port `validate_vllm_params` and `run_capacity_planner` from `llm-d-benchmark`. F
 
 ## 5. Integration details
 
-### 5.1 Agentic Deploy deterministic planner (`llm_d_bench/agentic/planner.py`)
+### 5.1 Agentic Deploy deterministic planner (`llm_d_lens/agentic/planner.py`)
 
 When `DeterministicPlanner.candidates()` generates candidates:
 1. Load the model's actual configuration, preferring the local `model_cache` manifest.
@@ -118,14 +118,14 @@ When `DeterministicPlanner.candidates()` generates candidates:
 
 ### 5.2 Pre-deployment guardrail
 
-Before approving via `POST /api/agentic-deployments/{id}/approve` or deploying via `llm_d_bench/deploy/`:
+Before approving via `POST /api/agentic-deployments/{id}/approve` or deploying via `llm_d_lens/deploy/`:
 1. Extract the selected topology's actual vLLM parameters (`tp`, `max_model_len`, `gpu_memory_utilization`, `gpu_memory`).
 2. Run `validate_vllm_params()` as a pre-flight check.
 3. If fatal errors are found and `ignore_failures` is not enabled, stop deployment and return structured rejection reasons and remediation suggestions, such as increasing TP, reducing `maxModelLen`, or lowering concurrency.
 
 ### 5.3 MCP capacity-estimation tool
 
-Register `estimate_vllm_capacity` in `llm_d_bench/agentic/generator.py` and `server/mcp/specialTools.ts`:
+Register `estimate_vllm_capacity` in `llm_d_lens/agentic/generator.py` and `server/mcp/specialTools.ts`:
 - **Inputs**:
   - `model`: model name or local cache path
   - `gpu_memory_gib`: per-GPU memory in GiB (for example, 80)
@@ -146,29 +146,29 @@ Register `estimate_vllm_capacity` in `llm_d_bench/agentic/generator.py` and `ser
 The implementation is divided into five phases, each protected by tests and designed for backward compatibility:
 
 ### Phase 1: Build a self-contained capacity module
-- [x] **Step 1.1**: Create `llm_d_bench/capacity/` and its `__init__.py`.
-- [x] **Step 1.2**: Add `llm_d_bench/capacity/vllm_constants.py` with in-tree activation profiles, base activation costs, and non-Torch overhead.
+- [x] **Step 1.1**: Create `llm_d_lens/capacity/` and its `__init__.py`.
+- [x] **Step 1.2**: Add `llm_d_lens/capacity/vllm_constants.py` with in-tree activation profiles, base activation costs, and non-Torch overhead.
 - [x] **Step 1.3**: Port and simplify `capacity_planner.py` to:
   - Prefer a local path or `model_cache` for `config.json`;
   - Dynamically import optional `transformers` and `huggingface_hub`, degrading gracefully with a clear message when they are absent;
   - Handle errors and floating-point boundaries robustly in the mathematical estimates.
-- [x] **Step 1.4**: Add `llm_d_bench/capacity/validator.py` with `ValidationParams` and `validate_vllm_params`.
-- [x] **Step 1.5**: Add offline tests in `llm_d_bench/capacity/test_capacity.py` for representative models (such as Llama-3-8B and Qwen-72B) on different GPU sizes.
+- [x] **Step 1.4**: Add `llm_d_lens/capacity/validator.py` with `ValidationParams` and `validate_vllm_params`.
+- [x] **Step 1.5**: Add offline tests in `llm_d_lens/capacity/test_capacity.py` for representative models (such as Llama-3-8B and Qwen-72B) on different GPU sizes.
 
 ### Phase 2: Improve the Agentic Deploy deterministic planner
-- [x] **Step 2.1**: Add memory and concurrency capacity fields to `PlannedCandidate` in `llm_d_bench/agentic/planner.py`.
+- [x] **Step 2.1**: Add memory and concurrency capacity fields to `PlannedCandidate` in `llm_d_lens/agentic/planner.py`.
 - [x] **Step 2.2**: Update `DeterministicPlanner.candidates()` to use strict TP and memory checks when the model configuration is known; fall back to the previous heuristic when neither configuration nor network/cache is available.
-- [x] **Step 2.3**: Update `llm_d_bench/agentic/test_planner.py` to check invalid TP filtering and precise exclusion when GPU memory is insufficient.
+- [x] **Step 2.3**: Update `llm_d_lens/agentic/test_planner.py` to check invalid TP filtering and precise exclusion when GPU memory is insufficient.
 
 ### Phase 3: Add pre-flight deployment validation
-- [x] **Step 3.1**: Add capacity validation to the approval logic (`approve`) in `llm_d_bench/agentic/service.py`.
+- [x] **Step 3.1**: Add capacity validation to the approval logic (`approve`) in `llm_d_lens/agentic/service.py`.
 - [x] **Step 3.2**: Return blocking errors when parameters could cause runtime OOM, preventing `CrashLoopBackOff` Pods.
 
 ### Phase 4: Expose the MCP capacity-estimation tool
-- [x] **Step 4.1**: Register `estimate_vllm_capacity` as an optional MCP tool in `llm_d_bench/agentic/generator.py`.
+- [x] **Step 4.1**: Register `estimate_vllm_capacity` as an optional MCP tool in `llm_d_lens/agentic/generator.py`.
 - [x] **Step 4.2**: Add its signature and handler to `server/mcp/specialTools.ts`.
 
 ### Phase 5: End-to-end verification and documentation
-- [x] **Step 5.1**: Run regression tests: `pytest llm_d_bench/agentic/ llm_d_bench/capacity/`.
+- [x] **Step 5.1**: Run regression tests: `pytest llm_d_lens/agentic/ llm_d_lens/capacity/`.
 - [x] **Step 5.2**: Verify the frontend/backend integration by selecting a model, cluster, and topology in the UI and checking memory allocation and concurrency metadata on the candidates.
 - [x] **Step 5.3**: Update the main project documentation and user guide.

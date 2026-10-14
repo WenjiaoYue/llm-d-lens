@@ -87,13 +87,14 @@ Use `-- --text-file /tmp/pr-title.txt --text-file /tmp/pr-body.md` to include
 PR metadata in the check. The scanner reports Han characters in Git-visible text
 and filenames; it is not a natural-language classifier for every other language.
 Do not replace text with escapes or remove useful content to bypass the policy.
-The one exception is `docs/docusaurus/i18n/` (the bilingual docs site's
-Chinese translations), which the scanner skips on purpose.
+The one exception is `docs/site/i18n/zh-CN/` (the bilingual docs site's
+Chinese translations), which the scanner skips on purpose. English documentation
+under `docs/site/i18n/en/` remains fully scanned.
 
 ## Development and validation
 
 Before changing behavior, follow [AGENTS.md](AGENTS.md) and the
-[reuse-first workflow](docs/refactoring/reuse-first-agent-design.md). Find existing implementations,
+[reuse-first workflow](docs/design/reuse-workflow.md). Find existing implementations,
 compare contracts and callers, and record reuse/new-code rationale in the PR.
 Pause dependent work for unresolved business, compatibility, CI exception or
 catalog decisions; obtain and record the user's actual answer before proceeding.
@@ -117,9 +118,59 @@ make test-python
 make lint
 ```
 
-Document substantial feature designs under `specs/changes/`. Keep API descriptions
+Keep one canonical design per module or shared domain under `docs/design/`,
+using lowercase, hyphen-separated English filenames without locale suffixes.
+Merge related material into that design; remove superseded proposals rather than
+keep historical appendices. Update file and section references, including docs
+sync inputs and CI path filters, whenever designs move.
+Maintain user guides and API references under `docs/site/i18n/en/docusaurus-plugin-content-docs/current/`. Keep API descriptions
 and relevant documentation in sync with frontend and backend behavior. Real
 cluster deployment and external provider calls require a configured environment;
 report separately whether those flows were exercised.
+
+## Security validation requirements
+
+These requirements cover application code, automation, dependency manifests and
+lockfiles, containers, installed dependencies shipped with the product, and
+release artifacts. Treat PRs and dependency-update PRs as untrusted input: use
+isolated runners and do not expose deployment credentials or long-lived secrets.
+Runners, scanners and their rule/signature update channels are trusted
+infrastructure; results apply only to scanned content, not the runtime environment.
+
+**Repository configuration:** `.github/workflows/ci-pr-checks.yaml` targets PRs
+to `main`. It checks English content and, for detected code changes, the pinned
+llm-d stack, frontend build, MCP generation, TypeScript, JS tests, Ruff/format and
+container build. It does not run `npm run lint`. No repository-owned CodeQL,
+REUSE license or malware-scanning job is configured. `.github/dependabot.yml`
+has weekly GitHub Actions and Docker updates, not npm/pip updates. Hosted
+CodeQL setup, branch protection, required checks, Dependabot alerts and security
+updates must be verified separately in GitHub settings.
+
+The following is the **required validation policy**, not a claim that all gates
+are wired into CI. Enabling missing gates or approving exceptions requires a
+separate maintainer decision; moving this documentation does neither.
+
+| ID | Acceptance requirement |
+| --- | --- |
+| CQ-1 | Existing build, type-check, tests, Ruff/format and container checks pass on code PRs; make `npm run lint` a required check. Do not merge failures. Exceptions need an owner, rationale and expiration. Build/test checks may be skipped for documentation-only PRs, but English and license checks still apply. |
+| SAST-1 | Official CodeQL JavaScript/TypeScript and Python security suites complete on code PRs and publish SARIF. Analysis failure blocks merge. Triage findings; high/critical findings block absent an approved time-bounded exception. Keep queries/alerts current; local triage does not replace CI. |
+| REUSE-1 | Run the official `reuse lint` on every PR, including documentation-only changes. Version-controlled files need valid SPDX license/copyright metadata or compliant license files/annotations; failures block merge. |
+| MAL-1 | Scan repository content, shipped installed dependencies and actual deliverable artifacts with ClamAV or an equivalent scanner on every PR and before release. Update signatures; detections, scanner/update errors, stale signatures or unscanned deliverables block acceptance/release. Investigate false positives by file/hash, rationale and disposition, not global exclusions. |
+| DEP-1 | Retain weekly Actions/Docker updates and add npm/pip coverage. Enable and verify Dependabot alerts/security updates. Dependency PRs pass CQ-1, REUSE-1 and MAL-1; prioritize high/critical alerts and record mitigations, owner and review date when an upgrade is unavailable. |
+
+**REUSE-1 means REUSE.software license compliance**, not Lens's code-reuse
+catalog or duplicate detection. `npm run reuse:*` does not replace `reuse lint`.
+
+Maintainers must verify that required status checks enforce CQ-1, SAST-1,
+REUSE-1 and MAL-1, and that releases scan the actual artifacts, not just source.
+After scanner configuration changes, use an isolated standard detectable test
+sample to confirm blocking behavior; never commit it or include it in releases.
+Review alert backlogs, scanner/rule freshness, exception expiry and GitHub
+required-check settings at least quarterly.
+
+Keep current scan evidence and dispositions traceable to these five objective IDs.
+If a repository threat model or SDL task list is adopted, map its specific IDs
+to these cases. These requirements alone do not establish broader threat coverage;
+old untriaged scan counts are not confirmed vulnerabilities or a current pass.
 
 Preserve the upstream Apache 2.0 [license](LICENSE) and source copyright notices.

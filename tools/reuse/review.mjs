@@ -13,7 +13,8 @@ export function reviewInventory(root, state, scopes) {
   for (const [path, hash] of Object.entries(state.files)) {
     if (!inScope(path, scopes) || hash === null) continue;
     let reason;
-    if (/(^|\/)(node_modules|dist|build|vendor|\.git)(\/|$)/.test(path) || path === 'server/mcp/tools.ts') reason = 'generated/dependency artifact';
+    if (/(^|\/)(node_modules|dist|build|vendor|\.git)(\/|$)/.test(path)
+      || path === 'apps/server/src/mcp/tools.ts' || path === 'server/mcp/tools.ts') reason = 'generated/dependency artifact';
     else if (!safeFile(root, path)) reason = 'symlink or non-regular file';
     else {
       const body = readFileSync(`${root}/${path}`);

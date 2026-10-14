@@ -1,0 +1,42 @@
+---
+title: 概览
+description: 找到使用 Lens 部署、调用和评估模型的操作步骤。
+---
+
+Lens 是一个基于 [llm-d](https://llm-d.ai/) 在 Kubernetes 上运行大模型的网页控制台。
+你可以用它部署模型、发布 API 端点并测量性能。
+
+## 第一次使用
+
+按[快速开始](/quickstart)安装 Lens 并获得第一条模型回复。通常按以下顺序操作：
+
+1. [添加集群](/user-guide/clusters)。
+2. [准备存储](/user-guide/storage)并[下载模型权重](/user-guide/model-cache)。
+3. [部署模型](/user-guide/model-market)，等待就绪。
+4. [发布服务并创建 API 密钥](/tutorials/publish-a-model-service)。
+5. [运行评估](/tutorials/evaluate-a-deployment)。
+
+## 按任务查找
+
+| 我想…… | 打开 |
+| --- | --- |
+| 选择并部署模型 | [模型市场](/user-guide/model-market) |
+| 检查部署状态或读取 Pod 日志 | [部署](/user-guide/deployments) |
+| 调用模型或管理 API 密钥 | [模型服务](/user-guide/model-services) |
+| 比较延迟和吞吐量 | [评估](/user-guide/evaluation) |
+| 重放请求轨迹 | [模拟](/user-guide/simulation) |
+| 连接集群或维护节点 | [集群](/user-guide/clusters) |
+| 创建或删除存储卷 | [存储](/user-guide/storage) |
+| 下载模型或释放缓存空间 | [模型缓存](/user-guide/model-cache) |
+| 打开监控仪表盘 | [可观测性](/user-guide/observability) |
+| 接入外部 AI 提供方 | [外部服务提供方](/user-guide/external-providers) |
+| 让助手查询资源或执行操作 | [Lens Assistant](/user-guide/lens-assistant) |
+| 管理用户和访问权限 | [管理](/user-guide/administration) |
+
+## 遇到问题
+
+操作失败时，先查看错误提示和日志，再查[故障排查](/troubleshooting)。
+看不到资源或按钮时，请管理员检查权限。
+
+自动化调用见 [API 参考](/api-reference)。实现原理放在[架构文档](/architecture)，
+不需要先读懂架构才能按操作手册使用。

@@ -1,19 +1,21 @@
 name: Deploy docs to GitHub Pages
 
-# Builds the Docusaurus site under docs/docusaurus/ and publishes it to
+# Builds the Docusaurus site under docs/site/ and publishes it to
 # GitHub Pages whenever a push to main touches documentation content: the
 # site itself, or one of the canonical sources it pulls in via
-# docs/docusaurus/scripts/sync-external-docs.mjs (docs/design/*.md,
+# docs/site/scripts/sync-external-docs.mjs (docs/design/*.md,
 # CONTRIBUTING.md). Also runnable on demand via workflow_dispatch.
 on:
   push:
     branches:
       - main
     paths:
-      - 'docs/docusaurus/**'
-      - 'docs/design/agentic-deployment-architecture.zh-CN.md'
-      - 'docs/design/agentic-planning-evidence-and-rag.zh-CN.md'
+      - 'docs/site/**'
+      - 'docs/design/agentic-deployment-design.md'
       - 'CONTRIBUTING.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.npmrc'
       - '.github/workflows/docs-deploy.yaml'
   workflow_dispatch: {}
 
@@ -39,19 +41,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: docs/docusaurus/package-lock.json
+          cache-dependency-path: package-lock.json
       - name: Install dependencies
-        working-directory: docs/docusaurus
+        working-directory: docs/site
         run: npm ci
       - name: Build site
-        working-directory: docs/docusaurus
+        working-directory: docs/site
         run: npm run build
       - name: Configure Pages
         uses: actions/configure-pages@v6
       - name: Upload build artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: docs/docusaurus/build
+          path: docs/site/build
 
   deploy:
     needs: build

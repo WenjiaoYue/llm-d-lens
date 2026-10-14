@@ -1,6 +1,6 @@
 ---
 name: database
-description: Use when reading/writing structured data, or changing table schemas, DAOs or Alembic migrations under llm_d_bench/db/.
+description: Use when reading/writing structured data, or changing table schemas, DAOs or Alembic migrations under apps/backend/src/llm_d_lens/db/.
 ---
 
 # Database
@@ -11,12 +11,12 @@ service/router conventions. All source paths below are repo-relative.
 
 ## Locate the implementation
 
-Start at `llm_d_bench/db/README.md` -- it is the front door for this package
+Start at `apps/backend/src/llm_d_lens/db/README.md` -- it is the front door for this package
 and maps every workflow to the right, more detailed document:
 
-- `llm_d_bench/db/dao/README.md`: reading/writing data from a router, service
+- `apps/backend/src/llm_d_lens/db/dao/README.md`: reading/writing data from a router, service
   or background job.
-- `llm_d_bench/db/migrations/README.md`: adding a column/table, or otherwise
+- `apps/backend/src/llm_d_lens/db/migrations/README.md`: adding a column/table, or otherwise
   changing a table's shape.
 
 Do not restore the reverted JSON `Store`/file-based persistence abstraction
@@ -26,15 +26,15 @@ not a new on-disk JSON store.
 
 ## Read/write data
 
-Only import `*Dao` classes (`llm_d_bench/db/dao/*.py`) from service/router
+Only import `*Dao` classes (`apps/backend/src/llm_d_lens/db/dao/*.py`) from service/router
 code -- never a `*Row` ORM class or a `Session` directly. Each DAO method
 opens and closes its own short-lived session and converts to/from the
 feature's existing DTO (a Pydantic model or dataclass), so callers never see
 ORM state leak across a request or task boundary.
 
 ```python
-from llm_d_bench.db.dao.storage_volume import StorageVolumeDao
-from llm_d_bench.storage.contracts import StorageVolume
+from llm_d_lens.db.dao.storage_volume import StorageVolumeDao
+from llm_d_lens.storage.contracts import StorageVolume
 
 dao = StorageVolumeDao()
 volume = dao.get(volume_id)
@@ -74,7 +74,7 @@ process-wide engine to it for the test's duration.
 
 ## Verify the affected contract
 
-Use `make test-python` (or the narrower `pytest llm_d_bench/db` /
-`pytest <domain>` selection) after any DAO or model change. Cover DAO callers
-in the owning domain, not just `llm_d_bench/db/`. Report which schema changes
+Use `make test-python` (or the narrower `pytest apps/backend/tests/unit/db` /
+`pytest <domain-test-path>` selection) after any DAO or model change. Cover DAO callers
+in the owning domain, not just `apps/backend/src/llm_d_lens/db/`. Report which schema changes
 were approved by a human and where that approval is recorded.

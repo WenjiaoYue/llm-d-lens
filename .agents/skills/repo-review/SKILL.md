@@ -19,7 +19,7 @@ do not reset, commit, push, deploy or migrate historical data as part of review.
 Run `npm run reuse:review -- --task REVIEW_ID` once. If a task is already prepared,
 resume it rather than overwrite it. The CLI prepares an inventory and instructions;
 it does not invoke an LLM or claim a completed review.
-For one module, use `begin --task ID --module src/features/example` (repeat
+For one module, use `begin --task ID --module apps/frontend/src/features/example` (repeat
 `--module` for additional roots). Existing tasks can use `scope --task ID --module
 PATH` without resetting their commit baseline.
 
@@ -36,6 +36,14 @@ sub-capabilities (transport, storage, lifecycle, presentation, etc.), keeping ID
 unique and assigning every inventory file exactly once. Discuss shared dependencies
 in each analysis even when ownership of a file belongs to another unit. Do not
 mark an entire large module complete using one generic search and explanation.
+
+Track changed, kept, blocked and unreviewed units separately. Deletions still
+require recorded review, and the ten-source fallback counts deleted files.
+New files must be assigned; changed hashes expire prior coverage. Whole-review
+duplicate analysis covers all sources, while registration stays task-diff scoped.
+Late scope additions preserve the original task snapshot; historical tasks without
+one use conservative baseline differences. Failed report generation must not
+leave a stale successful completion claim.
 
 ## Work through every unit
 

@@ -1,0 +1,24 @@
+"""Tests for the pinned Gateway API / GIE CRD installer."""
+
+from urllib.parse import urlsplit
+
+from llm_d_lens import versions
+from llm_d_lens.cluster.gateway_crds import _REQUIRED_CRDS, manifest_urls
+
+
+def test_manifest_urls_follow_the_pinned_versions():
+    current = versions.stack()
+    urls = manifest_urls()
+
+    assert urlsplit(urls["gateway_api"]).path.split("/")[-2] == current.k8s_gateway_api
+    assert (
+        urlsplit(urls["gateway_api_inference_extension"]).path.split("/")[-2]
+        == current.k8s_gateway_api_inference_extension
+    )
+    assert urlsplit(urls["gateway_api"]).path.split("/")[-1] == "standard-install.yaml"
+    assert urlsplit(urls["gateway_api_inference_extension"]).path.split("/")[-1] == "v1-manifests.yaml"
+
+
+def test_required_crds_cover_both_bundles():
+    assert "gateways.gateway.networking.k8s.io" in _REQUIRED_CRDS["gateway_api"]
+    assert "inferencepools.inference.networking.k8s.io" in _REQUIRED_CRDS["gateway_api_inference_extension"]

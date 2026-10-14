@@ -17,7 +17,7 @@ The scope covers unstructured content and its related configuration, task record
 | Deployment logs and Kubernetes events | During deployment execution, readiness checks, and failure diagnosis | `D/deploy/logs/<executionID>/entries.jsonl`, storing collected log fragments |
 | Deployment tasks and execution states | When deployments are created and state changes | `D/deploy/{runs,executions}/`, one JSON file per record |
 | Evaluation inputs, raw logs, metrics, and charts | At evaluation start, warm-up, runs for each parameter group, and result aggregation | `C/prism-evaluate-results/<runID>/`; contains subdirectories such as `warmup/` and `matrix-<index>/` |
-| Evaluation workflows, run records, and log tails | When evaluation tasks are created and during execution | `~/.llm_d_bench/run_store/evaluate/{runs,workflows}/`; old development scripts use `private/run_store/evaluate/` inside the repo |
+| Evaluation workflows, run records, and log tails | When evaluation tasks are created and during execution | `~/.llm_d_lens/run_store/evaluate/{runs,workflows}/`; old development scripts use `private/run_store/evaluate/` inside the repo |
 | Simulation tasks, request details, summaries, and process logs | When simulation tasks are created, requests are replayed, and results are organized | `C/simulations/<taskID>/task.json` and `artifacts/<runner tool>/` |
 | Trace request datasets and indexes | When datasets are downloaded or generated and replay is prepared | Datasets and timeline indexes in `C/datasets/`; converted request files in the simulation task directory |
 | KV cache access records | Generated with inference requests when collection is enabled and aggregated at evaluation end | `/tmp/prism-kv-trace/` in the inference-process environment; aggregated files enter the evaluation result directory |
@@ -42,7 +42,7 @@ The original paths for storage-volume registration, AI Provider configuration, a
 | `C/simulations/` | 22 | 2.60 MiB |
 | `C/datasets/` | 3 | 26.61 MiB |
 | Repo `private/run_store/` | 47 | 8.56 MiB |
-| `~/.llm_d_bench/run_store/` | 12 | 6.82 MiB |
+| `~/.llm_d_lens/run_store/` | 12 | 6.82 MiB |
 | Repo `.dev-logs/` | 9 | 1.10 MiB |
 | Repo `.cache/reuse/`, including retrieval models | 18 | 135.59 MiB |
 
@@ -148,7 +148,7 @@ Root directories prefer `LENS_*`; when unset, XDG rules and the defaults above a
 
 | Resource | Path | Usage |
 | --- | --- | --- |
-| llm-d source used for development startup | `CACHE/llm-d/` | Default location for `scripts/dev.sh`; `LLM_D_ROOT` can specify an existing directory, and if absent a prompt is shown to prepare the source |
+| llm-d source used for development startup | `CACHE/llm-d/` | Default location for `scripts/lens-local.sh`; `LLM_D_ROOT` can specify an existing directory, and if absent a prompt is shown to prepare the source |
 | Repository download feature | `CACHE/repos/<repo>/<processed-version-name>/` | Cache llm-d and llm-d-benchmark by repository and version |
 | Guide planning cache | `CACHE/guide-planning/` | Save manifests and rendered results used for planning |
 | Remote deployment source | Remote host `CACHE/deploy-repos/<org>/<repo>/` | A GitHub URL triggers cloning; if an existing path is specified, use that path |
@@ -163,24 +163,25 @@ Source downloads preserve the existing repository, version, and deployment-scena
 
 | Function | Existing capability | Code entry |
 | --- | --- | --- |
-| Unified root directories | Python, Node, and startup scripts use `LENS_*` / XDG rules; old module directory variables no longer override new paths | `utils/paths.py`, `server/storagePaths.ts`, `scripts/storage-env.sh` |
+| Unified root directories | Python, Node, and startup scripts use `LENS_*` / XDG rules; old module directory variables no longer override new paths | Python `infrastructure/storage/paths.py`, Node `infrastructure/storagePaths.ts`, `scripts/storage-env.sh` |
 | Business-file persistence | Configuration, deployment, evaluation, simulation, and monitoring are saved by domain and task ID | Modules in each domain |
-| File registration | Record source version, configuration ID, SHA-256, truncation status, and retention category | `utils/artifact_store.py` |
+| File registration | Record source version, configuration ID, SHA-256, truncation status, and retention category | `infrastructure/artifacts/store.py` |
 | File location | Form a `lens-artifact://` identifier from owner object ID and relative path | `artifact_uri`, `resolve_artifact` |
 | External resource locations | Source code and tools use a unified cache root; model weights use the selected storage volume | Repository download, Guide, Model Cache |
-| Offline management tools | Historical file copying, manifest reconstruction, expiration-candidate statistics; preview by default, copy requires explicit execution | `utils/storage_admin.py` |
+| Offline management tools | Historical file copying, manifest reconstruction, expiration-candidate statistics; preview by default, copy requires explicit execution | `infrastructure/storage/admin.py` |
 
-All `utils/` entry points in Python are under `llm_d_bench/`.
+Python infrastructure entry points are under `apps/backend/src/llm_d_lens/`;
+Node infrastructure is under `apps/server/src/`.
 
 ### Shared Entry Points and Integration Code
 
 | Capability | File path | Integration scope |
 | --- | --- | --- |
-| Python path selection | [llm_d_bench/utils/paths.py](../../llm_d_bench/utils/paths.py) | Persistent directories, cache, and temporary directories for Python business modules |
-| Node path selection | [server/storagePaths.ts](../../server/storagePaths.ts) | Cluster sessions, Guide planning cache |
+| Python path selection | [storage/paths.py](../../apps/backend/src/llm_d_lens/infrastructure/storage/paths.py) | Persistent directories, cache, and temporary directories for Python business modules |
+| Node path selection | [storagePaths.ts](../../apps/server/src/infrastructure/storagePaths.ts) | Cluster sessions, Guide planning cache |
 | Startup environment | [scripts/storage-env.sh](../../scripts/storage-env.sh) | Root-directory configuration for development and installation startup scripts |
-| File manifests and identifiers | [llm_d_bench/utils/artifact_store.py](../../llm_d_bench/utils/artifact_store.py) | Configuration, deployment, evaluation, simulation, dataset, and monitoring results |
-| Migration and retention checks | [llm_d_bench/utils/storage_admin.py](../../llm_d_bench/utils/storage_admin.py) | Offline copying, manifest reconstruction, cleanup-candidate statistics |
+| File manifests and identifiers | [artifacts/store.py](../../apps/backend/src/llm_d_lens/infrastructure/artifacts/store.py) | Configuration, deployment, evaluation, simulation, dataset, and monitoring results |
+| Migration and retention checks | [storage/admin.py](../../apps/backend/src/llm_d_lens/infrastructure/storage/admin.py) | Offline copying, manifest reconstruction, cleanup-candidate statistics |
 | Container storage | [Dockerfile](../../Dockerfile) | Service root directories and volume configuration |
 
 ### Content Kept Under Separate Management
@@ -231,3 +232,37 @@ The following are development constraints for this scheme, applicable to mainten
 | Retention category | Register file purpose; automatic cleanup must be defined separately and is not performed by path functions |
 | File location | Locate through owner object ID, relative path, and file manifest; do not use host absolute paths as permanent identifiers |
 | Migration acceptance | Check file count and checksums, validate task references, and record missing items and conflicts |
+
+## 5. Artifact publication and offline administration
+
+`artifact-manifest.v1` records owner type/ID, creation/update timestamps, source
+version, configuration IDs, retention class, status, truncation and file entries.
+Each file carries a relative path, logical URI, media type, size and checksum.
+Publish payload before metadata, and replace manifests atomically. Incomplete
+running logs must not be represented as complete streams. Missing historical
+provenance stays explicitly unknown; failed runs also retain available evidence.
+Configuration payloads are immutable per artifact ID. Readers reject traversal
+and unsafe symlink paths rather than escaping controlled roots.
+
+Offline administration is implemented by
+[storage/admin.py](../../apps/backend/src/llm_d_lens/infrastructure/storage/admin.py).
+The following commands preview changes; they do not authorize a migration:
+
+```sh
+python -m llm_d_lens.infrastructure.storage.admin migrate
+python -m llm_d_lens.infrastructure.storage.admin reindex
+```
+
+Stop application writers before an explicitly approved `--apply`. Migration
+copies files without deleting sources or overwriting conflicting destination
+content. It reports conflicts and rebases only recognized local path fields,
+not arbitrary strings. Reindexing preserves existing manifests and does not
+invent missing source versions. Nothing sweeps or migrates historical data on
+module import.
+
+`retention_inventory` reports candidates; retention classes are metadata, not
+scheduled deletion. Configuration and active work stay protected, and existing
+domain deletion APIs own removal so references remain consistent. Model weights
+remain on registered cluster volumes, conversations/audio remain ephemeral, and
+repository-local reuse caches remain tool state. This scheme does not claim an
+object-storage deployment or authorize new uploads, retention or deletion.

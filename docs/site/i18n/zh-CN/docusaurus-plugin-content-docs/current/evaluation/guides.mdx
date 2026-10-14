@@ -1,0 +1,92 @@
+---
+title: 选择评测方案
+description: 选择要测试的优化方案，并与基线进行比较。
+slug: /evaluation/guides
+displayed_sidebar: docsSidebar
+---
+
+**Guide** 是一套部署方案。在配置编辑器中选择方案，再通过[评估](/user-guide/evaluation)测量效果。
+首次使用建议从 **Optimized Baseline** 开始。
+
+## 按测试目标选择
+
+| 测试目标 | Guide | 比较对象 |
+| --- | --- | --- |
+| 常规路由和前缀复用 | **Optimized Baseline** | 完整方案与 **load-only** |
+| 分开处理输入和生成输出 | **PD Disaggregation** | P/D 与加速器总量相同的聚合部署 |
+| 将重复请求路由到已有缓存的实例 | **Precise Prefix Cache Routing** | 精确路由与 **Optimized Baseline** |
+| 复用设备内存放不下的前缀缓存 | **Tiered Prefix Cache** | CPU 卸载与 **HBM-only baseline** |
+
+## 创建 Guide 配置
+
+1. 打开 **Evaluation → New Task → Deploy configurations → Create configuration**。
+2. 选择集群、模型和缓存存储。
+3. 在 **Guide template** 中选择 **Guide**、**Accelerator（加速器）**及可用变体。
+4. 设置副本数和张量并行度。第一次先保留高级参数。
+5. 点击 **Generate YAML**，选择资源预算，再点击 **Confirm & generate**。
+6. 修正标出的错误，检查并保存配置。
+7. 回到评估任务，选中该配置并设置测试负载。
+
+更换集群或源码版本后，重新检查可选变体。生成时提示缺少网络或存储资源，
+可改选其他支持的变体，或请管理员准备对应资源。
+
+## 测试 Optimized Baseline
+
+1. 在 **Guide** 中选择 **optimized-baseline**。
+2. 候选方案和对照保持相同副本数及 TP。
+3. 在可选对照中选择完整方案和 **load-only**。
+4. 在任务弹窗点击 **Add rate ramp**，发送重复前缀请求；完整向导中的对应选项是 **Prefix cache reuse**。
+5. 比较 TTFT、吞吐量和成功率。同等负载下 TTFT 降低，表示响应更快。
+
+要单独观察负载评分的作用，可再加入 **affinity-only**。它保留前缀亲和与过载保护，但不使用负载评分。
+
+## 测试 P/D 分离
+
+1. 选择 **pd-disaggregation** 和 **P/D Guide variant**。
+2. 设置 **Prefill replicas**、**Prefill tensor parallel size**、**Decode replicas** 和 **Decode tensor parallel size**。
+3. 使用 **vllm-rdma** 时，与管理员核对 **Cache & network → RDMA NICs per pod**。
+4. 添加加速器总数相同的聚合部署作为基线。
+5. 使用 **Add matrix** 测试应用需要的输入输出长度；完整向导中的对应选项是 **Fixed input / output lengths**。
+6. 同时比较 TTFT、TPOT 和吞吐量。生成速度变快，不一定意味着首个 token 等待时间更短。
+
+资源总量要计算两侧之和：一个 Prefill 副本、TP 2，加上两个 Decode 副本、TP 1，共使用四张加速卡。
+比较不同 P:D 比例时保持总量一致。
+
+## 测试精确前缀缓存路由
+
+1. 创建 **precise-prefix-cache-routing** 配置。
+2. 使用相同模型、副本数和 TP，添加 **optimized-baseline** 作为对照。
+3. 保持 tokenizer 和块大小设置一致。
+4. 使用 **Add rate ramp**（完整向导中为 **Prefix cache reuse**），设置相同前缀组和负载阶段。
+5. 比较实测 TTFT、吞吐量和引擎缓存复用。
+
+路由端的缓存估计不等于引擎实际复用量。判断是否减少重复计算时，以引擎测量结果为准。
+
+## 测试分层前缀缓存
+
+1. 创建 **tiered-prefix-cache** 配置，变体选择 **HBM-only baseline**。
+2. 再创建一个配置，选择 **Native CPU offload** 或 **LMCache CPU offload**。
+3. 在 **Cache & network** 中设置 **CPU cache capacity per pod (GiB)**，不要超过节点可用主机内存。
+4. 保存两份配置，在同一个评估任务中选中它们。
+5. 使用 **Add rate ramp**（完整向导中为 **Prefix cache reuse**）发送重复请求，比较 TTFT、吞吐量、CPU 内存用量和缓存恢复情况。
+
+配置编辑器支持 CPU 卸载，不支持文件系统卸载。
+重复前缀都能放入设备内存时，可增加前缀组数或共享前缀长度，再观察 CPU 缓存是否有帮助。
+
+## 保持比较条件一致
+
+两侧使用相同模型版本、运行镜像、资源预算、负载和 SLO，只改变要测试的优化项。
+
+| 对照选项 | 改变了什么 |
+| --- | --- |
+| **direct-vllm** | 单独运行一个纯 vLLM 部署 |
+| **router-neutral** | 不使用专门的路由优化；不代表严格轮询 |
+| **load-only** | 保留负载路由，不使用前缀亲和 |
+| **affinity-only** | 保留亲和，不使用负载评分 |
+| **kubernetes-service** | 复用候选的 Pod，但绕过推理路由器 |
+
+负载阶段之间以及同 Pod 对照之间会保留缓存，不要将后续阶段当作冷缓存测试。
+比较相同负载点，缺失指标应查看原因，不能按零处理。
+
+KV 工作集指标不可用时，查看结果中的采集原因。压测不会为已有服务安装缺失的探针。
+采集要求见[评估 API 参考](/api-reference/modules/evaluation)。

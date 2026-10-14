@@ -21,7 +21,7 @@
 # require a secure context.
 #
 # Idempotent: if a cert already exists for the requested host, it's reused
-# as-is (so scripts/dev.sh and the installer can call this on every start
+# as-is (so scripts/lens-local.sh and the installer can call this on every start
 # without regenerating/rotating certs each time). Pass --force to regenerate.
 #
 # Usage:

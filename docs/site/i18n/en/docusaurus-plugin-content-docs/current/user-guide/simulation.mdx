@@ -1,0 +1,55 @@
+---
+title: Simulation
+description: Replay request traffic against a model and inspect latency, throughput and errors.
+---
+
+Use **Simulation** to replay a trace dataset against a model service or an endpoint URL.
+
+## Create a simulation task
+
+1. Open **Simulation** and click **New Task**.
+2. In **Benchmark & Endpoint**, choose **Benchmark tool**.
+3. Under **Inference Endpoint**, choose **Model Service** or **Endpoint URL** using the table below.
+4. Enter **Model access token**, then check the resolved **Model**.
+5. In **Scenario & Prompt**, select a scenario and **Trace dataset**. Click **Download dataset** if it is not downloaded.
+6. For a dataset with a timeline, select the replay start/end, scale factor and duration.
+7. In **Load & Backend**, review **Stream responses**. Add TTFT, TPOT or error-rate targets only if you want a pass/fail assessment.
+8. In **Task Details**, enter **Task name** and an optional description.
+9. Click **Create Task**. Open the new task card to follow its progress.
+
+| Endpoint choice | What to supply |
+| --- | --- |
+| **Model Service** | A published, healthy service and a personal model access token |
+| **Endpoint URL** | The endpoint address you want to test, plus a token if that service requires one |
+
+To create a service and token, follow [Publish a model service](/tutorials/publish-a-model-service).
+Leave **Advanced backend settings** unchanged for the first run.
+
+## Read the result
+
+1. Open the task card.
+2. In **Summary**, check the task state, completed requests and key metrics.
+3. Use **Latency** to inspect TTFT and TPOT over time, and **Throughput** to inspect processing rate.
+4. Open **Errors & Logs** to investigate failures.
+5. In **Artifacts**, click **Download** beside each file you want to keep.
+
+Missing measurements are not zero. If a metric is unavailable, check **Task Log**
+for a failed run or collection problem before drawing conclusions.
+
+## Stop, rerun or delete a task
+
+| Goal | Action |
+| --- | --- |
+| Stop a running task | Click **Stop** on its card or detail page |
+| Repeat a finished task | Click **Rerun** to create a new task with the same configuration |
+| Remove a finished task | Click **Delete**, review the dialog, then click **Delete Task** |
+
+Download required artifacts before deletion.
+
+## Find an earlier task
+
+1. Use search, status cards, **Model** or **Dataset** to narrow the list.
+2. For a date range or endpoint, open **Advanced Filters**, fill the fields and click **Apply Filters**.
+3. Use **Rows per page** and the pager for more results. **Clear Filters** resets the list.
+
+For automated runs, see the [Simulation API reference](/api-reference/modules/simulation).

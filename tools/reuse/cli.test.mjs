@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -17,11 +17,18 @@ function setup(t) {
   return { root, put, run };
 }
 
-test('check rejects stale map and invalid base instead of quietly passing', t => {
-  const { run, put } = setup(t);
+test('map stays under .reuse and check rejects missing or stale maps and invalid bases', t => {
+  const { run, put, root } = setup(t);
   assert.equal(run('map').status, 0);
+  assert.match(readFileSync(join(root, '.reuse/map.md'), 'utf8'), /\[src\/a.js\]\(\.\.\/src\/a.js\)/);
+  assert.equal(existsSync(join(root, 'docs')), false);
   assert.equal(run('check').status, 0);
-  put('docs/reuse-map.md', 'old map');
+  rmSync(join(root, '.reuse/map.md'));
+  const missing = run('check');
+  assert.equal(missing.status, 1, missing.stderr);
+  assert.match(missing.stdout, /stale\/missing/);
+  assert.equal(run('map').status, 0);
+  put('.reuse/map.md', 'old map');
   const stale = run('check');
   assert.equal(stale.status, 1, stale.stderr);
   assert.match(stale.stdout, /map/);
@@ -349,13 +356,13 @@ test('review-status exposes live gaps without claiming completion or writing a f
   assert.equal(run('review', '--task', 'progress').status, 0);
   const taskPath = join(root, '.cache/reuse/tasks/progress.json');
   const before = readFileSync(taskPath, 'utf8');
-  put('llm_d_bench/new_domain/service.py', 'def load(): return 1\n');
+  put('llm_d_lens/new_domain/service.py', 'def load(): return 1\n');
   let result = run('review-status', '--task', 'progress', '--json');
   assert.equal(result.status, 1, result.stderr);
   let status = JSON.parse(result.stdout);
   assert.equal(status.completionVerified, false);
   assert.equal(status.coverage.mode, 'repository');
-  assert.ok(status.coverage.errors.some(x => x.includes('Unassigned review file: llm_d_bench/new_domain/service.py')));
+  assert.ok(status.coverage.errors.some(x => x.includes('Unassigned review file: llm_d_lens/new_domain/service.py')));
   assert.equal(readFileSync(taskPath, 'utf8'), before, 'progress must not mark files reviewed');
   assert.throws(() => readFileSync(join(root, '.cache/reuse/progress-review.json')), /ENOENT/);
   put('src/a.js', 'export function load() { return 2; }');

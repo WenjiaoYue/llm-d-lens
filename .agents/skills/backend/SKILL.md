@@ -1,6 +1,6 @@
 ---
 name: backend
-description: Use when changing Node or Express services in server/, Python APIs and domain services in llm_d_bench/, persistence, backend validation or task execution.
+description: Use when changing Node or Express services in apps/server/src/, Python APIs and domain services in apps/backend/src/llm_d_lens/, persistence, backend validation or task execution.
 ---
 
 # Backend
@@ -10,20 +10,19 @@ registration and unresolved decisions. All source paths below are repo-relative.
 
 ## Locate the implementation
 
-- `server/`: Node/Express endpoints, integrations and proxy boundaries. Inspect
-  existing callers and `server/http.ts` before adding outbound JSON requests;
+- `apps/server/src/`: Node/Express endpoints, integrations and proxy boundaries. Inspect
+  existing callers and `apps/server/src/infrastructure/http.ts` before adding outbound JSON requests;
   compare error, timeout and streaming contracts before reuse.
-- `llm_d_bench/`: Python APIs and domain services. Start in the owning domain
+- `apps/backend/src/llm_d_lens/`: Python APIs and domain services. Start in the owning domain
   (`configuration`, `deploy`, `evaluate`, `simulation`, etc.), then inspect
   `core/`, `schemas/`, `tasks/` and `utils/` for existing lower-level contracts.
-- Use [the capability map](../../../docs/reuse-map.md) and current source to
+- Use [the capability map](../../../.reuse/map.md) and current source to
   locate storage and Kubernetes helpers. A removed implementation or historical
   design document is not an available dependency.
 
 ## Kubernetes operations
 
-Read the [SDK/CLI operating guide](../../../docs/kubernetes-read-backend.md)
-when changing Kubernetes calls. Prefer the existing `kubernetes_api` and
+This section owns the SDK/CLI operating contract. Prefer the existing `kubernetes_api` and
 `kubernetes_mutations` helpers for structured operations; use
 `utils.kubernetes.run_kubectl` / `scoped_runner` when callers need the existing
 command-result contract. Inspect their error contracts before choosing:
@@ -36,25 +35,96 @@ For Node session discovery, reuse the existing Python session endpoint rather
 than introducing another client or accepting arbitrary kubeconfig paths.
 
 SDK request failures must not trigger CLI retries, especially for writes.
-Unsupported command forms select CLI before execution; consult the operating
-guide for retained CLI operations. Keep domain validation before transport.
+Unsupported command forms select CLI before execution. Keep domain validation
+before transport; the retained CLI operations are listed below.
 
 Tests must isolate SDK network access with local API fixtures or mocks at the
 SDK boundary. A subprocess mock alone no longer isolates default Kubernetes
 calls. Explicitly select CLI for CLI-specific tests; cover SDK behavior separately
 and do not globally disable SDK merely to make a suite pass. Existing examples
-are in `llm_d_bench/utils/test_kubernetes_integration.py`.
+are in `apps/backend/tests/unit/infrastructure/kubernetes/test_kubernetes_integration.py`.
+
+### Backend selection and supported operations
+
+The pinned official client is `kubernetes==36.0.3` (see
+`apps/backend/pyproject.toml`). With neither backend variable set, recognized
+reads and writes use its asynchronous SDK. `PRISM_KUBERNETES_BACKEND=sdk|cli`
+overrides `PRISM_KUBERNETES_READ_BACKEND`; the latter enables SDK reads only.
+Invalid values fail. Changing the environment requires a backend restart.
+See the [environment reference](../../../docs/site/i18n/en/docusaurus-plugin-content-docs/current/environment-variables.mdx#kubernetes-and-networking)
+for the selection table.
+
+| Capability | SDK boundary |
+| --- | --- |
+| Resources | Core, apps, batch, storage, networking, RBAC and CRD definitions; custom resources use their served preferred API version |
+| Queries | Named/list JSON or YAML; namespace/all namespaces; label/field selectors; pagination; multi-resource lists; selected raw API GETs |
+| Writes | Namespace creation; one core/apps/batch manifest from stdin; strategic/merge/JSON patches; labels with overwrite checks; scale; cordon/uncordon; named/selector deletion and UID-aware deletion waits |
+| Logs | Bounded named-Pod logs with container, tail, previous and timestamp selection |
+| Node planning | Four allowlisted session planning queries use the Python session endpoint; Node default-context queries stay local CLI |
+| Benchmark diagnostics | SDK Watch wakes failure checks; periodic pod/log reconciliation remains; CLI mode retains polling |
+
+Only recognized argv shapes enter the adapter in
+`apps/backend/src/llm_d_lens/infrastructure/kubernetes/commands.py`.
+Unsupported flags, output formats and ambiguous selections choose CLI before
+effects. Preserve raw Kubernetes JSON, `CommandResult` and caller-specific
+list/error contracts. Typed-list items receive missing `kind`/`apiVersion` on
+every page; preserve explicit item types and generic `List` responses.
+Monitoring classification and Storage PVC/PV association depend on this.
+Explicit JSON output remains JSON; default mutation output contains status lines,
+not resource bodies or Secret data.
+
+Keep Helm, Kustomize, **client-side kubectl apply**, unsupported rollout/wait,
+Pod exec, port-forward, streaming/workload-selector logs, SSH, advanced
+force/grace/dry-run flags and legacy `auth-provider` credentials on CLI paths.
+Keep kubectl installed. Do not translate arbitrary scripts or replace client-side
+apply with server-side apply: field ownership and pruning semantics differ.
+
+### Credentials, connections and errors
+
+- Reuse registry/session kubeconfig resolution. An unresolved explicit cluster
+  must fail rather than inherit another default cluster; remote API reachability
+  is not assumed.
+- Reuse `infrastructure/kubernetes/proxy.py`: when a proxy is configured, add the
+  selected API-server host to process `NO_PROXY`/`no_proxy` before SDK access.
+  Preserve existing entries and skip explicit kubeconfig `proxy-url`. The
+  aiohttp transport cannot rely on CIDR bypass entries as kubectl does.
+- Support kubeconfig merging, context namespace, static token/token-file and TLS
+  credentials through the existing auth helpers. ExecCredential plugins use argv
+  arrays, noninteractive stdin, output/version/expiry validation, sanitized errors
+  and bounded process-group cleanup on POSIX timeout/cancellation. Legacy
+  `auth-provider` selects CLI before authentication. Never persist refreshed
+  credentials back into kubeconfig.
+- Reload configuration on each acquisition. Lifecycle-managed HTTP clients are
+  pooled by credential/TLS identity, with 16-client and 16-borrower bounds,
+  idle-only LRU eviction and lazy 30-second idle expiration. Shutdown closes
+  clients and private exec-certificate files; outside that lifecycle, close per use.
+- Watch bypasses the ordinary pool and reloads credentials on bounded reconnects.
+  Bookmarks advance resourceVersion; 410 emits RESET and relists; 401/403 propagate;
+  transient failures use bounded backoff. Early-exit consumers close their async
+  iterator with `contextlib.aclosing`.
+- Strict `query_resource` and mutation helpers preserve API exceptions.
+  `list_resources` logs sanitized categories but retains legacy empty-list
+  compatibility on request failures: an empty list does not prove absence.
+  Scoped runners preserve timeout exceptions; deployment tuple results preserve
+  exit-code/evidence behavior.
+
+Isolated tests cover real SDK HTTP streams, mutual TLS, credential subprocesses,
+pagination failures, credential/session rotation, cancellation/process descendants,
+pool cleanup, writes and Watch reconnects. These fixtures do not establish live
+write compatibility with every cluster, auth provider or CRD. Exercise SDK and
+explicit CLI modes separately, including affected storage/evaluation/deployment
+callers, and distinguish local coverage from real-cluster acceptance.
 
 ## Hardware profiles
 
 Hardware-specific behavior is data-driven. Declare it in a profile
-(`llm_d_bench/hardware/profiles/<vendor>.json`, shape in
-`llm_d_bench/hardware/schema.json`) and, only when code is required, a provider
-(`llm_d_bench/hardware/providers/<vendor>.py`) contributing driver
+(`apps/backend/src/llm_d_lens/hardware/profiles/<vendor>.json`, shape in
+`apps/backend/src/llm_d_lens/hardware/schema.json`) and, only when code is required, a provider
+(`apps/backend/src/llm_d_lens/hardware/providers/<vendor>.py`) contributing driver
 install/manifests and access `modes`, device resources, monitoring images and
 dashboards, telemetry `device_metric_sources`, and the default runtime image.
 Surface it through `GET /api/v1/hardware/capabilities` (see
-`llm_d_bench/hardware/`) and the cluster overview `hardware` summary.
+`apps/backend/src/llm_d_lens/hardware/`) and the cluster overview `hardware` summary.
 
 Do not hardcode a vendor list, a device-metric name/query, a DCGM/GFD/device-plugin
 manifest, an access mode, a runtime image or an accelerator variant in a domain
@@ -69,34 +139,40 @@ Cover the profile contract and its consumers, not only one vendor.
 
 | Type | Directory | Filename | Export |
 | --- | --- | --- | --- |
-| Node shared transport or utility | `server/` | Responsibility-based `camelCase.ts` | camelCase function; PascalCase type/class |
-| Node domain capability | `server/` or existing domain subdirectory | `<domain><Responsibility>.ts` | camelCase function; PascalCase type/class |
-| MCP adapter | `server/mcp/` | `camelCase.ts` | camelCase function |
-| Python shared base types | `llm_d_bench/core/` | `snake_case.py` | PascalCase class |
-| Python HTTP adaptation | `llm_d_bench/api/` | `snake_case.py` | snake_case function |
-| Python technical utility | `llm_d_bench/utils/` | Responsibility-based `snake_case.py` | snake_case function; PascalCase class |
-| Python domain capability | `llm_d_bench/<domain>/` | Responsibility-based `snake_case.py` | snake_case function; PascalCase class |
+| Node shared transport or utility | `apps/server/src/` | Responsibility-based `camelCase.ts` | camelCase function; PascalCase type/class |
+| Node domain capability | `apps/server/src/` or existing domain subdirectory | `<domain><Responsibility>.ts` | camelCase function; PascalCase type/class |
+| MCP adapter | `apps/server/src/mcp/` | `camelCase.ts` | camelCase function |
+| Python shared base types | `apps/backend/src/llm_d_lens/core/` | `snake_case.py` | PascalCase class |
+| Python HTTP adaptation | `apps/backend/src/llm_d_lens/api/` | `snake_case.py` | snake_case function |
+| Python technical adapter | `apps/backend/src/llm_d_lens/infrastructure/<capability>/` | Responsibility-based `snake_case.py` | snake_case function; PascalCase class |
+| Python domain capability | `apps/backend/src/llm_d_lens/<domain>/` | Responsibility-based `snake_case.py` | snake_case function; PascalCase class |
 | Python domain models | Owning domain directory | `models.py` or existing model module | PascalCase class |
 | Node test | Beside the tested module | `<filename>.test.ts` or existing `.test.js` convention | Existing test conventions |
 | Python test | Owning domain or utility directory | `test_<capability>.py` | `test_<behavior>` function |
 
-Examples: `server/http.ts` / `fetchJsonWithTimeout`,
-`server/clusterSources.ts` / `loadClusterSources`,
-`llm_d_bench/core/exceptions.py` / `DomainError`,
-`llm_d_bench/utils/kubernetes.py` / `validate_namespace`.
+Examples: `apps/server/src/infrastructure/http.ts` / `fetchJsonWithTimeout`,
+`apps/server/src/services/clusterSources.ts` / `loadClusterSources`,
+`apps/backend/src/llm_d_lens/core/exceptions.py` / `DomainError`,
+`apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py` / `validate_namespace`.
 
 Extend existing owners and preserve public import compatibility; do not rename
 unrelated legacy modules. Persistence placement follows the DB PR's data-access
 design; do not recreate the reverted JSON Store abstraction. Unresolved shared
 schema/task ownership is not a reason to place new domain models in those folders.
-The human-facing reference is the
-[shared code guide](../../../docs/refactoring/shared-code-guide.md).
+The [capability map](../../../.reuse/map.md) links to current implementations,
+callers and tests; do not maintain a second hand-written capability inventory.
+For Node upstream JSON, reuse `fetchJsonWithTimeout` where its body-consumption
+timeout and parsing contract fits; routes retain status/error mapping. Python
+domain exceptions remain separate from HTTP serialization through
+`install_problem_handlers`. Historical extraction reports do not establish
+current persistence or shared-type ownership; consult the database skill and
+the decision ledger rather than reviving a withdrawn file Store abstraction.
 
 ## File storage
 
 Use the [storage scheme](../../../docs/design/storage-layout.md) for exact domain paths.
-Reuse `storage_path` / `prism_temp_root` in `llm_d_bench/utils/paths.py` and
-`storagePath` in `server/storagePaths.ts`; do not introduce another storage root
+Reuse `storage_path` / `prism_temp_root` in `apps/backend/src/llm_d_lens/utils/paths.py` and
+`storagePath` in `apps/server/src/infrastructure/storagePaths.ts`; do not introduce another storage root
 variable or restore legacy directory overrides. `LENS_*` roots take precedence
 over XDG defaults. Explicit source checkout inputs such as `LLM_D_ROOT` retain
 their existing input semantics.

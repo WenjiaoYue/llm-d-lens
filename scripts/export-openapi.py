@@ -21,13 +21,17 @@ METHODS = {"get", "post", "put", "patch", "delete"}
 
 
 def main() -> int:
-    from llm_d_bench.api.main import app
+    from llm_d_lens.api.main import app
 
     spec = app.openapi()
     paths = spec.get("paths", {})
-    operations = sum(1 for item in paths.values() for method in item if method in METHODS)
+    operations = sum(
+        1 for item in paths.values() for method in item if method in METHODS
+    )
     OUTPUT.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
-    print(f"Wrote {OUTPUT.relative_to(REPO_ROOT)} ({len(paths)} paths, {operations} operations)")
+    print(
+        f"Wrote {OUTPUT.relative_to(REPO_ROOT)} ({len(paths)} paths, {operations} operations)"
+    )
     return 0
 
 

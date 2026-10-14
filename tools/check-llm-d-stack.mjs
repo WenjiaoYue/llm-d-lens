@@ -1,6 +1,6 @@
 // Release-time consistency check for the pinned llm-d stack profile.
 //
-// Verifies that the versions in llm_d_bench/versions/llm_d_stack.yaml are
+// Verifies that the versions in apps/backend/src/llm_d_lens/versions/llm_d_stack.yaml are
 // internally consistent and actually exist, so an incompatible combination
 // cannot ship. Run in CI before a release, and locally before changing the
 // profile:
@@ -18,17 +18,17 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const PROFILE_PATH = path.join(ROOT, 'llm_d_bench', 'versions', 'llm_d_stack.yaml');
+const PROFILE_PATH = path.join(ROOT, 'apps', 'backend', 'src', 'llm_d_lens', 'versions', 'llm_d_stack.yaml');
 // Model-server images are owned by the hardware profiles (repository + version),
 // not derived from `llm_d`; scan the profile registry directory rather than a
 // hardcoded vendor file list.
-const HARDWARE_PROFILES_DIR = path.join(ROOT, 'llm_d_bench', 'hardware', 'profiles');
+const HARDWARE_PROFILES_DIR = path.join(ROOT, 'apps', 'backend', 'src', 'llm_d_lens', 'hardware', 'profiles');
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '';
 const REQUIRED_KEYS = [
   'llm_d',
   'llm_d_router',
-  'llm_d_benchmark',
+  'llm_d_lensmark',
   'llm_d_inference_payload_processor',
   'k8s_gateway_api',
   'k8s_gateway_api_inference_extension',
@@ -158,7 +158,7 @@ export async function runChecks(profile, { offline = false, log = console.log } 
   const {
     llm_d: llmD,
     llm_d_router: router,
-    llm_d_benchmark: benchmark,
+    llm_d_lensmark: benchmark,
     llm_d_inference_payload_processor: ipp,
     k8s_gateway_api: gatewayApi,
     k8s_gateway_api_inference_extension: gie,

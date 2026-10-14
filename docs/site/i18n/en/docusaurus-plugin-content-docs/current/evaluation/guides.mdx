@@ -1,0 +1,100 @@
+---
+title: Choose an evaluation Guide
+description: Select an optimization to test and compare it with a baseline.
+slug: /evaluation/guides
+displayed_sidebar: docsSidebar
+---
+
+A **Guide** is a deployment recipe. Choose one in the configuration editor,
+then run an [evaluation](/user-guide/evaluation) to measure it.
+Start with **Optimized Baseline** before testing a more specialized option.
+
+## Choose the experiment
+
+| What you want to test | Guide | What to compare |
+| --- | --- | --- |
+| General routing and prefix reuse | **Optimized Baseline** | Full Guide versus **load-only** |
+| Separate input processing from token generation | **PD Disaggregation** | P/D versus an aggregated deployment with the same accelerator budget |
+| Route repeated prompts to instances that cache them | **Precise Prefix Cache Routing** | Precise versus **Optimized Baseline** |
+| Reuse cached prefixes that no longer fit in device memory | **Tiered Prefix Cache** | CPU offload versus **HBM-only baseline** |
+
+## Create a Guide configuration
+
+1. Open **Evaluation → New Task → Deploy configurations → Create configuration**.
+2. Choose the cluster, model and cache storage.
+3. Under **Guide template**, select **Guide**, **Accelerator** and the available variant.
+4. Set replicas and tensor parallel size. Keep advanced settings unchanged for the first run.
+5. Click **Generate YAML**, select the resource budget, and click **Confirm & generate**.
+6. Correct any highlighted errors, review the configuration, and save it.
+7. Return to the evaluation task, select the configuration and set the workload.
+
+When changing cluster or source version, recheck the available variants. If generation
+reports missing network or storage resources, choose another supported variant or ask
+the cluster administrator to prepare those resources.
+
+## Test Optimized Baseline
+
+1. Select **optimized-baseline** in **Guide**.
+2. Keep the same replicas and TP for the candidate and its comparison.
+3. Select the Full Guide and **load-only** comparison when offered.
+4. In the task dialog, use **Add rate ramp** to send repeated prefixes (**Prefix cache reuse** in the full wizard).
+5. Compare TTFT, throughput and success rate. Lower TTFT at the same load shows faster responses.
+
+To isolate the effect of load scoring, add **affinity-only**. It keeps prefix
+affinity and saturation protection but removes load scoring.
+
+## Test P/D disaggregation
+
+1. Select **pd-disaggregation** and a **P/D Guide variant**.
+2. Set **Prefill replicas**, **Prefill tensor parallel size**, **Decode replicas**, and **Decode tensor parallel size**.
+3. For **vllm-rdma**, check **Cache & network → RDMA NICs per pod** with your cluster administrator.
+4. Add an aggregated baseline using the same total number of accelerators.
+5. Use **Add matrix** to test the input/output sizes your application needs (**Fixed input / output lengths** in the full wizard).
+6. Compare TTFT and TPOT as well as throughput. Faster token generation can still come with a longer wait for the first token.
+
+Count resources on both sides: one Prefill replica at TP 2 plus two Decode
+replicas at TP 1 uses four accelerators. Keep that total fixed when comparing P:D ratios.
+
+## Test precise prefix-cache routing
+
+1. Create a **precise-prefix-cache-routing** configuration.
+2. Add **optimized-baseline** as a comparison using the same model, replicas and TP.
+3. Keep the tokenizer and block-size settings consistent between configurations.
+4. Use **Add rate ramp** (**Prefix cache reuse** in the full wizard) with the same prefix groups and load stages.
+5. Compare measured TTFT, throughput and engine cache reuse.
+
+Router cache estimates are not measured engine reuse. Use the engine measurements
+when deciding whether the configuration reduced repeated computation.
+
+## Test tiered prefix cache
+
+1. Create a **tiered-prefix-cache** configuration with **HBM-only baseline**.
+2. Create another with **Native CPU offload** or **LMCache CPU offload** from the variant list.
+3. Under **Cache & network**, set **CPU cache capacity per pod (GiB)** within the node's available host memory.
+4. Save both configurations and select them in one evaluation.
+5. Use **Add rate ramp** (**Prefix cache reuse** in the full wizard) with repeated prompts. Compare TTFT, throughput, CPU memory use and cache restore activity.
+
+The configuration editor supports CPU offload, not filesystem offload.
+If the repeated prefixes already fit in device memory, increase the prefix groups
+or shared-prefix length to test whether CPU caching helps under pressure.
+
+## Keep comparisons fair
+
+Use the same model version, runtime image, resource budget, workload and SLO
+for both sides, changing only the feature being tested.
+
+| Comparison option | What it changes |
+| --- | --- |
+| **direct-vllm** | Runs a separate plain-vLLM deployment |
+| **router-neutral** | Removes specialized routing; it is not strict round-robin |
+| **load-only** | Keeps load-aware routing without prefix affinity |
+| **affinity-only** | Keeps affinity without load scoring |
+| **kubernetes-service** | Uses the candidate's existing pods while bypassing its inference router |
+
+Cache is retained between load stages and same-pod comparisons. Do not label a
+later stage a cold-cache test. Compare matching load points, and check missing-data
+messages rather than treating absent metrics as zero.
+
+If KV working-set metrics are unavailable, read the collection reason in the result.
+Benchmarks do not install a missing probe into an existing service. Collection
+requirements are in the [Evaluation API reference](/api-reference/modules/evaluation).

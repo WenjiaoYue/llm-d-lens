@@ -1,0 +1,100 @@
+---
+title: 故障排查
+description: 针对运行 Lens 时最可能遇到的故障模式的解决方法。
+---
+
+## 安装/发布模型服务后首次请求失败，重试即可成功
+
+**现象：** 刚安装完共享 Gateway 或发布新的服务提供方后，第一次向网关发起
+`curl` 请求会返回 `upstream connect error or disconnect/reset before
+headers ... Connection refused`，但几秒钟后进行完全相同的重试却能成功。
+
+**原因：** `kubectl apply` 只意味着 Envoy Gateway 控制器已经*看到*了期望的
+`Gateway`/`HTTPRoute` 资源——它仍然需要一点时间才能把这些资源翻译成真正的
+Envoy xDS 配置并下发给代理。Lens 会在应用之后轮询 `Gateway` 的
+`status.conditions[Programmed]`，只有当该状态变为 `True` 后才会报告安装已
+就绪（默认超时时间为 30 秒）；如果你在这个时间窗口内仍然遇到该问题，请稍等
+几秒后重试，或在安装操作的日志抽屉中查看是否有 "still programming the
+route" 的提示信息。
+
+## Gateway 一直停留在 `Programmed=False`（`AddressNotAssigned`）
+
+**原因：** Gateway 对应的 `LoadBalancer` Service 没有外部地址，因此 Envoy
+Gateway 永远不会为其分配地址。**解决方法：** 在云端集群上，由云厂商负责
+分配地址；在本地 kind 集群上，请安装 `cloud-provider-kind` 或 MetalLB。
+可以使用 `kubectl get svc -n envoy-gateway-system` 来检查。
+
+## InferencePool 对应的 HTTPRoute 出现 `ResolvedRefs=False`（`InvalidKind`）
+
+以下修复用于 **Envoy AI Gateway**，不是集群向导中选择的 **Istio**。
+请集群管理员安装带 inference-pool 插件的 Envoy Gateway；缺少该插件时，
+指向 `InferencePool` 的路由会返回 500。
+
+使用目标集群的 kubeconfig 执行：
+
+```bash
+helm upgrade -i eg oci://docker.io/envoyproxy/gateway-helm \
+  --version v1.8.1 -n envoy-gateway-system --create-namespace \
+  -f https://raw.githubusercontent.com/envoyproxy/ai-gateway/v0.7.0/manifests/envoy-gateway-values.yaml \
+  -f https://raw.githubusercontent.com/envoyproxy/ai-gateway/v0.7.0/examples/inference-pool/envoy-gateway-values-addon.yaml
+```
+
+然后在 **Model services** 中重新协调目标集群，再次发送请求。
+
+## 安装 Gateway 时出现 "no matches for kind ... ensure CRDs are installed first"
+
+**原因：** `kubectl` 的客户端发现缓存可能会在 CRD 刚变为 `Established`
+后的短暂窗口期内，仍将其报告为未知类型；或者此前某次失败的安装尝试缓存了
+过期的"未知 API 组"信息。Lens 会在应用前先使发现缓存失效，并对 apply 操作
+进行若干次带短暂延迟的重试；如果仍然失败，请重新运行安装——此时 CRD 本身
+其实已经存在。
+
+## 模型服务权限的变更没有在 UI 中显示出来
+
+**原因：** 会话的权限集合是在浏览器标签页加载时获取一次并缓存在内存中的；
+在角色或后端权限目录发生变更后，它不会自动重新获取。**解决方法：**
+强制刷新页面，或者退出登录后重新登录。
+
+## 代码/依赖变更后后端启动失败
+
+请查看 `~/.local/state/lens/logs/dev/backend.log` 以了解实际的异常信息。
+常见原因包括：`[project.dependencies]` 变更后缺少某个 Python 依赖
+（运行 `python3 -m pip install -e '.[dev]'` 解决），或者端口已被占用——
+`scripts/lens-local.sh` 会自动选择空闲端口，并在日志中记录实际使用的端口。
+
+## MCP 工具目录中缺少刚刚添加的路由
+
+请重新生成它：`node scripts/generate-mcp-tools.mjs`。`scripts/lens-local.sh
+start`/`restart` 会自动执行此操作；只有绕过 `scripts/lens-local.sh` 手动重启后端
+时，才可能导致该目录信息过期。
+
+## 复用能力图谱/任务启动验证阻止了 `scripts/lens-local.sh start`
+
+复用优先工作流会在启动服务前校验能力图谱；无效的注册信息或未解决的待定
+决策会阻止启动，但不会停止已经在运行的服务。关于如何解决该问题，请参阅
+[复用工作流](https://github.com/llm-d-incubation/llm-d-lens/blob/main/docs/design/reuse-workflow.md)。
+
+## 压测 Kubernetes 代理错误
+
+如果部署已 Ready，但压测在 `preparing-storage` 阶段出现
+`Unable to connect to the server: Forbidden`，应先检查代理路由，再考虑扩大 RBAC 权限：
+代理拒绝连接也可能产生同样错误。
+
+运行时合并 `runtime.no_proxy` 与后端的 `NO_PROXY` / `no_proxy`，添加 `localhost`、
+`127.0.0.1`、`.svc`、`.cluster.local` 和解析出的 API Server 主机，再去重。
+Harness Pod 通过 `harness.extraEnvVars` 接收代理，Helm 下载使用独立包装器。
+压测 CLI 和 kubectl 子进程不继承 HTTP/HTTPS/ALL 代理变量，包括小写形式；
+kubeconfig 中显式的 `proxy-url` 保持不变。
+
+若仍失败，检查实际 kubeconfig 及 Harness/Helm 的绕过列表。进程环境变更后重启后端并重试任务；
+历史失败记录不会自动变为成功。
+
+## 压测客户端 OOM
+
+`inference-perf-.../harness (terminated: OOMKilled, exit_code=137)` 表示压测 worker
+超过主机内存限制，而不是模型 GPU 显存不足。当前 API 和新 UI 预设为每 worker 8 GiB；
+`harness_memory_gib` 接受 1–512 的整数，覆盖 worker 的内存请求与上限。
+
+根据观测增加内存，或降低输入长度、数据集规模、并发及到达速率。总内存预留随 `parallelism` 增长，
+节点必须有足够可调度内存。配置变化不会调整正在运行的 Pod，需要新建任务。
+开环时长不含请求排空，超过服务能力的速率可能积累请求。OOM 中断不能当作完整成功测量。

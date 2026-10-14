@@ -46,12 +46,13 @@ jobs:
         with:
           filters: |
             code:
+              - 'docs/site/**'
               - '!docs/**'
               - '!**/*.md'
               - '!LICENSE'
 
   # Release-time gate: the pinned llm-d stack must be internally consistent and
-  # every referenced version must exist (llm_d_bench/versions/llm_d_stack.yaml).
+  # every referenced version must exist (llm_d_lens/versions/llm_d_stack.yaml).
   llm-d-stack:
     runs-on: ubuntu-latest
     permissions:
@@ -110,7 +111,7 @@ jobs:
       - name: Generate MCP catalog
         run: |
           python -m venv .venv
-          .venv/bin/pip install -e ".[embedded-db]"
+          .venv/bin/pip install -e "apps/backend[embedded-db]"
           node scripts/generate-mcp-tools.mjs
 
       - name: Type check

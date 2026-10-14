@@ -1,0 +1,45 @@
+---
+title: Overview
+description: Find the steps for deploying, calling and evaluating models with Lens.
+---
+
+Lens is a web console for running large language models on Kubernetes with
+[llm-d](https://llm-d.ai/). Use it to deploy a model, publish an API endpoint,
+and measure its performance.
+
+## First time using Lens?
+
+Follow [Quickstart](/quickstart) to install Lens and get your first model response.
+The normal path is:
+
+1. [Add a cluster](/user-guide/clusters).
+2. [Prepare storage](/user-guide/storage) and [download model weights](/user-guide/model-cache).
+3. [Deploy a model](/user-guide/model-market) and wait for it to be ready.
+4. [Publish a service and create an API key](/tutorials/publish-a-model-service).
+5. [Run an evaluation](/tutorials/evaluate-a-deployment).
+
+## Find your task
+
+| I want to... | Open |
+| --- | --- |
+| Choose and deploy a model | [Model Market](/user-guide/model-market) |
+| Check deployment status or read pod logs | [Deployments](/user-guide/deployments) |
+| Call a model or manage API keys | [Model services](/user-guide/model-services) |
+| Compare latency and throughput | [Evaluation](/user-guide/evaluation) |
+| Replay a request trace | [Simulation](/user-guide/simulation) |
+| Connect a cluster or maintain its nodes | [Clusters](/user-guide/clusters) |
+| Create or remove a storage volume | [Storage](/user-guide/storage) |
+| Download models or free cache space | [Model cache](/user-guide/model-cache) |
+| Open monitoring dashboards | [Observability](/user-guide/observability) |
+| Connect an external AI provider | [External providers](/user-guide/external-providers) |
+| Ask the assistant about resources | [Lens Assistant](/user-guide/lens-assistant) |
+| Manage users and access | [Administration](/user-guide/administration) |
+
+## Get help
+
+For a failed operation, read its error message and logs, then check
+[Troubleshooting](/troubleshooting). If a resource or action is missing, ask an
+administrator to check your permissions.
+
+For automation, use the [API reference](/api-reference). Implementation details
+are in [Architecture](/architecture), separate from the operating instructions.

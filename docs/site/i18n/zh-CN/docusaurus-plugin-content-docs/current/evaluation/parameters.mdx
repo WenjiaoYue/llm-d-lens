@@ -1,0 +1,140 @@
+---
+title: 设置评测参数
+description: 设置请求长度、负载阶段和性能目标。
+slug: /evaluation/parameters
+displayed_sidebar: docsSidebar
+---
+
+先跑小负载，再逐步加压。**New Task** 弹窗与完整的 **New Benchmark Task** 向导控件不同，
+请按当前页面使用对应步骤。
+
+## 在 New Task 弹窗中设置负载
+
+1. 选择目标，点击 **Next** 进入 **Benchmark & comparison**。
+2. 选择 **Custom workload**，**Benchmark runner** 保持 **inference-perf**。
+3. 固定长度测试：点击 **Add matrix → Add ISL/OSL point**。ISL 是输入 token 数，OSL 是输出 token 数。
+4. 点击 **Add concurrency stage**，填写并发数和请求数。
+5. 首次运行将 **Traffic workers** 保持为 `1`，点击 **Launch evaluation**。
+
+测试共享前缀时，不使用矩阵，改点 **Add rate ramp**。
+填写 **Shared-prompt groups**、**Prompts per group**、**System prompt length**、
+**Question length** 和 **Output length**，再点 **Add rate stage**。
+使用 YAML 时，先移除矩阵点和速率阶段，再点击 **Edit traffic YAML**。
+
+下文带编号的输入框、性能目标和高级选项，位于完整的 **New Benchmark Task → Benchmark** 向导。
+
+## 先运行一个小测试
+
+1. 在 **Request workload（请求负载）**中选择 **Fixed input / output lengths（固定输入输出长度）**。
+2. **Input tokens 1** 填 `128`，**Output tokens 1** 填 `64`。
+3. 在 **Load stages（负载阶段）**中，**Concurrency 1** 填 `1`，**Requests 1** 填 `10`。
+4. 延迟上限留空，先测量，不设置延迟达标要求。
+5. **Parallel benchmark instances（并行压测实例）**保持 `1`。
+6. 查看 **Execution summary（执行摘要）**，然后启动评估。
+
+每个目标会发送十个正式请求，另加预热请求。此测试用于确认流程可用，不用于判断生产容量。
+
+## 选择负载类型
+
+| 选项 | 用途 |
+| --- | --- |
+| **Fixed input / output lengths** | 比较固定输入输出长度和不同并发 |
+| **Prefix cache reuse** | 随请求速率增加测试重复前缀；支持的 Guide 推荐中会提供此选项 |
+| **Customize → Inline YAML** | 自定义数据集和负载 |
+| **Customize → File in benchmark repository** | 使用所选压测仓库内的负载文件 |
+
+## 测试不同并发
+
+1. 选择 **Fixed input / output lengths**。
+2. 填写输入和输出 token 数，点击 **Add length combination** 添加更多长度组合。
+3. 填写 **Concurrency（同时处理的请求数）**和 **Requests（正式请求数）**。
+4. 点击 **Add concurrency stage** 添加负载阶段。
+5. 在 **Execution summary** 中核对测量组合数和请求总量。
+
+可以先使用输入 `1024`、输出 `128`，再设置以下阶段：
+
+| 并发 | 请求数 |
+| --- | --- |
+| 1 | 20 |
+| 4 | 20 |
+| 8 | 40 |
+
+每个长度组合都会执行所有阶段。输入加输出长度不能超过所选配置中最小的上下文上限。
+
+## 测试前缀缓存复用
+
+1. 选择 **Prefix cache reuse（前缀缓存复用）**。
+2. 按下表填写请求内容。
+3. 设置 **Rate 1 (req/s)** 和 **Duration 1 (seconds)**。
+4. 点击 **Add rate stage** 增加更高负载。
+5. 测试独立请求时保持 **Reuse conversation history（复用对话历史）**关闭；需要带上前几轮对话时再开启。
+
+| 字段 | 如何填写 |
+| --- | --- |
+| **Distinct prefix groups** | 不同共享前缀的组数 |
+| **Prompt samples per group** | 每组共用前缀的提示词样本数 |
+| **Shared prefix tokens** | 重复开头的长度 |
+| **Unique input tokens** | 每个请求独有的输入长度 |
+| **Output tokens** | 期望的输出长度 |
+| **Rate (req/s)** | 每秒发送的请求数，不是并发数 |
+| **Duration (seconds)** | 按该速率发送请求的持续时间 |
+
+小负载示例：4 组、每组 10 个样本、共享前缀 128 token、独有输入 32 token、
+输出 64 token，以 1 req/s 运行 60 秒。检查错误和延迟后，再逐步提高速率。
+
+发送速率超过服务能力时，请求会积压；设定时长结束后，任务可能仍在等待未完成的请求。
+阶段之间不会清空缓存。
+
+## 使用自定义负载
+
+1. 选择 **Customize（自定义）**。
+2. **YAML source** 选择 **Inline YAML** 或 **File in benchmark repository**。
+3. 粘贴包含 `load`、`api`、`data` 的 **Workload YAML**，或填写 **Repository workload filename（仓库内负载文件名）**。
+4. 修正校验提示后再启动。
+
+负载格式和仅 API 支持的选项见[评估 API 参考](/api-reference/modules/evaluation)。
+
+## 设置性能目标
+
+在 **Performance targets（性能目标）**中，只填写需要判断是否达标的限制。
+
+| 字段 | 含义 |
+| --- | --- |
+| **Minimum success rate (%)** | 请求成功率的最低要求 |
+| **TTFT limit (ms, optional)** | 等待首个 token 的时间上限 |
+| **TPOT limit (ms, optional)** | 每个输出 token 的耗时上限 |
+| **Percentile** | 检查延迟分布中的哪个百分位 |
+
+例如，TTFT 上限填 `1000`、选择 **P99**，表示要求 99% 的实测首 token 延迟不超过一秒。
+延迟留空表示只测量；任务完成不代表性能目标一定通过。
+
+## 调整压测资源
+
+需要时展开 **Advanced execution settings（高级执行设置）**。
+
+| 字段 | 初始建议 | 何时调整 |
+| --- | --- | --- |
+| **Parallel benchmark instances** | 1 | 增加独立压测实例；每个实例重复整个负载，会放大总流量 |
+| **Load generator memory (GiB)** | 8 | 压测进程内存不足时增加；这是主机内存，不是模型显存 |
+| **Timeout (seconds)** | 1800 | 压测需要更长时间时增加；不是整个评估的总时限 |
+| **Warm-up requests** | 新 UI 预设为 1 | 固定长度测试前不计入结果的预热请求；0 表示关闭 |
+
+切换负载预设可能保留之前的执行设置，启动前请核对。
+内存问题见[压测客户端 OOM](/troubleshooting#压测客户端-oom)。
+
+## 修改模型资源，而不是压测负载
+
+副本数、TP、运行镜像和模型上下文在**配置编辑器**中修改。
+压测设置只改变发送给模型的流量，不改变服务使用的资源。
+
+| 配置字段 | 用途 |
+| --- | --- |
+| **Replicas / Tensor parallel size** | 实例数及每实例加速器数量 |
+| **Prefill / Decode** 资源字段 | 分别设置 P/D 两侧资源 |
+| **Max context (tokens)** | 输入加输出的最大长度 |
+| **Max sequences** | 引擎并发序列上限 |
+| **GPU/XPU memory utilization** | 引擎可使用的设备内存比例 |
+| **CPU cache capacity per pod (GiB)** | 支持的分层缓存变体的 CPU 缓存容量 |
+| **RDMA NICs per pod** | P/D RDMA 变体使用的网卡数 |
+
+没有明确调参目标时，保留 Guide 的高级参数默认值。修改后保存为新配置，再创建评估测试。

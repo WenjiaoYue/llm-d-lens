@@ -12,9 +12,9 @@ registration and unresolved decisions. Paths below are repo-relative.
 
 | Scope | Inspect before changing |
 | --- | --- |
-| Local service start/restart | `scripts/dev.sh`, `scripts/run-backend.sh`, `package.json` |
+| Local service start/restart | `scripts/lens-local.sh`, `scripts/run-backend.sh`, `package.json` |
 | Containers | The relevant Dockerfile under the root or `docker/` |
-| Cluster provisioning/deployment | `llm_d_bench/cluster/`, `llm_d_bench/deploy/`, the manifest/template used by the caller |
+| Cluster provisioning/deployment | `apps/backend/src/llm_d_lens/cluster/`, `apps/backend/src/llm_d_lens/deploy/`, the manifest/template used by the caller |
 | CI | The relevant workflow under `.github/workflows/` |
 
 For backend deployment logic, also apply
@@ -36,9 +36,9 @@ the feature cleanly instead of substituting another vendor's default. See
 
 ## Kubernetes transport and compatibility
 
-Read the [SDK/CLI operating guide](../../../docs/kubernetes-read-backend.md)
-before changing cluster operations or backend-mode configuration, and follow
-[backend](../backend/SKILL.md#kubernetes-operations) for reuse and test isolation.
+Read the [Backend Kubernetes operating contract](../backend/SKILL.md#kubernetes-operations)
+before changing cluster operations or backend-mode configuration, including its
+coverage, credential/error boundaries and test-isolation rules.
 With neither backend variable set, supported reads and writes use the official
 SDK. `PRISM_KUBERNETES_BACKEND=cli` explicitly rolls back; the full backend setting
 overrides the legacy read-only setting. Preserve this precedence.
@@ -48,12 +48,12 @@ before SDK or CLI execution. SDK failure is not permission to retry a write via
 CLI. Client-side apply, Helm/Kustomize, exec, port-forward and other documented
 exceptions retain CLI; keep their required tools installed. Do not substitute
 server-side apply for client-side apply without addressing field ownership and
-compatibility. Consult the operating guide for the complete current boundary.
+compatibility. The Backend skill owns the complete current boundary.
 
 ## Local development
 
-The normal user entry is `./dev.sh restart` from `scripts/`, equivalent to
-`scripts/dev.sh restart` from the repository root. Inspect `scripts/dev.sh status`
+The normal user entry is `./lens-local.sh restart` from `scripts/`, equivalent to
+`scripts/lens-local.sh restart` from the repository root. Inspect `scripts/lens-local.sh status`
 and `$LENS_LOG_DIR/dev/` (default `~/.local/state/lens/logs/dev/`)
 for service state and failures.
 
@@ -67,7 +67,7 @@ does not replace task-baseline verification or approve dependent refactor edits.
 
 For Docker-specific work, inspect actual service commands, mounts, ports and
 runtime versions before choosing a launch command. The current Compose app uses
-`node:20-alpine`, while `scripts/dev.sh` requires Node 22 or newer; these are not
+`node:20-alpine`, while `scripts/lens-local.sh` requires Node 22 or newer; these are not
 interchangeable validated environments. Check MCP generation requirements in
 `scripts/generate-mcp-tools.mjs` and startup code when changing Express startup.
 Do not assume a host-generated catalog or Python environment exists in a container.

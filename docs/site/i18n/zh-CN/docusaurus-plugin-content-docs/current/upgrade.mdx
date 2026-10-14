@@ -1,0 +1,32 @@
+---
+title: 升级
+description: 将现有的 Lens 安装升级到更新版本。
+---
+
+## 升级基于安装程序的部署
+
+在线安装器仅支持全新安装，会拒绝非空目录。重新运行它不是升级或回滚流程，
+请勿通过删除现有安装来绕过检查。
+
+手动升级前，应备份数据库、Lens 数据和安装配置，并检查目标版本的迁移要求。
+目前不提供自动配置保留、迁移或回滚。使用已安装的 `lensctl.sh` 管理服务；
+数据库迁移操作见[迁移](/migration)。
+
+## 升级从源码构建的开发环境
+
+```bash
+git pull
+npm install
+python3 -m pip install -e 'apps/backend[dev]'
+node scripts/generate-mcp-tools.mjs
+scripts/lens-local.sh restart
+```
+
+`scripts/lens-local.sh restart` 会在重启服务之前重新生成并校验复用地图，
+并重新生成 MCP 工具目录。
+
+## 回滚
+
+在线安装器不提供回滚。源码开发环境可切换到旧 tag/commit，
+重新构建对应依赖后再启动。代码回滚不会撤销数据库迁移；
+请遵循对应版本的迁移说明，或恢复兼容的备份，不要假定执行一次降级就足够。

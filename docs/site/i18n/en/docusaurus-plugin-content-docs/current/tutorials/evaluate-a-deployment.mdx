@@ -1,0 +1,41 @@
+---
+title: Evaluate a deployment
+description: Run a small benchmark against a published model service and read the report.
+---
+
+This tutorial sends ten measured requests to an existing service without creating
+another deployment. First [publish the deployment and create an API key](/tutorials/publish-a-model-service).
+
+## 1. Select the service
+
+1. Open **Evaluation → New Task**.
+2. Choose **Use existing endpoint**.
+3. Select your **Model service** and paste your key into **Model access token**.
+4. Click **Next**.
+
+If the service is not listed, check that it is published and healthy in **Model services**.
+
+## 2. Set a small workload
+
+1. In **Benchmark & comparison**, select **Custom workload**.
+2. Enter **Task name** as `first-benchmark`. Keep **Benchmark runner** on **inference-perf** and **Traffic workers** at `1`.
+3. Click **Add matrix**, then **Add ISL/OSL point**.
+4. Set **ISL** to `128` and **OSL** to `64`; remove any other length rows.
+5. Click **Add concurrency stage**, set **Concurrency** to `1` and **Requests** to `10`; remove any other stages.
+6. Click **Launch evaluation**.
+
+## 3. Read and save the result
+
+1. Find `first-benchmark` in the task list and click **Results**.
+2. Wait for the task to finish. Use **Benchmark logs** if it fails.
+3. Check success rate, **TTFT** (time to first token), **TPOT** (time per output token), and output throughput.
+4. Click **Download Report** to save the result.
+
+## 4. Test more load
+
+Create a new task with the same service and token. Add concurrency stages of `1`,
+`4` and `8`, using the same input/output lengths, then compare latency and errors.
+Use [Evaluation parameters](/evaluation/parameters) for larger workloads.
+
+To compare different model resources, [create configuration-based evaluations](/user-guide/evaluation).
+The **Deployments** edit dialog changes only the name and description, not resource allocation.

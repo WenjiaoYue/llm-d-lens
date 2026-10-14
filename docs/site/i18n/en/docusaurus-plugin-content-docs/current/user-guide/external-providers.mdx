@@ -1,0 +1,45 @@
+---
+title: External providers
+description: Configure OpenAI- or Anthropic-compatible AI providers used by Lens's optional AI features.
+---
+
+Add an external AI provider to use it in Lens's AI features. Have its API base URL,
+model name and API key ready. For **Lens Assistant**, choose an OpenAI-compatible provider.
+
+## Add a provider
+
+1. On **External providers**, click **Add provider**.
+2. Enter a **Name**, choose **API type**, and copy **Base URL** and **Model** from your provider's API documentation.
+3. Paste the secret into **API key**, not the URL. Use a public HTTPS URL without a query string or fragment; private network addresses are not accepted.
+4. Keep **Timeout (seconds)** at its initial value for the first test, then click **Test connection**.
+5. Click **Add provider**. The provider appears in the table.
+
+A failed connection test does not prevent saving. Before using the provider,
+correct the URL, model or key and test again.
+
+## Search and filter providers
+
+1. Use **Search name, base URL, or model...** to filter the table.
+2. Open **Type** to filter by provider type.
+3. Click **Clear Filters** to remove the active filters.
+4. Review the filtered results in the **External providers** table.
+
+## Test a saved provider
+
+1. Find the provider in the **External providers** table.
+2. In the **Test** column, click **Test**.
+3. Wait for the status icon to update in the same row, then hover it if you need the full result message.
+
+## Edit a provider
+
+1. In the provider row, click **Edit**.
+2. In **Edit AI provider**, update the fields you need.
+3. If the **API key** line says the key is already saved, leave the field blank when you want to keep the existing key.
+4. Optionally click **Test connection** to check the edited settings.
+5. Click **Save changes**.
+
+## Delete a provider
+
+1. In the provider row, click **Delete**.
+2. In **Delete AI provider**, review the warning text.
+3. Click **Delete provider**.

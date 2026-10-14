@@ -1,0 +1,149 @@
+---
+title: Set evaluation parameters
+description: Configure request lengths, load stages and performance targets for a benchmark.
+slug: /evaluation/parameters
+displayed_sidebar: docsSidebar
+---
+
+Start with a small run, then increase the load. The **New Task** dialog and the
+full **New Benchmark Task** wizard have different controls; use the matching section below.
+
+## Set load in the New Task dialog
+
+1. Choose a target and click **Next → Benchmark & comparison**.
+2. Select **Custom workload**, and keep **Benchmark runner** on **inference-perf**.
+3. For fixed lengths, click **Add matrix → Add ISL/OSL point**. ISL is input tokens; OSL is output tokens.
+4. Click **Add concurrency stage**, then enter concurrency and request count.
+5. Keep **Traffic workers** at `1` for the first run and click **Launch evaluation**.
+
+For shared prefixes, use **Add rate ramp** instead of the matrix.
+Fill **Shared-prompt groups**, **Prompts per group**, **System prompt length**,
+**Question length**, and **Output length**, then **Add rate stage**.
+For YAML, remove matrix points and rate stages, then use **Edit traffic YAML**.
+
+The numbered input fields, performance targets and advanced controls below are
+in the full **New Benchmark Task → Benchmark** wizard.
+
+## Run a small check
+
+1. Under **Request workload**, select **Fixed input / output lengths**.
+2. Set **Input tokens 1** to `128` and **Output tokens 1** to `64`.
+3. Under **Load stages**, set **Concurrency 1** to `1` and **Requests 1** to `10`.
+4. Leave latency limits blank to measure without a latency pass/fail target.
+5. Keep **Parallel benchmark instances** at `1`.
+6. Review **Execution summary**, then launch the evaluation.
+
+This sends ten measured requests per target, plus warm-up requests. It checks the
+test path; it is not enough to establish production capacity.
+
+## Choose a workload
+
+| Option | Use it to |
+| --- | --- |
+| **Fixed input / output lengths** | Compare known prompt sizes and concurrency levels |
+| **Prefix cache reuse** | Test repeated prefixes as request rate increases; shown for compatible Guide recommendations |
+| **Customize → Inline YAML** | Supply your own dataset and load definition |
+| **Customize → File in benchmark repository** | Use a workload file from the selected benchmark repository |
+
+## Test increasing concurrency
+
+1. Select **Fixed input / output lengths**.
+2. Enter input and output token counts. Use **Add length combination** to compare more sizes.
+3. Set **Concurrency** (simultaneous requests) and **Requests** (measured request count).
+4. Click **Add concurrency stage** for each load level.
+5. Check the total measured combinations and request count in **Execution summary**.
+
+For a modest sweep, use input `1024`, output `128`, and:
+
+| Concurrency | Requests |
+| --- | --- |
+| 1 | 20 |
+| 4 | 20 |
+| 8 | 40 |
+
+Every length combination runs every stage. Keep input plus output within the
+smallest context limit of the selected configurations.
+
+## Test prefix-cache reuse
+
+1. Select **Prefix cache reuse**.
+2. Fill in the request fields below.
+3. Set **Rate 1 (req/s)** and **Duration 1 (seconds)**.
+4. Use **Add rate stage** to test increasing traffic.
+5. Leave **Reuse conversation history** off for independent requests; turn it on to include earlier turns.
+
+| Field | What to enter |
+| --- | --- |
+| **Distinct prefix groups** | Number of different shared prefixes |
+| **Prompt samples per group** | Number of prompt samples sharing each prefix |
+| **Shared prefix tokens** | Length of the repeated opening text |
+| **Unique input tokens** | Extra input that differs per request |
+| **Output tokens** | Target response length |
+| **Rate (req/s)** | Requests sent per second, not simultaneous requests |
+| **Duration (seconds)** | How long to send traffic at that rate |
+
+For a small starting workload, try 4 groups, 10 samples per group, 128 shared
+tokens, 32 unique tokens and 64 output tokens, at 1 req/s for 60 seconds.
+Increase the rate gradually after checking errors and latency.
+
+Requests can queue when the rate exceeds the service's capacity. The run can
+continue after the configured duration while outstanding requests finish.
+Cache is not cleared between stages.
+
+## Use a custom workload
+
+1. Select **Customize**.
+2. In **YAML source**, choose **Inline YAML** or **File in benchmark repository**.
+3. Paste **Workload YAML** containing `load`, `api` and `data` mappings, or enter **Repository workload filename**.
+4. Resolve the validation messages before launching.
+
+Use the [Evaluation API reference](/api-reference/modules/evaluation) for the
+workload schema and API-only options.
+
+## Set performance targets
+
+Under **Performance targets**, fill in only the limits you want to enforce.
+
+| Field | Meaning |
+| --- | --- |
+| **Minimum success rate (%)** | Required share of successful requests |
+| **TTFT limit (ms, optional)** | Maximum wait for the first token |
+| **TPOT limit (ms, optional)** | Maximum time per generated output token |
+| **Percentile** | Which part of the latency distribution to check |
+
+For example, a TTFT limit of `1000` at **P99** asks for 99% of measured
+first-token latencies to be at or below one second.
+Blank latency limits mean measure only. A completed task can still fail its SLO.
+
+## Adjust execution resources
+
+Expand **Advanced execution settings** only when needed.
+
+| Field | Starting point | When to change it |
+| --- | --- | --- |
+| **Parallel benchmark instances** | 1 | To add independent load generators; each repeats the workload and multiplies traffic |
+| **Load generator memory (GiB)** | 8 | Increase after a worker memory failure; this is host memory, not model VRAM |
+| **Timeout (seconds)** | 1800 | Increase for longer benchmark runs; this is not a whole-evaluation time limit |
+| **Warm-up requests** | 1 for a fresh UI preset | Set the unmeasured warm-up for fixed-length tests; 0 disables it |
+
+Changing a workload preset can retain earlier execution settings. Check these
+values before launching. For worker memory failures, see [Benchmark client OOM](/troubleshooting#benchmark-client-oom).
+
+## Change model resources, not benchmark load
+
+Return to the **configuration editor** to change replicas, TP, runtime image or
+model context. Benchmark settings change the traffic sent to the model, not the
+resources serving it.
+
+| Configuration field | Use it for |
+| --- | --- |
+| **Replicas** / **Tensor parallel size** | Number of instances and accelerators per instance |
+| **Prefill** and **Decode** resource fields | Separate resource allocations for P/D |
+| **Max context (tokens)** | Maximum input plus output length |
+| **Max sequences** | Engine concurrency limit |
+| **GPU/XPU memory utilization** | Fraction of device memory available to the engine |
+| **CPU cache capacity per pod (GiB)** | CPU offload capacity for supported tiered-cache variants |
+| **RDMA NICs per pod** | Network devices for the P/D RDMA variant |
+
+Keep advanced values at their Guide defaults unless you are testing a specific change.
+Save a new configuration and create a new evaluation to test the change.

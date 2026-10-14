@@ -157,7 +157,7 @@ with tarfile.open(archive, "r:gz") as source:
                 or not (member.isdir() or member.isfile())):
             sys.exit(f"Unsafe or unsupported source archive entry: {member.name}")
         seen.add(str(path))
-    required = ("package.json", "pyproject.toml", "scripts/storage-env.sh",
+    required = ("package.json", "apps/backend/pyproject.toml", "scripts/storage-env.sh",
                 "scripts/LensInstaller-Ubuntu-x86_64-online.sh")
     for name in required:
         if not any(m.name == f"{root}/{name}" and m.isfile() for m in members):
@@ -335,7 +335,7 @@ ENABLE_HTTPS=1
 TLS_HOST="${TLS_HOST:-}"
 
 # Application-level ("Step 0") database configuration -- see
-# llm_d_bench/db/bootstrap_cli.py. Silent installs always default to the
+# llm_d_lens/db/bootstrap_cli.py. Silent installs always default to the
 # built-in embedded PostgreSQL unless --db-mode/--db-* flags override it;
 # interactive installs are asked via db_interactive_configure() below.
 DB_MODE="${DB_MODE:-embedded}"
@@ -346,8 +346,8 @@ DB_NAME="${DB_NAME:-}"
 DB_USER="${DB_USER:-}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 # Password enforced on the built-in embedded PostgreSQL's superuser (only
-# used when DB_MODE=embedded; see llm_d_bench/db/settings.py's
-# _harden_embedded_postgres_password). Unlike scripts/dev.sh's local-dev
+# used when DB_MODE=embedded; see llm_d_lens/db/settings.py's
+# _harden_embedded_postgres_password). Unlike scripts/lens-local.sh's local-dev
 # embedded database (intentionally password-less), the installer always
 # requires one -- prompted interactively, or auto-generated for silent
 # installs if not supplied via --db-embedded-password.
@@ -615,7 +615,7 @@ test_external_db_connection() {
     [[ -n "$DB_PORT" ]] && args+=(--port "$DB_PORT")
     [[ -n "$DB_USER" ]] && args+=(--username "$DB_USER")
     [[ -n "$DB_PASSWORD" ]] && args+=(--password "$DB_PASSWORD")
-    if ! (cd "$INSTALL_DIR" && .venv/bin/python -m llm_d_bench.db.bootstrap_cli "${args[@]}"); then
+    if ! (cd "$INSTALL_DIR" && .venv/bin/python -m llm_d_lens.db.bootstrap_cli "${args[@]}"); then
         fail "could not connect to that database -- double check the host/port/credentials and that it's reachable from this machine."
         return 1
     fi
@@ -712,7 +712,7 @@ ensure_system_packages() {
     ok "system packages installed"
 }
 
-# ---- Node.js toolchain (adapted from scripts/dev.sh) ------------------------------
+# ---- Node.js toolchain (adapted from scripts/lens-local.sh) ------------------------------
 TOOLS_DIR="$INSTALL_DIR/.tools"
 LOCAL_NODE_DIR="$TOOLS_DIR/node"
 
@@ -868,25 +868,25 @@ ensure_venv() {
 
     # The embedded PostgreSQL mode needs the optional 'pgserver' extra and the
     # LDAP identity provider needs the optional 'ldap' extra; a plain
-    # "pip install -e ." skips both. Install them so those features work.
+    # A plain backend install skips both. Install them so those features work.
     local extras=()
     [[ "$DB_MODE" == "embedded" ]] && extras+=("embedded-db")
     extras+=("ldap")
     local extra
     extra="[$(IFS=,; printf '%s' "${extras[*]}")]"
 
-    # A stamp of pyproject.toml (plus the selected extra) forces a reinstall
+    # A stamp of apps/backend/pyproject.toml (plus the selected extra) forces a reinstall
     # when a dependency is added/bumped by a source update, e.g. casbin. Without
-    # it, an existing .venv that still imports llm_d_bench/uvicorn/pgserver
+    # it, an existing .venv that still imports llm_d_lens/uvicorn/pgserver
     # would skip the install and the database bootstrap would fail on the new
     # module. sync_source excludes .venv, so the stamp survives re-installs.
     local stamp=".venv/.install-stamp"
     local current_hash=""
-    if [[ -f pyproject.toml ]]; then
-        current_hash="${extra}:$(sha256sum pyproject.toml 2>/dev/null | awk '{print $1}')"
+    if [[ -f apps/backend/pyproject.toml ]]; then
+        current_hash="${extra}:$(sha256sum apps/backend/pyproject.toml 2>/dev/null | awk '{print $1}')"
     fi
 
-    local check_import="import llm_d_bench, uvicorn"
+    local check_import="import llm_d_lens, uvicorn"
     [[ "$DB_MODE" == "embedded" ]] && check_import="$check_import, pgserver"
     if [[ -x .venv/bin/python && -f "$stamp" && "$(cat "$stamp" 2>/dev/null)" == "$current_hash" ]] \
         && .venv/bin/python -c "$check_import" 2>/dev/null; then
@@ -897,11 +897,11 @@ ensure_venv() {
         info "creating virtualenv (.venv)..."
         "$PYTHON_BIN" -m venv .venv || { fail "Python virtualenv creation failed"; exit 1; }
     elif [[ -f "$stamp" && "$(cat "$stamp" 2>/dev/null)" != "$current_hash" ]]; then
-        info "pyproject.toml changed since the last install — refreshing Python dependencies..."
+        info "backend pyproject.toml changed since the last install — refreshing Python dependencies..."
     fi
-    info "installing Python dependencies (pip install -e .${extra})..."
+    info "installing Python dependencies (pip install -e apps/backend${extra})..."
     .venv/bin/python -m pip install --upgrade pip >/dev/null 2>&1 || true
-    run_with_tail 5 .venv/bin/python -m pip install -e ".${extra}" || { fail "pip install -e .${extra} failed"; exit 1; }
+    run_with_tail 5 .venv/bin/python -m pip install -e "apps/backend${extra}" || { fail "pip install -e apps/backend${extra} failed"; exit 1; }
     echo "$current_hash" > "$stamp"
     ok "Python dependencies installed"
 }
@@ -910,7 +910,7 @@ ensure_venv() {
 # This used to be a mandatory gate inside CreateClusterWizard.jsx (blocking
 # the wizard until configured). It now happens once here, before the backend
 # is ever started, so the wizard can simply assume the database is ready —
-# see llm_d_bench/db/bootstrap_cli.py.
+# see llm_d_lens/db/bootstrap_cli.py.
 configure_database() {
     step "Configuring the Lens database"
     cd "$INSTALL_DIR"
@@ -933,7 +933,7 @@ configure_database() {
         args+=(--embedded-password "$DB_EMBEDDED_PASSWORD")
     fi
     local bootstrap_output
-    if ! bootstrap_output="$(.venv/bin/python -m llm_d_bench.db.bootstrap_cli "${args[@]}" 2>&1)"; then
+    if ! bootstrap_output="$(.venv/bin/python -m llm_d_lens.db.bootstrap_cli "${args[@]}" 2>&1)"; then
         printf '%s\n' "$bootstrap_output" >&2
         fail "database configuration failed — re-run with --db-mode embedded to use the built-in PostgreSQL, or fix the external database settings."
         exit 1
@@ -958,7 +958,7 @@ build_app() {
     npm install --no-audit --no-fund --ignore-scripts || { fail "npm install failed"; exit 1; }
     info "running npm run build ..."
     npm run build || { fail "npm run build failed"; exit 1; }
-    ok "build complete (dist/)"
+    ok "build complete (apps/frontend/dist/)"
 }
 
 # ---- Config & control script ------------------------------------------------------
@@ -1164,7 +1164,7 @@ wait_for_http() {
 }
 
 # Points operators to the protected first-run credential file without
-# printing its contents (mirrors scripts/dev.sh's print_initial_admin_credentials).
+# printing its contents (mirrors scripts/lens-local.sh's print_initial_admin_credentials).
 # The file is removed once the password is changed.
 print_initial_admin_credentials() {
     local cred_file="$LENS_DATA_DIR/credentials/initial_admin.txt"
@@ -1172,7 +1172,7 @@ print_initial_admin_credentials() {
     log "administrator credentials are stored in the mode-600 file $cred_file; removed after the password is changed"
 }
 
-# Regenerates server/mcp/tools.ts from the FastAPI backend's live OpenAPI
+# Regenerates apps/server/src/mcp/tools.ts from the FastAPI backend's live OpenAPI
 # schema before every start, so the MCP tool catalog can never drift from the
 # routes actually exposed by this installed backend. Non-fatal: if it fails
 # (e.g. venv/node_modules missing), fall back to whatever tools.ts already
@@ -1184,7 +1184,7 @@ regenerate_mcp_tools() {
     mkdir -p "$LOG_DIR"
     log "regenerating MCP tool catalog from the backend API..."
     if ! node scripts/generate-mcp-tools.mjs >"$LOG_DIR/generate-mcp-tools.log" 2>&1; then
-        warn "MCP tool catalog regeneration failed — see $LOG_DIR/generate-mcp-tools.log (using existing server/mcp/tools.ts)"
+        warn "MCP tool catalog regeneration failed — see $LOG_DIR/generate-mcp-tools.log (using existing apps/server/src/mcp/tools.ts)"
     fi
 }
 cmd_start() {
@@ -1197,11 +1197,11 @@ cmd_start() {
     start_one backend env \
         PRISM_MCP_URL="$scheme://127.0.0.1:$APP_PORT/api/mcp" \
         PRISM_MCP_CA_FILE="${TLS_CERT_FILE:-}" \
-        .venv/bin/python -m uvicorn llm_d_bench.api:app --host "${BACKEND_HOST:-0.0.0.0}" --port "$BACKEND_PORT"
+        .venv/bin/python -m uvicorn llm_d_lens.api:app --host "${BACKEND_HOST:-0.0.0.0}" --port "$BACKEND_PORT"
     start_one app env NODE_ENV=production HOST="$APP_HOST" SERVER_PORT="$APP_PORT" PORT="$APP_PORT" \
         SIMULATION_API_URL="http://127.0.0.1:$BACKEND_PORT" \
         TLS_CERT_FILE="$TLS_CERT_FILE" TLS_KEY_FILE="$TLS_KEY_FILE" \
-        ./node_modules/.bin/tsx server/server.js
+        ./node_modules/.bin/tsx apps/server/src/server.js
     log "waiting for services to become ready..."
     wait_for_http backend "http://127.0.0.1:$BACKEND_PORT/api/health"
     wait_for_http app     "$scheme://127.0.0.1:$APP_PORT/api/config"
@@ -1218,7 +1218,7 @@ cmd_start() {
 }
 
 # embedded_db_dir -> the on-disk location of the built-in PostgreSQL cluster
-# (see llm_d_bench/db/settings.py's _DB_DATA_DIRECTORY_DEFAULT), honoring the
+# (see llm_d_lens/db/settings.py's _DB_DATA_DIRECTORY_DEFAULT), honoring the
 # same LLM_D_BENCH_EMBEDDED_DB_DIR override the backend itself respects.
 embedded_db_dir() {
     local dir="${LLM_D_BENCH_EMBEDDED_DB_DIR:-~/.llm-d-lens/db/data}"
@@ -1226,7 +1226,7 @@ embedded_db_dir() {
 }
 
 # embedded_db_bootstrap_file -> the "Step 0" config recording how this install
-# connects to its own database (see llm_d_bench/db/bootstrap_config.py),
+# connects to its own database (see llm_d_lens/db/bootstrap_config.py),
 # honoring the same LLM_D_BENCH_DB_BOOTSTRAP_FILE override the backend respects.
 embedded_db_bootstrap_file() {
     local file="${LLM_D_BENCH_DB_BOOTSTRAP_FILE:-~/.llm-d-lens/db-bootstrap.json}"
@@ -1348,7 +1348,7 @@ cmd_uninstall() {
     if [[ "$LENS_IN_PLACE" == "1" ]]; then
         warn "this is an in-place install (running from the source checkout) —"
         warn "only build artifacts will be removed; source files are left untouched."
-        rm -rf node_modules dist .venv .tools "$PID_DIR"
+        rm -rf node_modules apps/frontend/dist docs/site/build .venv .tools "$PID_DIR"
         [[ "$mode" == "purge" ]] && rm -f .lens-install.env
         log "build artifacts removed from $ROOT_DIR."
         return 0
@@ -1484,7 +1484,7 @@ if [[ "$PIPE_ENTRY" == 1 || "${BASH_SOURCE[0]}" == "$0" ]]; then
             ;;
         --install-source)
             shift
-            [[ "$PIPE_ENTRY" == 0 && -f "$SOURCE_DIR/package.json" && -f "$SOURCE_DIR/pyproject.toml" &&
+            [[ "$PIPE_ENTRY" == 0 && -f "$SOURCE_DIR/package.json" && -f "$SOURCE_DIR/apps/backend/pyproject.toml" &&
                 -f "$SOURCE_DIR/scripts/storage-env.sh" ]] ||
                 online_fail "Internal source installation requires a complete downloaded Lens tree."
             parse_args "$@"
