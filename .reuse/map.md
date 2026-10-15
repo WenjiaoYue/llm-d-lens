@@ -206,6 +206,11 @@ Entry: [apps/frontend/src/shared/lib/useClipboard.js](../apps/frontend/src/share
 Kubernetes namespace DNS-label validation.
 Entry: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py) — `validate_namespace`
 
+## kubernetes-resource-deletion
+
+Idempotent cluster-scoped deletion of a Kubernetes namespace or Secret.
+Entry: [apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py](../apps/backend/src/llm_d_lens/infrastructure/kubernetes/__init__.py) — `delete_namespace`, `delete_secret`
+
 ## upstream-json-transport
 
 Node upstream JSON fetch with timeout through body consumption.
@@ -908,3 +913,8 @@ Entry: [tools/reuse/repository.mjs](../tools/reuse/repository.mjs) — `SOURCE_R
 
 Check local Markdown and MDX file targets for selected documentation files.
 Entry: [tools/check-docs.mjs](../tools/check-docs.mjs) — `checkDocs`
+
+## cluster-hf-token-secret
+
+Write the cluster-level HF_TOKEN Secret on the target cluster and record its namespace/name on the Lens cluster record so Deploy and Model Cache default to it.
+Entry: [apps/backend/src/llm_d_lens/cluster/service.py](../apps/backend/src/llm_d_lens/cluster/service.py) — `create_hf_token_secret`, `update_hf_token_secret`
