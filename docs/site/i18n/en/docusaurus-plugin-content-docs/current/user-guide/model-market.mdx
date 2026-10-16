@@ -6,6 +6,11 @@ description: Choose a model and create a manual or AI-assisted deployment.
 Open **Model Market** to choose a model and deploy it to a cluster.
 For your first deployment, use **Manual** mode.
 
+Use **Search models** above the categories to filter by model name, publisher,
+repository, model type, category, or precision. Search ignores case and combines
+with the selected category; multiple words must all match. The model count updates
+as you type. Use **Clear filters** to reset both search and category.
+
 ## Choose a deployment mode
 
 | Mode | Choose it when |
@@ -22,7 +27,7 @@ For your first deployment, use **Manual** mode.
 5. Check the runtime image, replicas, and tensor parallel size.
 6. Under **Guide template**, choose **Guide** and **Accelerator**. Use [Choose an evaluation Guide](/evaluation/guides) to compare the options.
 7. For a P/D or tiered-cache Guide, choose a variant from the displayed list. Keep the supplied defaults for the first run.
-8. Click **Generate YAML**, choose the resource budget, then click **Confirm & generate**.
+8. Click **Generate YAML**. If available cards are insufficient but the physical total is sufficient, review the Pending warning and click **Continue & generate**. If the physical total is insufficient, reduce replicas / TP.
 9. Review **Generated deployable configuration**. Correct any highlighted errors, then click **Deploy**.
 10. On **Deployments**, wait for **Ready**. The deployment is retained without running a benchmark; stop or clean it up explicitly when no longer needed.
 

@@ -252,21 +252,22 @@ export function ModelCachePage({ onNavigateBack, initialDownload, onDownloadHand
         setMutatingId(entryId);
         try {
             const updated = await deleteModelCacheEntry(entryId);
-            if (updated.status === 'deleted') {
-                // Removed synchronously on the backend (it never reached
-                // "ready", so there was nothing on the shared volume that
-                // needed a mount-dependent cleanup Job) -- drop it from the
-                // list immediately instead of merging in the minimal payload.
-                setItems((current) => current.filter((item) => item.id !== entryId));
-                setNotice('Deleted');
-            } else {
+            if (updated.status !== 'deleted') {
                 setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-                setNotice('Deletion started');
             }
-            closeDialog();
+            return updated;
         } finally {
             setMutatingId(null);
         }
+    };
+
+    const handleDeleted = async () => {
+        const entryId = selected.id;
+        // Replace any older list request before removing the confirmed deletion.
+        await load();
+        setItems((current) => current.filter((item) => item.id !== entryId));
+        setNotice('Deleted');
+        closeDialog();
     };
 
     return (
@@ -499,7 +500,7 @@ export function ModelCachePage({ onNavigateBack, initialDownload, onDownloadHand
                 />
                 </PermissionGate>
             )}
-            {dialog === 'delete' && <DeleteModelCacheModal entry={selected} onCancel={closeDialog} onDelete={handleDelete} />}
+            {dialog === 'delete' && <DeleteModelCacheModal entry={selected} onCancel={closeDialog} onDelete={handleDelete} onDeleted={handleDeleted} />}
             {dialog === 'logs' && <ModelCacheLogsModal entry={selected} onClose={closeDialog} />}
         </ModulePage>
     );

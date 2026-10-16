@@ -6,6 +6,16 @@ This is a starting point for discovery, not a complete function inventory. Sourc
 
 Boundaries, examples and tests are maintained in [catalog.json](catalog.json); read the matching entry before reuse.
 
+## evaluation-resource-confirmation
+
+Generate directly with sufficient available cards; confirm physical capacity and Pending scheduling when cards are busy.
+Entry: [apps/frontend/src/pages/evaluation/ui/evaluation/ResourceBasisControl.jsx](../apps/frontend/src/pages/evaluation/ui/evaluation/ResourceBasisControl.jsx) — `ResourceBasisControl`
+
+## simulation-endpoint-validation
+
+Validate OpenAI-compatible endpoint model discovery before creating or rerunning Endpoint URL simulations.
+Entry: [apps/backend/src/llm_d_lens/simulation/endpoints.py](../apps/backend/src/llm_d_lens/simulation/endpoints.py) — `discover_models`, `models_url`
+
 ## router-pd-plugin-compatibility
 
 Adapt legacy P/D plugin configurations to Router 0.11 while preserving source snapshots and disaggregation decisions.
