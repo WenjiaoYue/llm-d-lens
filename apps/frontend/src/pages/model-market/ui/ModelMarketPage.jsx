@@ -304,6 +304,27 @@ export default function ModelMarketPage({ onNavigate, isActive = true }) {
         setAgenticDraft(null);
     };
 
+    const openAdvanced = () => {
+        storeEvaluationIntent({
+            entrySource: 'model-market',
+            operation: 'create-evaluation',
+            initial_step: 'configurations',
+            return_target: 'optimization-evaluate-new',
+            name: deployName || formatDefaultName(selected),
+            deployment_name: deployName || formatDefaultName(selected),
+            deployment_description: deploymentDescription,
+            cluster_id: cluster,
+            workloads: [{ model: selected.repository, replicas, tensor_parallel_size: tensorParallelism }],
+            runtime: {
+                model_server: 'vllm',
+                model_source: storageVolumeId ? 'auto-cache' : 'huggingface',
+                storage_volume_id: storageVolumeId,
+                max_model_len: vllm.maxModelLen ?? plan.maxModelLen,
+            },
+        });
+        onNavigate('optimization-evaluate-new');
+    };
+
     const submit = async (requestedResourceBasis = resourceBasis) => {
         setError('');
         if (parsedVllmArguments.error) {
@@ -324,22 +345,7 @@ export default function ModelMarketPage({ onNavigate, isActive = true }) {
             return;
         }
         if (mode === 'advanced') {
-            storeEvaluationIntent({
-                operation: 'deploy-only',
-                return_target: 'model-market',
-                name: deployName,
-                deployment_name: deployName,
-                deployment_description: deploymentDescription,
-                cluster_id: cluster,
-                workloads: [{ model: selected.repository, replicas, tensor_parallel_size: tensorParallelism }],
-                runtime: {
-                    model_server: 'vllm',
-                    model_source: storageVolumeId ? 'auto-cache' : 'huggingface',
-                    storage_volume_id: storageVolumeId,
-                    max_model_len: vllm.maxModelLen ?? plan.maxModelLen,
-                },
-            });
-            onNavigate('optimization-evaluate-new');
+            openAdvanced();
             return;
         }
         if (mode === 'agentic') {
