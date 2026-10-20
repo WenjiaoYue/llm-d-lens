@@ -22,6 +22,7 @@ from llm_d_lens.deploy.providers.guide_adapter import (
 )
 from llm_d_lens.deploy.providers.hardware_profile import (
     active_profile,
+    apply_runtime_class,
     claim_request_name,
     device_class,
     set_accelerator_request,
@@ -471,4 +472,5 @@ class BaselineVllmAdapter:
             set_accelerator_request(
                 container, None, parameters["tensor_parallel_size"], accelerator=accelerator, access_mode=access_mode
             )
+        apply_runtime_class(pod_spec, accelerator=accelerator, access_mode=access_mode)
         return documents

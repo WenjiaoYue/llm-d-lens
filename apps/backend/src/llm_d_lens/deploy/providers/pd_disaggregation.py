@@ -29,6 +29,7 @@ from llm_d_lens.deploy.providers.guide_adapter import (
 )
 from llm_d_lens.deploy.providers.hardware_profile import (
     active_profile,
+    apply_runtime_class,
     default_guide_variant,
     guide_overlays,
     requires_dra_claim,
@@ -74,7 +75,10 @@ class PdDisaggregationAdapter:
             "supported-core",
             {
                 "variants": sorted(self._sources),
-                "default_variant": default_guide_variant(self._sources),
+                "default_variant": (
+                    default_guide_variant(self._sources, guide="pd-disaggregation", accelerator=self._accelerator)
+                    if any(name in self._sources for name in (".", "base")) else ""
+                ),
                 "structured_custom_parameters": True,
             },
         )
@@ -96,6 +100,8 @@ class PdDisaggregationAdapter:
                             sources[sibling.name if variant == "." else f"{sibling.name}/{variant}"] = path
         if "." in sources:
             sources["vllm"] = sources["."]
+        elif "base" in sources:
+            sources["vllm"] = sources["base"]
         return sources
 
     def discover(self):
@@ -234,6 +240,7 @@ class PdDisaggregationAdapter:
                     set_accelerator_request(
                         container, None, parameters[role]["tensor_parallel_size"], accelerator=self._accelerator
                     )
+            apply_runtime_class(deployment["spec"]["template"]["spec"], accelerator=self._accelerator)
         manifest = directory / "manifest.yaml"
         manifest.write_text(yaml.safe_dump_all(documents, sort_keys=False), encoding="utf-8")
         return GuideDeploymentArtifact(
@@ -518,7 +525,9 @@ class PdDisaggregationAdapter:
         # The variant id is accelerator-specific (XPU: vllm/vllm-rdma; NVIDIA GPU:
         # the vLLM infra-provider overlay such as base); the adapter validates it
         # against the overlays available for the active accelerator.
-        variant = str(overrides.get("guideVariant") or default_guide_variant(self._sources))
+        variant = str(overrides.get("guideVariant") or default_guide_variant(
+            self._sources, guide="pd-disaggregation", accelerator=self._accelerator
+        ))
         result: dict[str, Any] = {
             "variant": variant,
             "model": model["name"],

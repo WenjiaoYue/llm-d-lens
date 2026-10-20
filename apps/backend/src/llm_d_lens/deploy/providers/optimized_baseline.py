@@ -31,7 +31,7 @@ from llm_d_lens.deploy.providers.guide_adapter import (
     serving_arguments,
     set_vllm_argument,
 )
-from llm_d_lens.deploy.providers.hardware_profile import active_profile, set_accelerator_request
+from llm_d_lens.deploy.providers.hardware_profile import active_profile, apply_runtime_class, set_accelerator_request
 from llm_d_lens.deploy.providers.model_cache_environment import model_cache_environment
 from llm_d_lens.deploy.providers.storage_mount import resolve_mount
 from llm_d_lens.deploy.providers.target_node import configured_target_node
@@ -65,6 +65,7 @@ class OptimizedBaselineGuidePolicy:
     retain_namespace_on_failure: bool = False
     readiness_timeout_seconds: int = 900
     docker_path: Path | None = None
+    source_error: str | None = None
 
 
 class OptimizedBaselineGuideAdapter(GuideAdapter):
@@ -113,6 +114,8 @@ class OptimizedBaselineGuideAdapter(GuideAdapter):
     ) -> ValidationResult:
         if definition.guide_id != self._definition.guide_id:
             return ValidationResult(accepted=False, reasons=["unsupported_guide_mapping"])
+        if self._policy.source_error:
+            return ValidationResult(accepted=False, reasons=[self._policy.source_error])
         try:
             deployment, _model_name, _runtime = self._deployment_parameters(overrides)
         except (TypeError, ValueError) as error:
@@ -139,6 +142,8 @@ class OptimizedBaselineGuideAdapter(GuideAdapter):
     async def render(self, definition: GuideDefinition, overrides: dict[str, Any]) -> GuideDeploymentArtifact:
         if definition.guide_id != self._definition.guide_id:
             raise ValueError("adapter cannot render a different guide")
+        if self._policy.source_error:
+            raise ValueError(self._policy.source_error)
         deployment, model_id, runtime = self._deployment_parameters(overrides)
         runtime["resolved_mount"] = await resolve_mount(
             overrides.get("runtime") or {},
@@ -667,6 +672,7 @@ class OptimizedBaselineGuideAdapter(GuideAdapter):
                 None,
             )
             set_accelerator_request(container, claim, deployment["accelerator_count"], accelerator=profile.id)
+            apply_runtime_class(pod, accelerator=profile.id)
             selectors = gpu_device_selectors(accelerator=profile.id)
             if selectors and claim:
                 for request in claim["spec"]["spec"]["devices"]["requests"]:

@@ -38,6 +38,7 @@ async def test_render_resolves_selected_storage_volume(monkeypatch, tmp_path: Pa
     adapter._definition = GuideDefinition("precise-prefix-cache-routing", "source", "content", "supported-extension")
     adapter._root = tmp_path
     adapter._modelserver_source = tmp_path
+    adapter._modelserver_source_error = None
     adapter._kustomize_build = AsyncMock(return_value=[{"kind": "ConfigMap"}])
     adapter._patch_modelserver = Mock()
     adapter._patched_router_values = Mock(return_value="router: {}\n")
@@ -123,6 +124,26 @@ def test_modelserver_overlay_follows_the_active_accelerator(tmp_path: Path):
         assert adapter._modelserver_overlay(tmp_path) == overlay
 
 
+@pytest.mark.parametrize("entries", [[], ["gke", "coreweave"]])
+def test_modelserver_overlay_reports_missing_generic_entry(tmp_path, entries):
+    for entry in entries:
+        overlay = tmp_path / "guides/precise-prefix-cache-routing/modelserver/gpu/vllm" / entry
+        overlay.mkdir(parents=True)
+        (overlay / "kustomization.yaml").write_text("resources: []")
+    adapter = PrecisePrefixCacheRoutingAdapter(
+        _ReadinessRunner(), tmp_path, "llmd-", 30, Path("helm"), None, accelerator="nvidia"
+    )
+
+    result = adapter.validate_inputs(adapter.discover(), {}, {})
+
+    assert not result.accepted
+    message = " ".join(result.reasons)
+    assert "precise-prefix-cache-routing" in message
+    assert "nvidia" in message
+    assert "expected '.' or 'base'" in message
+    assert "available variants:" in message
+
+
 def _upstream_deployment_documents():
     return [
         {
@@ -203,6 +224,22 @@ def test_patch_modelserver_sets_model_replicas_tp_and_claim_count():
     assert container["image"] == "ghcr.io/llm-d/llm-d-xpu:v0.9.0"
     claim = next(item for item in documents if item["kind"] == "ResourceClaimTemplate")
     assert claim["spec"]["spec"]["devices"]["requests"][0]["exactly"]["count"] == 4
+
+
+@pytest.mark.parametrize("existing", [None, "custom-runtime"])
+def test_patch_modelserver_applies_hardware_runtime_class(existing):
+    documents = [item for item in _upstream_deployment_documents() if item["kind"] == "Deployment"]
+    pod = documents[0]["spec"]["template"]["spec"]
+    if existing:
+        pod["runtimeClassName"] = existing
+    adapter = PrecisePrefixCacheRoutingAdapter.__new__(PrecisePrefixCacheRoutingAdapter)
+    adapter._accelerator = "nvidia"
+    parameters = adapter._parameters(_valid_overrides(runtime={"image": "model-server:test"}))
+
+    adapter._patch_modelserver(documents, parameters)
+
+    assert pod["runtimeClassName"] == (existing or "nvidia")
+    assert pod["containers"][0]["resources"]["limits"]["nvidia.com/gpu"] == str(parameters["tensor_parallel_size"])
 
 
 def test_patch_modelserver_applies_custom_parameters_and_mount_path():

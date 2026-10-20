@@ -46,6 +46,8 @@ from llm_d_lens.deploy.providers.guide_adapter import (
     set_vllm_argument,
 )
 from llm_d_lens.deploy.providers.hardware_profile import (
+    apply_runtime_class,
+    default_guide_variant,
     guide_overlays,
     overlay_variant,
     requires_dra_claim,
@@ -121,7 +123,12 @@ class PrecisePrefixCacheRoutingAdapter:
         # different clusters/vendors must not race on a single overlay choice.
         self._accelerator = accelerator
         self._overlay_variant_value = overlay_variant(accelerator=accelerator)
-        self._modelserver_source = self._modelserver_overlay(guide_root)
+        self._modelserver_source_error = None
+        try:
+            self._modelserver_source = self._modelserver_overlay(guide_root)
+        except ValueError as error:
+            self._modelserver_source_error = str(error)
+            self._modelserver_source = guide_root / "unavailable-overlay"
         self._render_source = guide_root / "guides/precise-prefix-cache-routing/render"
         self._baseline_source = (
             Path(__file__).resolve().parent / "guide_overlays" / "precise-prefix-cache-routing" / "baseline"
@@ -173,9 +180,10 @@ class PrecisePrefixCacheRoutingAdapter:
         overlay.
         """
         sources = guide_overlays(guide_root, "precise-prefix-cache-routing", accelerator=self._accelerator)
-        return (
-            sources.get(".") or sources.get("base") or next(iter(sources.values()), guide_root / "unavailable-overlay")
+        variant = default_guide_variant(
+            sources, guide="precise-prefix-cache-routing", accelerator=self._accelerator
         )
+        return sources[variant]
 
     def discover(self) -> GuideDefinition:
         return self._definition
@@ -184,6 +192,8 @@ class PrecisePrefixCacheRoutingAdapter:
         self, definition, cluster_snapshot: dict[str, Any], overrides: dict[str, Any]
     ) -> ValidationResult:
         try:
+            if self._modelserver_source_error:
+                raise ValueError(self._modelserver_source_error)
             self._parameters(overrides)
             for path in (self._modelserver_source, self._render_source, self._baseline_source):
                 if not path.is_dir():
@@ -199,6 +209,8 @@ class PrecisePrefixCacheRoutingAdapter:
     async def render(self, definition, overrides: dict[str, Any]) -> GuideDeploymentArtifact:
         if definition.guide_id != self._definition.guide_id:
             raise ValueError("adapter cannot render a different guide")
+        if self._modelserver_source_error:
+            raise ValueError(self._modelserver_source_error)
         parameters = self._parameters(overrides)
         parameters["resolved_mount"] = await resolve_mount(
             overrides.get("runtime") or {},
@@ -837,6 +849,7 @@ class PrecisePrefixCacheRoutingAdapter:
         container["env"] = environment
         container["image"] = parameters["image"]
         set_accelerator_request(container, claim, parameters["tensor_parallel_size"], accelerator=self._accelerator)
+        apply_runtime_class(deployment["spec"]["template"]["spec"], accelerator=self._accelerator)
         if cache_mounted:
             pod_spec = deployment["spec"]["template"]["spec"]
             volume_source = (

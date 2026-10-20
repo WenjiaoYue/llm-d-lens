@@ -177,8 +177,9 @@ def _asset(name: str, content: str) -> dict[str, str]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("read_only", [False, True])
+@pytest.mark.parametrize("accelerator", ["xpu", "nvidia"])
 async def test_render_mounts_selected_cache_volume_for_both_roles(
-    monkeypatch, tmp_path: Path, read_only: bool, cached_model
+    monkeypatch, tmp_path: Path, read_only: bool, accelerator: str, cached_model
 ):
     import llm_d_lens.deploy.providers.pd_disaggregation as pd
 
@@ -205,7 +206,6 @@ async def test_render_mounts_selected_cache_volume_for_both_roles(
     process.communicate = AsyncMock(return_value=(yaml.safe_dump_all(documents).encode(), b""))
     monkeypatch.setattr(pd.asyncio, "create_subprocess_exec", AsyncMock(return_value=process))
     monkeypatch.setattr(pd, "gpu_device_selectors", lambda **_: [])
-    monkeypatch.setattr(pd, "requires_dra_claim", lambda **_: True)
     mount = {
         "volume_source": {"persistentVolumeClaim": {"claimName": "cache-in-deployment-namespace"}},
         "mount_path": "/model-cache",
@@ -219,7 +219,7 @@ async def test_render_mounts_selected_cache_volume_for_both_roles(
     adapter._sources = {"vllm": tmp_path}
     adapter._root = tmp_path
     adapter._environment = None
-    adapter._accelerator = "xpu"
+    adapter._accelerator = accelerator
     overrides = {
         "guideVariant": "vllm",
         "model": {"name": "Qwen/Qwen3-8B"},
@@ -259,6 +259,7 @@ async def test_render_mounts_selected_cache_volume_for_both_roles(
     for deployment in rendered:
         pod_spec = deployment["spec"]["template"]["spec"]
         container = pod_spec["containers"][0]
+        assert pod_spec.get("runtimeClassName") == ("nvidia" if accelerator == "nvidia" else None)
         expected_volumes = [{"name": "model-cache", **mount["volume_source"]}]
         expected_mounts = [{"name": "model-cache", "mountPath": "/model-cache", "readOnly": read_only}]
         if not read_only:
@@ -448,5 +449,30 @@ def test_guide_sources_follow_the_active_accelerator(monkeypatch, tmp_path):
         overlay = tmp_path / "guides/pd-disaggregation/modelserver" / relative
         overlay.mkdir(parents=True)
         (overlay / "kustomization.yaml").write_text("resources: []")
-    assert set(PdDisaggregationAdapter._guide_sources(tmp_path, "gpu")) == {"base"}
+    assert set(PdDisaggregationAdapter._guide_sources(tmp_path, "gpu")) == {"base", "vllm"}
     assert set(PdDisaggregationAdapter._guide_sources(tmp_path, "xpu")) == {".", "vllm", "vllm-rdma"}
+
+
+@pytest.mark.parametrize(
+    ("accelerator", "variant", "entries", "expected"),
+    [
+        ("gpu", "gpu", ("base",), "base"),
+        ("xpu", "xpu", (".",), "."),
+        ("gpu", "gpu", (".", "base"), "."),
+        ("gpu", "gpu", ("gke",), None),
+        ("unknown", "gpu", (".", "base"), None),
+    ],
+)
+def test_vllm_alias_uses_an_existing_generic_entry(tmp_path, accelerator, variant, entries, expected):
+    source_root = tmp_path / "guides/pd-disaggregation/modelserver" / variant / "vllm"
+    for entry in entries:
+        overlay = source_root / entry
+        overlay.mkdir(parents=True, exist_ok=True)
+        (overlay / "kustomization.yaml").write_text("resources: []")
+
+    sources = PdDisaggregationAdapter._guide_sources(tmp_path, accelerator)
+
+    if expected is None:
+        assert "vllm" not in sources
+    else:
+        assert sources["vllm"] == source_root / expected

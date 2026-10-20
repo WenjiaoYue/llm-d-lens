@@ -27,11 +27,31 @@ from llm_d_lens.deploy.providers.guide_adapter import (
     serving_arguments,
     set_vllm_argument,
 )
-from llm_d_lens.deploy.providers.hardware_profile import active_profile, default_guide_variant, set_accelerator_request
+from llm_d_lens.deploy.providers.hardware_profile import (
+    active_profile,
+    apply_runtime_class,
+    default_guide_variant,
+    set_accelerator_request,
+)
 from llm_d_lens.deploy.providers.model_cache_environment import model_cache_environment
 from llm_d_lens.deploy.providers.storage_mount import resolve_mount
 from llm_d_lens.infrastructure.process import spawn
 from llm_d_lens.infrastructure.storage.paths import prism_temp_root
+
+
+def resolve_tiered_cache_variant(variants, requested: str = "native/cpu", *, accelerator: str | None = None) -> str:
+    if requested in variants:
+        return requested
+    aliases = {"native/cpu": "native/cpu/base", "native/cpu/base": "native/cpu"}
+    alternative = aliases.get(requested)
+    if alternative in variants:
+        return alternative
+    available = ", ".join(sorted(variants)) or "none"
+    raise ValueError(
+        f"tiered-prefix-cache cannot resolve variant '{requested}' for accelerator {accelerator or 'unresolved'}; "
+        f"available variants: {available}. Select a compatible Guide source or a supported cache variant. "
+        "Cache implementation and storage tier are not changed automatically."
+    )
 
 
 @dataclass(frozen=True)
@@ -343,7 +363,16 @@ class HelmKustomizeGuideAdapter:
         model = overrides.get("model") or {}
         decode = overrides.get("decode") or {}
         runtime = overrides.get("runtime") or {}
-        variant = str(overrides.get("guideVariant") or default_guide_variant(self._descriptor.variants))
+        if self._descriptor.guide_id == "tiered-prefix-cache":
+            cache = overrides.get("cache") or {}
+            requested = str(overrides.get("guideVariant") or cache.get("variant") or "native/cpu")
+            variant = resolve_tiered_cache_variant(
+                self._descriptor.variants, requested, accelerator=self._accelerator
+            )
+        else:
+            variant = str(overrides.get("guideVariant") or default_guide_variant(
+                self._descriptor.variants, guide=self._descriptor.guide_id, accelerator=self._accelerator
+            ))
         if variant not in self._descriptor.variants:
             raise ValueError(f"unsupported {self._descriptor.guide_id} variant: {variant}")
         if not isinstance(model.get("name"), str) or not model["name"]:
@@ -452,6 +481,7 @@ class HelmKustomizeGuideAdapter:
                 environment.append({"name": name, "value": value})
         container["args"] = args
         set_accelerator_request(container, claim, parameters["tensor_parallel_size"], accelerator=self._accelerator)
+        apply_runtime_class(deployment["spec"]["template"]["spec"], accelerator=self._accelerator)
         if cache_mounted:
             pod_spec = deployment["spec"]["template"]["spec"]
             volume_source = (

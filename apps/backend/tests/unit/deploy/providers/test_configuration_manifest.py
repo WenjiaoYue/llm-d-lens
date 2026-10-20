@@ -80,13 +80,15 @@ def test_provider_serving_controls_validate_explicit_values_and_fall_back_to_mod
             return BaselineVllmAdapter._parameters(overrides)["serving_arguments"]
         if provider == "pd-disaggregation":
             adapter = PdDisaggregationAdapter.__new__(PdDisaggregationAdapter)
-            adapter._sources = {"vllm": tmp_path}
+            adapter._accelerator = "xpu"
+            adapter._sources = {".": tmp_path}
             parsed = adapter._parameters(overrides)
             assert parsed["prefill"]["serving_arguments"] == {"max-model-len": 4096}
             return parsed["decode"]["serving_arguments"]
         if provider == "tiered-prefix-cache":
             adapter = HelmKustomizeGuideAdapter.__new__(HelmKustomizeGuideAdapter)
-            adapter._descriptor = SimpleNamespace(variants={"base": tmp_path}, guide_id=provider)
+            adapter._accelerator = "xpu"
+            adapter._descriptor = SimpleNamespace(variants={"native/cpu": tmp_path}, guide_id=provider)
         else:
             adapter = PrecisePrefixCacheRoutingAdapter.__new__(PrecisePrefixCacheRoutingAdapter)
         return adapter._parameters(overrides)["serving_arguments"]
