@@ -220,6 +220,9 @@ main span:has(> :only-child) + p.text-slate-600 {
 
     --chart-grid: #cfe9f7;
     --chart-axis: #475569;
+    --scrollbar-track: #f1f5f9;
+    --scrollbar-thumb: #cbd5e1;
+    --scrollbar-thumb-hover: #94a3b8;
   }
 
   .dark {
@@ -237,6 +240,9 @@ main span:has(> :only-child) + p.text-slate-600 {
 
     --chart-grid: #1e293b;
     --chart-axis: #64748b;
+    --scrollbar-track: rgba(15, 23, 42, 0.4);
+    --scrollbar-thumb: #334155;
+    --scrollbar-thumb-hover: #475569;
   }
 
   body {
@@ -273,24 +279,24 @@ main span:has(> :only-child) + p.text-slate-600 {
   scrollbar-width: none;  /* Firefox */
 }
 
-/* Prism Custom Scrollbars */
+/* Shared by page, panel, and custom-scrollbar containers in both themes. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.4);
+  background: var(--scrollbar-track);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--scrollbar-thumb);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--scrollbar-thumb-hover);
 }
 
 ::-webkit-scrollbar-corner {
@@ -299,31 +305,7 @@ main span:has(> :only-child) + p.text-slate-600 {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 rgba(15, 23, 42, 0.4);
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.4);
-  border-radius: 9999px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 9999px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
-
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #334155 rgba(15, 23, 42, 0.4);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 /* Rendered Markdown (react-markdown + remark-gfm) -- used by both the
@@ -1074,6 +1056,14 @@ html:not(.dark) .benchmark-task-page .configuration-editor .configuration-source
   background: #ffffff;
 }
 
+/* Override the legacy disclosure gradient, including its inset list surface. */
+html:not(.dark) .benchmark-task-page .configuration-saved-panel {
+  background: var(--bg-card) !important;
+}
+html:not(.dark) .benchmark-task-page .configuration-saved-panel > div {
+  background: var(--bg-primary);
+}
+
 /* Light mode: no shadows anywhere on New Benchmark Task. */
 html:not(.dark) .benchmark-task-page [class*="shadow-"] {
   box-shadow: none !important;
@@ -1483,6 +1473,16 @@ html:not(.dark) .simulation-task-dialog [class*="border-cyan"],
 html:not(.dark) .simulation-task-dialog [class*="border-emerald"],
 html:not(.dark) .simulation-task-dialog [class*="border-slate"] {
   border-color: #d1d5db !important;
+}
+
+html:not(.dark) .optimization-comparison-tree .scenario-node-surface {
+  fill: var(--bg-secondary);
+}
+html:not(.dark) .optimization-comparison-tree text {
+  fill: var(--text-secondary);
+}
+html:not(.dark) .optimization-comparison-tree [aria-pressed="true"] text {
+  fill: var(--brand-accent);
 }
 
 /* Light mode: selected scenario uses brand blue with white ink. */
