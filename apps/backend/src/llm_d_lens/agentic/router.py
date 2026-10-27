@@ -176,3 +176,64 @@ async def approve_agentic_deployment(run_id: str, request: Request = None) -> Ag
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+from .optimization import MeasuredOptimizer, OptimizationRequest
+
+optimizer = MeasuredOptimizer(service)
+
+
+def _optimization_run(run_id, http_request):
+    from llm_d_lens.auth.access import require_cluster_access
+    from llm_d_lens.cluster.sessions import require_active_session
+
+    run = service.get(run_id)
+    if run is None:
+        raise HTTPException(404, "Agentic plan not found")
+    session = require_active_session(run.request.cluster_session_id)
+    require_cluster_access(current_principal(http_request), session.server_id)
+    return run
+
+
+@router.post("/{run_id}/optimize", response_model=AgenticDeploymentRun, status_code=202,
+    operation_id="optimize_agentic_plan", summary="Measure candidates within an explicit resource budget",
+    description="Deploy, benchmark and clean up selected validated candidates sequentially using one workload. Return the best measured candidate subject to SLOs; this does not prove a global optimum.")
+async def optimize_agentic_plan(run_id: str, request: OptimizationRequest, http_request: Request):
+    run = _optimization_run(run_id, http_request)
+    from llm_d_lens.auth.context import require_route_permission
+    await require_route_permission(Request(dict(http_request.scope, path="/api/v1/evaluate/runs", method="POST")))
+    try:
+        from llm_d_lens.cluster.sessions import require_active_session
+        return optimizer.start(run, request, http_request, owner_for_create(current_principal(http_request)), cluster_id=require_active_session(run.request.cluster_session_id).server_id)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@router.post("/{run_id}/optimize/cancel", response_model=AgenticDeploymentRun,
+    operation_id="cancel_agentic_optimization", summary="Stop measured optimization and clean up its test resources",
+    description="Cancel an active measured candidate search and clean up only the deployments created by that search.")
+async def cancel_agentic_optimization(run_id: str, http_request: Request, cluster_session_id: str | None = None):
+    run = service.get(run_id)
+    if run is None:
+        raise HTTPException(404, "Agentic plan not found")
+    if cluster_session_id and (run.optimization or {}).get('status') in {'interrupted', 'cleanup_failed'}:
+        from llm_d_lens.cluster.sessions import require_active_session
+        from llm_d_lens.auth.access import require_cluster_access
+        session = require_active_session(cluster_session_id)
+        if session.server_id != run.optimization.get('cluster_id'):
+            raise HTTPException(409, "Cleanup session must refer to the original test cluster")
+        require_cluster_access(current_principal(http_request), session.server_id)
+        run.request = run.request.model_copy(update={'cluster_session_id': cluster_session_id})
+    else:
+        _optimization_run(run_id, http_request)
+    return await optimizer.cancel(run_id)
+
+
+@router.on_event("shutdown")
+async def stop_measured_optimization():
+    await optimizer.close()
+
+
+@router.on_event("startup")
+async def recover_measured_optimization():
+    optimizer.recover()

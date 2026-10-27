@@ -151,6 +151,42 @@ class ConfigurationManifestAdapter:
                 manifest_ref=str(isolated),
                 artifact_hash=stable_hash({"provider_artifact": artifact.artifact_hash, "overlay": str(isolated)}),
             )
+        composition = overrides.get("guideComposition")
+        if composition and not self._is_exact(overrides):
+            import yaml
+            from llm_d_lens.configuration.guide_composition import compose_native_cpu_cache
+            from llm_d_lens.deploy.guide_planning import GuideError, select_manifest_paths
+
+            if not isinstance(composition, dict) or set(composition) != {"nativeCpuCacheGiB"}:
+                raise ValueError("Unknown Guide composition")
+            policy = getattr(self._delegate, "_policy", None)
+            root = getattr(self._delegate, "_guide_root", None) or getattr(policy, "guide_root", None)
+            if root is None:
+                raise ValueError("This provider cannot resolve a source-bound composition")
+            root = Path(root)
+            accelerator = overrides.get("hardware_profile") or getattr(self._delegate, "_accelerator", None) or getattr(policy, "accelerator", None)
+            paths = [str(path.relative_to(root)) for path in (root / "guides/tiered-prefix-cache").rglob("*") if path.is_file()]
+            try:
+                selected = select_manifest_paths(paths, "tiered-prefix-cache", accelerator, "vllm", "native/cpu")
+            except GuideError:
+                selected = select_manifest_paths(paths, "tiered-prefix-cache", accelerator, "vllm", "native/cpu/base")
+            status, donor, stderr = await self._runner(["kubectl", "kustomize", str(root / selected["guidePath"])])
+            if status or not donor.strip():
+                raise ValueError("Unable to render the native CPU cache source for composition")
+            reference = Path(artifact.manifest_ref or "")
+            path = reference / "manifest.yaml" if reference.is_dir() else reference
+            documents = compose_native_cpu_cache(list(yaml.safe_load_all(path.read_text())), list(yaml.safe_load_all(donor)), guide=definition.guide_id, capacity_gib=composition["nativeCpuCacheGiB"])
+            rendered = yaml.safe_dump_all(documents, sort_keys=False)
+            checksum = text_checksum(rendered)
+            if reference.is_dir():
+                path.write_text(rendered)
+            else:
+                directory = self._output_root / checksum.removeprefix("sha256:")
+                directory.mkdir(parents=True, exist_ok=True)
+                path = directory / "manifest.yaml"
+                path.write_text(rendered)
+                register_artifacts(directory, owner_type="deployment-manifest", owner_id=checksum.removeprefix("sha256:"), retention_class="configuration")
+            artifact = replace(artifact, manifest_ref=str(reference if reference.is_dir() else path), manifest_checksum=checksum, artifact_hash=stable_hash({"provider": artifact.artifact_hash, "composition": composition, "manifest": checksum}))
         artifact = prepare_shared_memory(artifact, self._output_root, exact=self._is_exact(overrides))
         if "_model_cache_dependencies" in overrides:
             from llm_d_lens.deploy.providers.storage_mount import validate_cached_model_arguments

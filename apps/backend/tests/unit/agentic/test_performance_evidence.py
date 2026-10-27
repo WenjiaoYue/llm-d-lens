@@ -81,7 +81,7 @@ def test_benchmark_performance_evidence_maps_matching_records_to_candidate_input
     assert len(evidence) == 1
     assert evidence[0].candidate_id == candidate.id
     assert evidence[0].status == "interpolated"
-    assert evidence[0].ttft_p95_ms == 300
+    assert evidence[0].ttft_p95_ms == pytest.approx(300)
     assert evidence[0].evidence_refs == ("benchmark:bench-1",)
     sample = evidence[0].weighted_samples[0]
     assert sample.benchmark_id == "bench-1"

@@ -156,3 +156,28 @@ def validate_configuration_extensions(content: dict[str, Any], manifest: str) ->
 
         validate_deployment_bundle(bundle, source.get("guide"), source.get("commit"))
     validate_guide_settings(content, manifest, source.get("guide", ""))
+    composition = content.get("guideComposition")
+    if composition:
+        from .guide_composition import composed_cache_config, runtime_probe, composition_servers
+        from kubernetes.utils.quantity import parse_quantity
+
+        if not isinstance(composition, dict) or set(composition) != {"nativeCpuCacheGiB"} or source.get("guide") not in {"optimized-baseline", "precise-prefix-cache-routing", "pd-disaggregation"}:
+            raise ValueError("Unsupported Guide composition")
+        capacity = composition["nativeCpuCacheGiB"]
+        if isinstance(capacity, bool) or not isinstance(capacity, (float, int)) or not math.isfinite(capacity) or not 0 < capacity <= 1024:
+            raise ValueError("Invalid composed CPU cache budget")
+        servers = composition_servers(list(yaml.safe_load_all(manifest)))
+        pd = source.get('guide') == 'pd-disaggregation'
+        if pd and {w['role'] for w, _ in servers} != {'prefill', 'decode'}:
+            raise ValueError('P/D composition requires both prefill and decode roles')
+        if not servers:
+            raise ValueError("Composed configuration requires model servers")
+        for workload, server in servers:
+            connector = json.loads(_option(_invocation_tokens(server, 'composition'), {'--kv-transfer-config'}, 'composition') or '{}')
+            cache = composed_cache_config(connector, pd=pd)
+            if pd and runtime_probe(server, connector) not in workload['pod'].get('initContainers', []):
+                raise ValueError('P/D composition requires a matching runtime capability probe')
+            if cache.get('kv_connector_extra_config', {}).get('cpu_bytes_to_use') != int(capacity * 1024**3):
+                raise ValueError("Composed cache does not match the saved manifest")
+            if parse_quantity(str(server.get('resources', {}).get('requests', {}).get('memory', '0'))) < int(capacity * 1024**3):
+                raise ValueError("Composed cache host memory is not reserved")

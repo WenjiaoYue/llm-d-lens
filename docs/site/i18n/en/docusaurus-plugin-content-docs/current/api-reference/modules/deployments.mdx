@@ -2512,3 +2512,28 @@ bindings belonging to another model. Generic binding creation rejects retired
 `deployment_run` and `deployment_execution` resource types.
   </TabItem>
 </Tabs>
+
+## Measured Agentic optimization
+
+`POST /api/agentic-deployments/{run_id}/optimize` returns HTTP 202 and the updated
+plan. It requires Agentic approval and benchmark creation permissions, cluster
+access and an active session. `POST /api/agentic-deployments/{run_id}/optimize/cancel`
+stops the task and cleans up its test deployments. Read progress through the
+existing `GET /api/agentic-deployments/{run_id}` response's `optimization` field.
+
+```json
+{"candidate_ids":["candidate-a","candidate-b"],"objective":"throughput","max_gpu_count":8,"max_duration_minutes":60,"max_benchmark_runs":4,"repetitions":2,"max_error_rate":0,"benchmark":{"matrix":[{"isl":512,"osl":128}],"concurrency_stages":[{"concurrency":4,"num_requests":100}]}}
+```
+
+The Python request type is `llm_d_lens.agentic.optimization.OptimizationRequest`.
+Objectives are `throughput`, `latency` and `throughput_per_gpu`. Optional
+`native_cpu_cache_gib` adds composition variants; its repetitions also count
+against `max_benchmark_runs`. Budgets are 1–1024 GPUs, 1–180 minutes, 1–30 runs
+and 1–3 repetitions. Invalid or insufficient budgets return 422 before starting.
+The response records `samples`, `ranking`, `best_candidate_id`, status and scope.
+Only completed comparable samples satisfying configured SLOs and the error cap
+are ranked. Cleanup failures remain visible and block approval.
+
+For interrupted cleanup, the cancel endpoint accepts the optional `cluster_session_id` query parameter. It must resolve to the original test cluster; a different cluster is rejected with HTTP 409.
+
+`guideComposition.nativeCpuCacheGiB` also supports `pd-disaggregation` with built-in NixlConnector/kv_both on both roles. The adapter emits ordered MultiConnector children and an image-matched capability init container; saved manifests must retain both. `native_cpu_cache_gib` in measured optimization adds P/D variants as well. Missing adapters, mismatched images, missing roles, and modified cache budgets fail validation. Capability checks do not replace workload correctness tests or benchmarks.

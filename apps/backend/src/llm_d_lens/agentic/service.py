@@ -265,6 +265,7 @@ class AgenticDeploymentService:
             prefill_replicas=selected.prefill_replicas,
             prefill_tensor_parallel_size=selected.prefill_tensor_parallel_size,
             guide_variant=selected.guide_variant,
+            native_cpu_cache_gib=selected.native_cpu_cache_gib,
             max_model_len=selected.max_model_len,
             gpu_memory_utilization=selected.gpu_memory_utilization,
             evidence=selected.evidence_ids,
@@ -1014,6 +1015,7 @@ class AgenticDeploymentService:
         run.planner_fallback_reason = planner_fallback_reason
         run.request = run.request.model_copy(update={"planner_prompt": request.planner_prompt})
         run.updated_at = datetime.now(UTC)
+        run.optimization = None
         snapshot = self._snapshot_store.save(run, refreshed.facts, event="refined")
         run.planning_snapshot_id = snapshot.snapshot_id
         run.planning_snapshot_path = snapshot.relative_path
@@ -1038,6 +1040,7 @@ class AgenticDeploymentService:
             prefill_replicas=selected.prefill_replicas,
             prefill_tensor_parallel_size=selected.prefill_tensor_parallel_size,
             guide_variant=selected.guide_variant,
+            native_cpu_cache_gib=selected.native_cpu_cache_gib,
             max_model_len=selected.max_model_len,
             gpu_memory_utilization=selected.gpu_memory_utilization,
             evidence=selected.evidence_ids,

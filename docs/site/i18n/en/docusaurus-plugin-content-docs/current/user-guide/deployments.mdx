@@ -274,3 +274,53 @@ metrics require kubelet-reported, profile-recognized device identities; an
 exporter alone cannot establish which devices belong to the workload. Profile
 file edits require restarting the development services and refreshing the page;
 this is not a live JSON editor. Existing saved results are not recollected.
+
+## Review a generated deployment
+
+Manual configuration includes **Automatic optimization completion**. Specify whether
+requests reuse prompt prefixes and optionally exclude prefix caching or chunked
+prefill. Completion only changes runtime flags established by the selected source;
+unknown support is reported under **Selection reasons**. Explicit runtime controls
+remain authoritative. Guide composition supports optimized baseline, precise routing, and NIXL P/D plus native CPU KV cache from the same pinned official source. Runtime images must match. P/D wraps the original NixlConnector first and OffloadingConnector second in MultiConnector on both Prefill and Decode, preserving transport settings and reserving local host memory per model pod. A same-image init container checks connector imports and configuration schemas before startup; it rejects the known vLLM 0.19.0 offloading defect (upstream issues #39500/#39617). This check does not establish GPU correctness or performance. Unsupported transports produce an adapter-specific error; arbitrary connector stacking is not supported. Composition alone does not prove optimal performance.
+
+After **Generate YAML**, **Overview** shows declared resource relationships. Choose
+**3D explorer** for spatial inspection, **Selection reasons** for policy decisions,
+or **YAML** for the generated document. These views describe a proposed deployment,
+not live traffic. Select a component to inspect it. For a single configuration,
+model role replicas and tensor parallel size can be edited; apply the change and
+generate again before saving. Other runtime parameters remain in the existing form.
+
+Agentic recommendations use the same review surface for candidate topology. With an
+AI provider, topology edits request a revised recommendation through the existing
+planner; the returned candidate must be reviewed again and may differ if constraints
+prevent the request. **Review recommendation** selects a candidate without deploying.
+**Confirm and deploy reviewed candidate** explicitly approves it. Candidate review
+precedes final YAML generation; predicted scores are not benchmark measurements.
+
+## Measure and compare Agentic candidates
+
+Open **Verify with real benchmarks**, select candidates, set the GPU ceiling,
+maximum minutes, benchmark-run budget and repetitions, then choose throughput,
+P95 end-to-end latency or throughput per GPU as the objective. The optional CPU
+cache budget adds a composed trial variant for each compatible base; include
+those extra repetitions in the benchmark-run budget. The default synthetic load
+uses 512 input tokens, 128 output tokens, concurrency 4 and 100 requests. Expand
+**Test workload** to change these values or supply representative inference-perf
+YAML, such as a shared-prefix workload for cache experiments.
+
+**Start deployment and benchmark tests** provisions actual cluster resources.
+Each candidate is deployed, tested with the same workload and cleaned up before
+the next candidate. Complete repetitions must satisfy every configured latency
+SLO and the error limit. Missing metrics and failed trials never count as proof
+of superiority. Results include benchmark IDs and a ranking of completed trials;
+review the best measured candidate before confirming its final deployment.
+
+Use **Stop and clean up** to cancel. Cleanup may outlast the measurement budget;
+a cleanup failure blocks further deployment until resolved. Progress is audited
+with the candidate configuration and workload. After a service interruption,
+the recorded test task is marked interrupted and offers explicit cleanup; it
+never automatically resumes deployment. Browser refresh restores the current
+plan in the same session. This is bounded candidate search, not an unbounded
+self-modifying optimization loop or a claim of global optimality.
+
+The Overview and 3D tabs show each role’s transport and local CPU cache separately. Agentic CPU-cache trials include eligible P/D candidates and compare them with their original configuration using the same workload. The default NIXL-first order prioritizes transport when multiple connectors report a hit; it does not guarantee fewer network transfers. Confirm workload correctness and performance with real measurements.

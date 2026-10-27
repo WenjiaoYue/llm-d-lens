@@ -2381,3 +2381,26 @@ def revoke_model_grant(model_id: str, binding_id: str, principal) -> None:
 通用绑定创建方法也会拒绝已退役的 `deployment_run` 和 `deployment_execution` 资源类型。
   </TabItem>
 </Tabs>
+
+## Agentic 实测优化
+
+`POST /api/agentic-deployments/{run_id}/optimize` 返回 HTTP 202 和更新后的方案。
+需要 Agentic 批准权限、压测创建权限、集群访问权限和有效会话。
+`POST /api/agentic-deployments/{run_id}/optimize/cancel` 停止任务并清理其测试部署。
+通过现有 `GET /api/agentic-deployments/{run_id}` 的 `optimization` 字段读取进度。
+
+```json
+{"candidate_ids":["candidate-a","candidate-b"],"objective":"throughput","max_gpu_count":8,"max_duration_minutes":60,"max_benchmark_runs":4,"repetitions":2,"max_error_rate":0,"benchmark":{"matrix":[{"isl":512,"osl":128}],"concurrency_stages":[{"concurrency":4,"num_requests":100}]}}
+```
+
+Python 请求类型为 `llm_d_lens.agentic.optimization.OptimizationRequest`。
+目标支持 `throughput`、`latency` 和 `throughput_per_gpu`。
+可选 `native_cpu_cache_gib` 增加组合变体，其重复测试同样计入运行次数预算。
+预算范围为 1–1024 GPU、1–180 分钟、1–30 次运行、每候选重复 1–3 次。
+预算无效或不足时，在执行前返回 422。结果包含 `samples`、`ranking`、
+`best_candidate_id`、状态和适用范围。仅完成、可比较且满足 SLO 和错误率上限的
+测量进入排名；清理失败会明确显示并阻止批准部署。
+
+清理中断任务时，取消端点接受可选查询参数 `cluster_session_id`，必须指向原测试集群；其他集群会返回 HTTP 409。
+
+`guideComposition.nativeCpuCacheGiB` 支持两种角色均使用内置 NixlConnector/kv_both 的 `pd-disaggregation`。适配器生成有序 MultiConnector 子连接器及相同镜像的能力检查初始化容器，保存的清单必须保留两者。实测优化中的 `native_cpu_cache_gib` 也会添加 P/D 变体。缺少适配器、镜像不匹配、角色缺失或缓存预算被修改均会校验失败。能力检查不能替代负载正确性测试和基准测试。

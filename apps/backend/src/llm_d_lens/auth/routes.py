@@ -119,6 +119,8 @@ ROUTE_PERMISSIONS: tuple[RoutePermission, ...] = (
     RoutePermission("POST", "/api/agentic-deployments/{run_id}/refine", "deployment:agentic:create"),
     RoutePermission("POST", "/api/agentic-deployments/{run_id}/refine/stream", "deployment:agentic:create"),
     RoutePermission("POST", "/api/agentic-deployments/{run_id}/select", "deployment:agentic:create"),
+    RoutePermission("POST", "/api/agentic-deployments/{run_id}/optimize", "deployment:agentic:approve"),
+    RoutePermission("POST", "/api/agentic-deployments/{run_id}/optimize/cancel", "deployment:agentic:approve"),
     # --- capacity planning ---
     RoutePermission("POST", "/api/v1/capacity/estimate", "deployment:agentic:read"),
     # --- cluster ---

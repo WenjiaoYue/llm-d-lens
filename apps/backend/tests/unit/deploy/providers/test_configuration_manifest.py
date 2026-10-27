@@ -850,3 +850,23 @@ async def test_pd_manifest_ensures_storage_volume_pvc_before_delegate_lifecycle(
     assert ensure_calls == [(volume, "llm-d-bench-run", "d459a19d")]
     delegate.deploy.assert_awaited_once_with(artifact, context)
     assert result == {"namespace": "llm-d-bench-run"}
+
+
+@pytest.mark.asyncio
+async def test_native_cpu_cache_composition_renders_before_deploy(monkeypatch, tmp_path):
+    from llm_d_lens.deploy import guide_planning
+    base = {'kind': 'Deployment', 'metadata': {'name': 'model'}, 'spec': {'template': {'spec': {'containers': [{'name': 'modelserver', 'image': 'runtime:1', 'args': ['model']}]}}}}
+    source = tmp_path / 'base.yaml'
+    source.write_text(yaml.safe_dump(base))
+    donor = json.loads(json.dumps(base))
+    donor['spec']['template']['spec']['containers'][0]['args'] += ['--kv-transfer-config', json.dumps({'kv_connector': 'OffloadingConnector', 'kv_role': 'kv_both', 'kv_connector_extra_config': {'cpu_bytes_to_use': 1024**3}})]
+    runner = AsyncMock(return_value=(0, yaml.safe_dump(donor), ''))
+    monkeypatch.setattr(guide_planning, 'select_manifest_paths', lambda *args: {'guidePath': 'guides/cache'})
+    delegate = SimpleNamespace(_guide_root=tmp_path, _accelerator='gpu', render=AsyncMock(return_value=GuideDeploymentArtifact(guide_id='optimized-baseline', artifact_hash='base', manifest_ref=str(source))))
+    adapter = ConfigurationManifestAdapter(delegate, runner, 'test-', 5, tmp_path / 'output')
+    artifact = await adapter.render(GuideDefinition('optimized-baseline', 'revision', 'hash', 'stable'), {'guideComposition': {'nativeCpuCacheGiB': 4}})
+    rendered = Path(artifact.manifest_ref).read_text()
+    assert 'OffloadingConnector' in rendered
+    assert str(4 * 1024**3) in rendered
+    assert 'OffloadingConnector' not in source.read_text()
+    runner.assert_awaited_once()

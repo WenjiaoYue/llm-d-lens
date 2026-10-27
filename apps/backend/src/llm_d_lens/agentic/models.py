@@ -24,6 +24,7 @@ def utcnow() -> datetime:
 class AgenticDeploymentStatus(StrEnum):
     AWAITING_APPROVAL = "awaiting_approval"
     DEPLOYING = "deploying"
+    OPTIMIZING = "optimizing"
     RECOMMENDED = "recommended"
     CANCELLED = "cancelled"
     FAILED = "failed"
@@ -58,6 +59,7 @@ class AgenticCandidate(BaseModel):
     prefill_replicas: int | None = None
     prefill_tensor_parallel_size: int | None = None
     guide_variant: str | None = None
+    native_cpu_cache_gib: float | None = Field(default=None, gt=0, le=1024, allow_inf_nan=False)
     max_model_len: int
     gpu_memory_utilization: float
     evidence: list[str] = Field(default_factory=list)
@@ -108,6 +110,7 @@ class AgenticDeploymentRun(BaseModel):
     configuration_artifact_id: str | None = None
     deployment_run_id: str | None = None
     deployment_execution_id: str | None = None
+    optimization: dict | None = None
     error: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

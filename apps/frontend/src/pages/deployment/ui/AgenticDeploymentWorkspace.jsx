@@ -1,3 +1,5 @@
+import { MeasuredOptimizationControls } from './MeasuredOptimizationControls';
+import { DeploymentPlanReview } from './DeploymentPlanReview';
 import { requestJson } from '../../../shared/api/httpClient';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, CheckCircle2, ChevronDown, Cpu, FileStack, LoaderCircle, RotateCcw, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
@@ -104,7 +106,7 @@ function CandidateRow({ candidate, selected, analysis, onDeploy, deploying, canD
                         KV: {candidate.allocatable_kv_cache_gib} GiB{candidate.max_concurrent_requests ? ` · Max ${candidate.max_concurrent_requests} req` : ''}
                     </div>
                 )}
-                {canDeploy && <Button variant={selected ? 'primary' : 'outline'} size="xs" className="mt-2" onClick={() => onDeploy(candidate.id)} isLoading={deploying}><CheckCircle2 size={13} />Deploy recommendation</Button>}
+                {canDeploy && <Button variant={selected ? 'primary' : 'outline'} size="xs" className="mt-2" onClick={() => onDeploy(candidate.id)} isLoading={deploying}><CheckCircle2 size={13} />Review recommendation</Button>}
             </div>
             <details className="col-span-full border-t border-slate-800/70 pt-2">
                 <summary className="cursor-pointer text-[11px] text-slate-400">Why this option</summary>
@@ -155,6 +157,15 @@ function generatorFallbackSummary(reason) {
 
 export default function AgenticDeploymentWorkspace({ draft, embedded = false, onBack, onDeploymentStarted, vllmParameterControls }) {
     const [run, setRun] = useState(null);
+    const savedPlanKey = `lens-agentic-plan:${draft?.clusterId}:${draft?.model}`;
+    useEffect(() => {
+        let active = true;
+        const id = sessionStorage.getItem(savedPlanKey);
+        if (id) api(`/api/agentic-deployments/${encodeURIComponent(id)}`).then(value => { if (active) setRun(value); }).catch(() => {});
+        return () => { active = false; };
+    }, [savedPlanKey]);
+    useEffect(() => { if (run) sessionStorage.setItem(savedPlanKey, run.id); }, [savedPlanKey, run?.id]);
+    const [reviewedCandidateId, setReviewedCandidateId] = useState('');
     const [creating, setCreating] = useState(false);
     const [deployingCandidateId, setDeployingCandidateId] = useState('');
     const [error, setError] = useState('');
@@ -244,6 +255,7 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
 
     const refinePlan = async () => {
         if (!run || !refinementPrompt.trim()) return;
+        setReviewedCandidateId('');
         setRefining(true);
         setError('');
         setRefinementEvents([{ phase: 'initialization', status: 'running', message: 'Connecting to the recommendation service.' }]);
@@ -265,6 +277,9 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
     };
 
     const reset = () => {
+        if (run?.status === 'optimizing') return;
+        setReviewedCandidateId('');
+        sessionStorage.removeItem(savedPlanKey);
         setRun(null);
         setRequirements(DEFAULT_REQUIREMENTS);
         setPlannerPrompt('');
@@ -274,8 +289,9 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
         setError('');
     };
 
-    const deployCandidate = async (candidateId) => {
-        if (!run) return;
+    const deployCandidate = async (candidateId, confirm = false) => {
+        if (!run || run.status !== 'awaiting_approval' || refining || deployingCandidateId) return;
+        if (confirm && (reviewedCandidateId !== candidateId || run.selected_candidate?.id !== candidateId)) return;
         setDeployingCandidateId(candidateId);
         setError('');
         try {
@@ -285,6 +301,7 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
                 });
                 setRun(updated);
             }
+            if (!confirm) { setReviewedCandidateId(candidateId); return; }
             await api(`/api/agentic-deployments/${encodeURIComponent(run.id)}/approve`, { method: 'POST' });
             onDeploymentStarted();
         } catch (failure) {
@@ -294,6 +311,21 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
         }
     };
 
+    const requestTopologyRevision = async ({ node, patch }) => {
+        if (!run || !run.request?.ai_provider_id) throw new Error('Select an AI provider to request a revised candidate.');
+        setRefining(true); setReviewedCandidateId('');
+        try {
+            const prompt = `Revise the ${node.id === 'prefill' ? 'prefill' : 'decode'} topology: ${JSON.stringify(patch)}. Preserve the original hard constraints. Reject this request explicitly if it cannot be satisfied; re-evaluate all affected evidence.`;
+            let updated = null;
+            await streamAgenticRefinement(run.id, { planner_prompt: prompt }, (type, data) => {
+                if (type === 'progress') setRefinementEvents(current => [...current.slice(-59), data]);
+                if (type === 'complete') updated = data;
+                if (type === 'error') throw new Error(data.message || 'Refinement failed');
+            });
+            if (!updated) throw new Error('No revised candidate returned.');
+            setRun(updated);
+        } finally { setRefining(false); }
+    };
     const input = (label, name, props = {}) => (
         <label className="text-xs text-slate-400">{label}
             <input className="mt-1 h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 text-sm text-slate-200 placeholder:text-theme-muted" type="number" placeholder="Optional" value={requirements[name]} onChange={updateRequirement(name)} {...props} />
@@ -374,10 +406,17 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
             </section>}
             {run && <section className="flex flex-col gap-5">
                 <div className="rounded-lg border border-slate-800 bg-slate-900/65 p-5"><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-white">{run.selected_candidate?.provider_ref}</h2><StatusChip status={run.status} label={run.status.replaceAll('_', ' ')} /><Badge tone={run.generator === 'ai-mcp' ? 'info' : 'neutral'} size="xs">{generatorLabel(run.generator)}</Badge></div><p className="mt-2 text-xs text-slate-400">Recommended for {draft.model}</p><p className="mt-2 text-xs leading-5 text-slate-300">{run.decision?.rationale}</p></div>
+                <DeploymentPlanReview key={`${run.id}:${run.updated_at}`} candidate={run.selected_candidate} model={draft.model} mode="agentic" disabled={refining || !!deployingCandidateId || !canDeploy} onEdit={run.request?.ai_provider_id ? requestTopologyRevision : undefined} decisions={[
+                    { id: 'selection', label: 'Why this candidate', status: 'recommended', reason: run.decision?.rationale || 'Selected from validated candidates.' },
+                    { id: 'evidence', label: 'Evidence boundary', status: run.optimization?.ranking?.some(item => item.candidate_id === run.selected_candidate?.id) ? 'measured for the tested workload' : 'not benchmark verified', reason: run.optimization?.ranking?.find(item => item.candidate_id === run.selected_candidate?.id)?.benchmark_ids?.join(', ') || 'Scores and historical evidence support the recommendation; this candidate still requires workload validation.' },
+                    ...(run.rejected_candidates || []).map(item => ({ id: item.id, label: item.provider_ref, status: 'rejected', reason: (item.rejection_reasons || []).join('; ') })),
+                ]} />
+                {reviewedCandidateId === run.selected_candidate?.id && canDeploy && <div className="flex justify-end"><Button onClick={() => deployCandidate(reviewedCandidateId, true)} isLoading={!!deployingCandidateId} disabled={refining}>Confirm and deploy reviewed candidate</Button></div>}
+                <MeasuredOptimizationControls key={run.id} run={run} onUpdate={updated => { setReviewedCandidateId(''); setRun(updated); }} onReview={deployCandidate} disabled={refining || !!deployingCandidateId || (!canDeploy && run.status !== 'optimizing')} />
                 {run.generator_fallback_reason && <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-100"><span className="font-semibold">Built-in candidate generation used.</span> {generatorFallbackSummary(run.generator_fallback_reason)}</div>}
                 {run.planner_fallback_reason && <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-100"><span className="font-semibold">Built-in ranking used.</span> {fallbackSummary(run.planner_fallback_reason)}</div>}
                 <div className="grid gap-4">
-                    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/45"><div className="flex items-center gap-2 border-b border-slate-800 bg-slate-950/55 px-4 py-3"><Cpu size={15} className="text-cyan-300" /><h3 className="text-xs font-semibold text-slate-200">Validated alternatives</h3></div>{run.candidates?.map((candidate, index) => <CandidateRow key={candidate.id} candidate={candidate} selected={candidate.id === run.selected_candidate?.id} analysis={candidateAnalysis(candidate, index, aicConfigs, relaxedConfigs, clusterDetails)} onDeploy={deployCandidate} deploying={deployingCandidateId === candidate.id} canDeploy={canDeploy} />)}{canDeploy && <div className="border-t border-slate-800 p-3"><textarea className="min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-slate-200" value={refinementPrompt} onChange={(event) => setRefinementPrompt(event.target.value)} maxLength={2000} placeholder="Describe unmet needs. The external planner can choose and score up to ten validated candidates." />{refining && <GenerationProgress events={refinementEvents} />}<div className="mt-2 flex justify-end"><Button size="xs" variant="secondary" onClick={refinePlan} isLoading={refining} disabled={!refinementPrompt.trim()}>Recalculate selection</Button></div></div>}</div>
+                    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/45"><div className="flex items-center gap-2 border-b border-slate-800 bg-slate-950/55 px-4 py-3"><Cpu size={15} className="text-cyan-300" /><h3 className="text-xs font-semibold text-slate-200">Validated alternatives</h3></div>{run.candidates?.map((candidate, index) => <CandidateRow key={candidate.id} candidate={candidate} selected={candidate.id === run.selected_candidate?.id} analysis={candidateAnalysis(candidate, index, aicConfigs, relaxedConfigs, clusterDetails)} onDeploy={deployCandidate} deploying={deployingCandidateId === candidate.id} canDeploy={canDeploy && !refining && !deployingCandidateId} />)}{canDeploy && <div className="border-t border-slate-800 p-3"><textarea className="min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-slate-200" value={refinementPrompt} onChange={(event) => setRefinementPrompt(event.target.value)} maxLength={2000} placeholder="Describe unmet needs. The external planner can choose and score up to ten validated candidates." />{refining && <GenerationProgress events={refinementEvents} />}<div className="mt-2 flex justify-end"><Button size="xs" variant="secondary" onClick={refinePlan} isLoading={refining} disabled={!refinementPrompt.trim()}>Recalculate selection</Button></div></div>}</div>
                     <div className="rounded-lg border border-slate-800 bg-slate-900/45"><div className="flex items-center gap-2 border-b border-slate-800 bg-slate-950/55 px-4 py-3"><FileStack size={15} className="text-cyan-300" /><h3 className="text-xs font-semibold text-slate-200">Decision evidence</h3></div><div className="divide-y divide-slate-800/70">
                         {run.decision_metadata && <div className="p-3"><p className="text-xs font-semibold text-slate-200">{run.decision_metadata.planner === 'openai-compatible' ? 'External planner' : 'Prism deterministic planner'}</p><p className="mt-1 text-[11px] text-slate-400">Candidates: {run.generator === 'ai-mcp' ? 'AI-generated with MCP evidence' : 'Prism deterministic generator'}</p>{usedAiProviderName && <p className="mt-1 text-[11px] text-slate-400">AI provider: {usedAiProviderName}</p>}{run.generator_model && <p className="mt-1 text-[11px] text-slate-400">Generator model: {run.generator_model}</p>}{run.decision_metadata.planner_model && <p className="mt-1 text-[11px] text-slate-400">Scoring model: {run.decision_metadata.planner_model}</p>}<p className="mt-2 text-[11px] leading-4 text-slate-400">{run.decision_metadata.selection_method}</p><p className="mt-2 text-[11px] leading-4 text-slate-500">{run.decision_metadata.score_method}</p></div>}
                         {run.planning_evidence?.length ? run.planning_evidence.map((item) => { const label = evidenceLabel(item, hasAicPrediction); if (!label) return null; const used = (run.decision_evidence_ids || []).includes(item.id); return <div key={`${item.source}:${item.id}`} className="p-3"><div className="flex items-center justify-between gap-2"><span className="text-xs text-slate-200">{label}</span><Badge tone={used ? 'success' : 'neutral'} size="xs">{used ? 'used for selection' : 'context only'}</Badge></div>{item.id === 'aic:search' && <p className="mt-1 text-[10px] text-slate-500">Support was verified before the prediction search.</p>}</div>; }) : <EmptyState icon={<ShieldCheck size={24} />} title="No evidence available" message="The recommendation remains constrained by the live cluster checks." />}

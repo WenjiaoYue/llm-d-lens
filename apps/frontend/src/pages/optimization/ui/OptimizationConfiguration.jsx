@@ -1,3 +1,5 @@
+import { DeploymentPlanReview } from '../../deployment/ui/DeploymentPlanReview';
+import { Checkbox, Select, Panel, Input } from '../../../shared/ui';
 import { guideVariantOptions, selectedGuideVariant } from '../../evaluation/model/capabilities.js';
 import { useHardwareProfiles } from '../../../shared/lib/useHardwareProfiles.js';
 import { getHardwareProfiles } from '../../clusters';
@@ -254,6 +256,8 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
     const buildSourceUrl = sharedContext?.buildSourceUrl ?? localBuildSourceUrl;
     const [planning, setPlanning] = useState(false);
     const [planResult, setPlanResult] = useState(null);
+    const [compositionCpuGiB, setCompositionCpuGiB] = useState('');
+    const [optimizationPolicy, setOptimizationPolicy] = useState({ mode: 'manual', prefixReuse: 'unknown', excluded: [] });
     useEffect(() => {
         if (!embedded || !planResult) return undefined;
         const frame = window.requestAnimationFrame(() => {
@@ -771,6 +775,8 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
 
     const planningRequest = (current, replicaCount, tpCount, prefillReplicaCount = Number(prefillReplicas), prefillTpCount = Number(prefillTensorParallelSize), guideSelection = selection) => ({
         ...guideSelection,
+        optimizationPolicy,
+        guideComposition: compositionCpuGiB ? { nativeCpuCacheGiB: Number(compositionCpuGiB) } : undefined,
         resourceBasis,
         recommendationGpuCount: budget,
         guideSettings: normalizeGuideSettings(guideSelection.guide, guideVariant, guideSettings),
@@ -813,7 +819,26 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
 
     const updateCustomRows = (rows) => setCustomRows(rows);
 
-    const previewInputs = JSON.stringify({ selection, model, modelSource, modelPath, image, guideSourceMode, localGuidePath, remoteGuideRepository, remoteGuideRef, remoteGuidePath, replicas, tensorParallelSize, prefillReplicas, prefillTensorParallelSize, replicaVariants, tensorParallelVariants, prefillReplicaVariants, prefillTensorParallelVariants, pdTopologyVariants, guideVariant, guideSettings, maxModelLen, maxNumSeqs, gpuMemoryUtilization, blockSize, maxNumBatchedTokens, customParametersText });
+    const editReviewedTopology = ({ node, patch }) => {
+        const current = topologyPreviewVariants[0];
+        if (!current) throw new Error('Generate a single configuration before editing topology.');
+        const prefill = node.role === 'prefill';
+        const next = {
+            replicaCount: !prefill && patch.replicas ? patch.replicas : current.replicaCount,
+            tpCount: !prefill && patch.tensorParallelSize ? patch.tensorParallelSize : current.tpCount,
+            prefillReplicaCount: prefill && patch.replicas ? patch.replicas : current.prefillReplicaCount,
+            prefillTpCount: prefill && patch.tensorParallelSize ? patch.tensorParallelSize : current.prefillTpCount,
+        };
+        setReplicas(next.replicaCount); setReplicaVariants(String(next.replicaCount));
+        setTensorParallelSize(next.tpCount); setTensorParallelVariants(String(next.tpCount));
+        if (selection.guide === 'pd-disaggregation') {
+            setPrefillReplicas(next.prefillReplicaCount); setPrefillReplicaVariants(String(next.prefillReplicaCount));
+            setPrefillTensorParallelSize(next.prefillTpCount); setPrefillTensorParallelVariants(String(next.prefillTpCount));
+            if (pdTopologyVariants.trim()) setPdTopologyVariants(`${next.prefillReplicaCount}:${next.replicaCount}`);
+        }
+        setPlanResult(null);
+    };
+    const previewInputs = JSON.stringify({ compositionCpuGiB, optimizationPolicy, selection, model, modelSource, modelPath, image, guideSourceMode, localGuidePath, remoteGuideRepository, remoteGuideRef, remoteGuidePath, replicas, tensorParallelSize, prefillReplicas, prefillTensorParallelSize, replicaVariants, tensorParallelVariants, prefillReplicaVariants, prefillTensorParallelVariants, pdTopologyVariants, guideVariant, guideSettings, maxModelLen, maxNumSeqs, gpuMemoryUtilization, blockSize, maxNumBatchedTokens, customParametersText });
     useEffect(() => { setPlanResult(null); setServerFieldErrors([]); }, [previewInputs]);
 
     useEffect(() => {
@@ -932,6 +957,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                 }
                 const candidateConfig = {
                     schema_version: '1.0',
+                    guide_composition: compositionCpuGiB ? { nativeCpuCacheGiB: Number(compositionCpuGiB) } : undefined,
                     type: isPd ? 'pd' : 'baseline',
                     guide_settings: normalizeGuideSettings(workload.guide, guideVariant, guideSettings),
                     candidate_source: { name: sourceName },
@@ -1533,7 +1559,8 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                         {embedded && modelSource === 'auto-cache' && modelCacheValidation.state !== 'ready' && <p className="mt-3 text-xs text-amber-300">{modelCacheValidation.state === 'loading' ? 'Checking model cache…' : modelCacheValidation.message || 'Select a ready model cache in Evaluation Setup.'}</p>}
                         {embedded && !catalogLoading && !selectedModelServer && <p className="mt-3 text-xs text-amber-300">This Guide does not support the runtime selected in Setup. Choose another Guide or edit Setup.</p>}
                         {!embedded && validationSubmitted && fieldErrors.length > 0 && <div role="alert" className="mt-3 flex items-center justify-between gap-3 text-xs text-rose-300"><span>{new Set(fieldErrors.map(error => error.field)).size} fields need attention</span><button type="button" className="underline" onClick={() => focusConfigurationError(editorRef.current, fieldErrors, true)}>Next error</button></div>}
-                        {!embedded && <div className="mt-4 flex justify-end">
+                        {!embedded && <div className="mt-4 flex flex-col gap-4">
+                            <OptimizationCompletion policy={optimizationPolicy} onChange={setOptimizationPolicy} compositionCpuGiB={compositionCpuGiB} setCompositionCpuGiB={setCompositionCpuGiB} />
                             <ResourceBasisControl value={resourceBasis} hardware={clusterHardware} requiredCards={Math.max(1, ...topologyPreviewVariants.map(row => row.gpuCount))} disabled={operationBusy || catalogLoading} loading={planning} onGenerate={generate} label="Generate YAML" />
                         </div>}
                         </fieldset>
@@ -1568,7 +1595,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                                 <div className="mb-1 flex items-center gap-2 text-[11px] text-slate-400">
                                     <FileCode className="h-3.5 w-3.5" /> Deployment configuration preview (published artifact is the deployment source)
                                 </div>
-                                <YamlPreview content={planResult.plannedDeployment?.content || ''} prominent />
+                                <DeploymentPlanReview content={planResult.plannedDeployment?.content || ''} decisions={planResult.optimizationDecisions || []} disabled={operationBusy} onEdit={singleConfiguration || topologyPreviewVariants.length === 1 ? editReviewedTopology : undefined} />
                             </div>
                             <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
                                 <button type="button" disabled={validation.status === 'invalid' || publishing} onClick={() => sendGuideToEvaluate()}
@@ -1582,6 +1609,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
 
             {embedded && onPublished && !singleConfiguration && !deployOnPublish && <div id="optimizationSelection"><OptimizationComparisonTree guide={selection.guide} selected={optimizationSelection} onChange={setOptimizationSelection} disabled={operationBusy} /></div>}
 
+            {embedded && <OptimizationCompletion policy={optimizationPolicy} onChange={setOptimizationPolicy} compositionCpuGiB={compositionCpuGiB} setCompositionCpuGiB={setCompositionCpuGiB} />}
             {embedded && <footer className="flex flex-wrap items-center justify-between gap-3 py-2">
                 <div className="min-w-0 flex-1" role="status" aria-live="polite">
                     {!operationBusy && validationSubmitted && fieldErrors.length > 0 && <button type="button" className="text-xs text-rose-300 underline" onClick={() => focusConfigurationError(editorRef.current, fieldErrors, true)}>{new Set(fieldErrors.map(error => error.field)).size} fields need attention · Next error</button>}
@@ -1606,7 +1634,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                     <p className="mt-1 text-[10px] text-slate-500">Source {planResult.deploymentBundle.sourceCommit} · Router {planResult.deploymentBundle.helm?.version}. These inputs are saved and reused during deployment.</p>
                     {[...(planResult.deploymentBundle.helm?.values || []), ...(planResult.deploymentBundle.resources || [])].map(file => <YamlPreview key={file.name} title={file.name} content={file.content} defaultOpen={false} />)}
                 </div>}
-                <YamlPreview content={planResult.plannedDeployment?.content || ''} prominent />
+                <DeploymentPlanReview content={planResult.plannedDeployment?.content || ''} decisions={planResult.optimizationDecisions || []} disabled={operationBusy} onEdit={singleConfiguration || topologyPreviewVariants.length === 1 ? editReviewedTopology : undefined} />
             </section>}
             {embedded && planResult?.plannedDeployment?.content && <div className="flex justify-end gap-2">
                 {!deployOnPublish && <button type="button" disabled={validation.status === 'invalid' || publishing} onClick={() => sendGuideToEvaluate('another')} className="inline-flex h-9 items-center rounded-lg border border-slate-700 px-4 text-xs text-slate-200 hover:border-cyan-500/50 disabled:opacity-40">Save &amp; add another</button>}
@@ -1624,4 +1652,13 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         </section>
         </ConfigurationValidationContext.Provider>
     );
+}
+
+function OptimizationCompletion({ policy, onChange, compositionCpuGiB, setCompositionCpuGiB }) {
+    return <Panel title="Automatic optimization completion">
+                                <p className="text-sm text-theme-muted">Complete compatible settings within the selected Guide. Separate topology recipes are shown as alternatives, never silently combined.</p>
+                                <label className="block text-sm mt-3">Do requests reuse prompt prefixes?<Select value={policy.prefixReuse} onChange={event => onChange(current => ({ ...current, prefixReuse: event.target.value }))}><option value="unknown">Unknown — preserve source behavior</option><option value="yes">Yes — enable when source support is known</option><option value="no">No repeated prefixes</option></Select></label>
+                                <label className="block text-sm mt-3">Add native CPU KV cache from another Guide (GiB per replica)<Input type="number" min="1" max="1024" value={compositionCpuGiB} onChange={event => setCompositionCpuGiB(event.target.value)} placeholder="Optional" /></label><p className="text-xs text-theme-muted mt-1">Supports baseline, precise routing, and NIXL P/D with matching source images. P/D preserves transport and adds a local cache to each role; runtime support is checked at deployment. Benchmark before choosing. Clear this field to remove the composition.</p>
+                                <details className="mt-3"><summary>Optimization exclusions</summary>{[['prefix', 'Disable prefix caching'], ['chunked', 'Disable chunked prefill']].map(([id, label]) => <Checkbox key={id} label={label} checked={policy.excluded.includes(id)} onChange={event => onChange(current => ({ ...current, excluded: event.target.checked ? [...current.excluded, id] : current.excluded.filter(value => value !== id) }))} />)}</details>
+                            </Panel>;
 }

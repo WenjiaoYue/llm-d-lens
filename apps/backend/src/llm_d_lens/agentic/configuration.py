@@ -87,6 +87,8 @@ def build_agentic_configuration(
             ],
         ],
     }
+    if candidate.native_cpu_cache_gib is not None:
+        content['guideComposition'] = {'nativeCpuCacheGiB': candidate.native_cpu_cache_gib}
     # Agentic plans must carry the same credential policy as the selected
     # Model Cache entry.  Cache readiness only proves that model files exist;
     # llm-d still requires its deployment Secret, and omitting this field

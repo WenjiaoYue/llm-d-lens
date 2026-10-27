@@ -14,6 +14,7 @@ import yaml
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from llm_d_lens.configuration.optimization_policy import resolve_optimization_policy
 from llm_d_lens.configuration.manifest_facts import _invocation_tokens, workload_roles
 from llm_d_lens.core.exceptions import DomainError
 from llm_d_lens.hardware.registry import all_profiles
@@ -1070,7 +1071,37 @@ async def plan(request: Request):
             machine = dict(machine, accelerator=detected_cluster["accelerator"])
         render_started = time.monotonic()
         documents = [document for document in yaml.safe_load_all(manifest["rendered"]) if document]
+        try:
+            body, optimization_decisions = resolve_optimization_policy(body, documents)
+        except ValueError as error:
+            raise GuideError(str(error)) from error
         planned = plan_documents(documents, model, machine, detected_cluster, body)
+        composition = body.get("guideComposition")
+        if composition:
+            from llm_d_lens.configuration.guide_composition import compose_native_cpu_cache
+
+            if not isinstance(composition, dict) or set(composition) != {"nativeCpuCacheGiB"}:
+                raise GuideError("Unknown Guide composition; select a supported CPU cache composition.")
+            if body.get("modelServer") != "vllm" or (body.get("source") or {}).get("mode", "official") != "official":
+                raise GuideError("Guide composition requires a pinned official vLLM source.")
+            donor_request = {
+                **body, "guide": "tiered-prefix-cache", "guideVariant": "native/cpu",
+                "source": {"mode": "official"},
+            }
+            try:
+                donor = await load_selected_manifests(request, donor_request)
+            except GuideError as error:
+                if error.status != 404:
+                    raise
+                donor = await load_selected_manifests(request, {**donor_request, "guideVariant": "native/cpu/base"})
+            if donor["source"]["commit"] != manifest["source"]["commit"]:
+                raise GuideError("Composed Guides must come from the same source revision.")
+            try:
+                planned["documents"] = compose_native_cpu_cache(planned["documents"], list(yaml.safe_load_all(donor["rendered"])), guide=guide, capacity_gib=composition["nativeCpuCacheGiB"])
+            except (ValueError, TypeError) as error:
+                raise GuideError(str(error)) from error
+            optimization_decisions = [item for item in optimization_decisions if item["id"] != "tiered-prefix-cache"]
+            optimization_decisions.append({"id": "tiered-prefix-cache", "label": "Native CPU KV cache", "status": "composed", "reason": f"Composed from the same source revision; {composition['nativeCpuCacheGiB']} GiB of additional host memory requested per model replica. Performance awaits measurement; NIXL P/D uses ordered transport and per-role local cache connectors, checked in the runtime image before startup."})
         if accelerator != resolved:
             planned["validation"]["warnings"].append(
                 f'Guide accelerator variant corrected from "{accelerator}" to "{resolved}" '
@@ -1080,6 +1111,16 @@ async def plan(request: Request):
         applied = apply_custom_patches(
             planned["documents"], patches, planned["validation"]["errors"], planned["validation"]["warnings"]
         )
+        if composition:
+            from llm_d_lens.configuration.guide_settings import validate_configuration_extensions
+
+            try:
+                validate_configuration_extensions(
+                    {"officialGuide": {"source": {"guide": guide}}, "guideComposition": composition},
+                    yaml.safe_dump_all(planned["documents"]),
+                )
+            except (ValueError, TypeError) as error:
+                planned["validation"]["errors"].append(str(error))
         planned["summary"]["requestedAccelerators"] = validate_manifest_capacity(
             planned["documents"],
             planned["summary"]["availableAccelerators"],
@@ -1140,6 +1181,7 @@ async def plan(request: Request):
             "machineProfile": machine,
             "clusterProfile": detected_cluster,
             "modelConfig": planned["summary"]["modelEstimate"],
+            "optimizationDecisions": optimization_decisions,
             "planningPatch": planned["planningPatch"],
             "appliedCustomPatches": applied,
             "plannedDeployment": {

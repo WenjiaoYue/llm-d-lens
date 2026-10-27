@@ -72,6 +72,7 @@ class PlannedCandidate(BaseModel):
     prefill_replicas: int | None = Field(default=None, ge=1)
     prefill_tensor_parallel_size: int | None = Field(default=None, ge=1)
     guide_variant: str | None = None
+    native_cpu_cache_gib: float | None = Field(default=None, gt=0, le=1024, allow_inf_nan=False)
     max_model_len: int = Field(ge=256)
     gpu_memory_utilization: float = Field(gt=0, le=1)
     required_gpus: int = Field(ge=1)
