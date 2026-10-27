@@ -183,6 +183,7 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
     const [generationEvents, setGenerationEvents] = useState([]);
     const [refinementEvents, setRefinementEvents] = useState([]);
     const [agenticDecisionPlan, setAgenticDecisionPlan] = useState(null);
+    const [agenticFormValue, setAgenticFormValue] = useState(null);
     const updateRequirement = (name) => (event) => setRequirements((current) => ({ ...current, [name]: event.target.value }));
     const numeric = (value) => (value ? Number(value) : null);
 
@@ -200,8 +201,8 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
         return () => { cancelled = true; };
     }, []);
 
-    const createPlan = async () => {
-        if (numeric(requirements.concurrency) !== null && numeric(requirements.requestRate) !== null) {
+    const createPlan = async (requirementsOverride = requirements) => {
+        if (numeric(requirementsOverride.concurrency) !== null && numeric(requirementsOverride.requestRate) !== null) {
             setError('AIC accepts only one load target: Concurrent requests or Request rate (QPS). Both were provided; choose one and clear the other because AIC does not support joint load targets.');
             return;
         }
@@ -233,21 +234,21 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
                 },
                 planning_facts: {
                     model_weight_gib: draft.modelWeightGiB, vram_per_gpu_gib: 1, free_gpu_count: 0,
-                    hardware_capacity_mode: requirements.hardwareCapacityMode,
-                    custom_gpu_count: requirements.hardwareCapacityMode === 'custom' ? numeric(requirements.customGpuCount) : null,
-                    context_length: draft.contextLength, use_case: requirements.useCase,
-                    operator_preference: requirements.objective,
-                    max_candidates: Number(requirements.maxCandidates) || 3,
-                    ttft_slo_ms: numeric(requirements.ttftSloMs), tpot_slo_ms: numeric(requirements.tpotSloMs),
+                    hardware_capacity_mode: requirementsOverride.hardwareCapacityMode,
+                    custom_gpu_count: requirementsOverride.hardwareCapacityMode === 'custom' ? numeric(requirementsOverride.customGpuCount) : null,
+                    context_length: draft.contextLength, use_case: requirementsOverride.useCase,
+                    operator_preference: requirementsOverride.objective,
+                    max_candidates: Number(requirementsOverride.maxCandidates) || 3,
+                    ttft_slo_ms: numeric(requirementsOverride.ttftSloMs), tpot_slo_ms: numeric(requirementsOverride.tpotSloMs),
                     workload_profile: {
-                        mean_input_tokens: numeric(requirements.inputTokens),
-                        p95_input_tokens: numeric(requirements.inputTokens),
-                        mean_output_tokens: numeric(requirements.outputTokens),
-                        concurrency: numeric(requirements.concurrency),
-                        request_rate: numeric(requirements.requestRate),
+                        mean_input_tokens: numeric(requirementsOverride.inputTokens),
+                        p95_input_tokens: numeric(requirementsOverride.inputTokens),
+                        mean_output_tokens: numeric(requirementsOverride.outputTokens),
+                        concurrency: numeric(requirementsOverride.concurrency),
+                        request_rate: numeric(requirementsOverride.requestRate),
                     },
                 },
-                planner_prompt: `${requirements.objective} priority. Compare at most ${requirements.maxCandidates || 3} candidates. ${plannerPrompt.trim()}`.trim() || null,
+                planner_prompt: `${requirementsOverride.objective} priority. Compare at most ${requirementsOverride.maxCandidates || 3} candidates. ${plannerPrompt.trim()}`.trim() || null,
                 ai_provider_id: aiProviderId || null,
             };
             let created = null;
@@ -266,7 +267,9 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
     };
 
     const buildAgenticDecisionPlan = async (value) => {
-        setRequirements(current => ({ ...current, objective: value.objective, customGpuCount: value.maxAccelerators, ttftSloMs: value.ttftMs, tpotSloMs: value.tpotMs, inputTokens: value.inputTokens, outputTokens: value.outputTokens, concurrency: value.concurrency, requestRate: value.requestRate }));
+        const nextRequirements = { ...requirements, objective: value.objective, customGpuCount: value.maxAccelerators, ttftSloMs: value.ttftMs, tpotSloMs: value.tpotMs, inputTokens: value.inputTokens, outputTokens: value.outputTokens, concurrency: value.concurrency, requestRate: value.requestRate };
+        setRequirements(nextRequirements);
+        setAgenticFormValue(nextRequirements);
         try {
             const response = await api('/api/v1/configurations/plan', { method: 'POST', body: JSON.stringify({ mode: 'agentic', requirements: { model: draft?.model || 'unknown-model', cluster_id: draft?.clusterId || null, objective: value.objective, hard_constraints: { maxAccelerators: Number(value.maxAccelerators) || null }, workload: { inputTokens: Number(value.inputTokens) || null, outputTokens: Number(value.outputTokens) || null, concurrency: Number(value.concurrency) || null, requestRate: Number(value.requestRate) || null }, performance_targets: { ttftMs: Number(value.ttftMs) || null, tpotMs: Number(value.tpotMs) || null }, required_features: value.requiredFeatures || [] }, candidate_limit: 3 }) });
             setAgenticDecisionPlan(response);
@@ -382,7 +385,7 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
             {error && <div role="alert" className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"><TriangleAlert size={15} />{error}</div>}
             {!run && <section className="flex flex-col gap-4">
                 <DeploymentRequirementsForm mode="agentic" onSubmit={buildAgenticDecisionPlan} disabled={creating} />
-                {agenticDecisionPlan && <ConfigurationPlanPreview plan={agenticDecisionPlan} onEdit={() => setAgenticDecisionPlan(null)} onContinue={() => { setAgenticDecisionPlan(null); createPlan(); }} />}
+                {agenticDecisionPlan && <ConfigurationPlanPreview plan={agenticDecisionPlan} onEdit={() => setAgenticDecisionPlan(null)} onContinue={() => { setAgenticDecisionPlan(null); createPlan(agenticFormValue || requirements); }} />}
                 <details className="rounded-xl border border-theme-border bg-theme-card/40">
                     <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold text-theme-text">Advanced execution and placement <span className="ml-2 font-normal text-theme-muted">optional runtime controls</span></summary>
                     <div className="border-t border-theme-border p-4">
