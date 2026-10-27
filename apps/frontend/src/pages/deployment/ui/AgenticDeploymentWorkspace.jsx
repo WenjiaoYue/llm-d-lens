@@ -23,6 +23,7 @@ const DEFAULT_REQUIREMENTS = {
     ttftSloMs: '', tpotSloMs: '',
     hardwareCapacityMode: 'free', customGpuCount: '',
     useCase: 'general-chat', inputTokens: '', outputTokens: '', concurrency: '', requestRate: '',
+    objective: 'throughput', maxCandidates: '3', maxIterations: '0', maxBenchmarks: '0', maxDuration: '60', allowTrial: false,
 };
 
 const GENERATION_STAGES = [
@@ -221,11 +222,19 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
                 vllm_arguments: draft.vllmArguments || [],
                 placement_replicas: placementReplicas,
                 placement_node_label: placementReplicas === 'same-node' && placementNodeName ? { key: 'kubernetes.io/hostname', value: placementNodeName } : null,
+                execution_policy: {
+                    mode: requirements.allowTrial ? 'automatic' : 'approval_required',
+                    max_optimization_iterations: Number(requirements.maxIterations) || 0,
+                    max_benchmark_runs: Number(requirements.maxBenchmarks) || 0,
+                    max_total_duration_minutes: Number(requirements.maxDuration) || 60,
+                },
                 planning_facts: {
                     model_weight_gib: draft.modelWeightGiB, vram_per_gpu_gib: 1, free_gpu_count: 0,
                     hardware_capacity_mode: requirements.hardwareCapacityMode,
                     custom_gpu_count: requirements.hardwareCapacityMode === 'custom' ? numeric(requirements.customGpuCount) : null,
                     context_length: draft.contextLength, use_case: requirements.useCase,
+                    operator_preference: requirements.objective,
+                    max_candidates: Number(requirements.maxCandidates) || 3,
                     ttft_slo_ms: numeric(requirements.ttftSloMs), tpot_slo_ms: numeric(requirements.tpotSloMs),
                     workload_profile: {
                         mean_input_tokens: numeric(requirements.inputTokens),
@@ -235,7 +244,7 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
                         request_rate: numeric(requirements.requestRate),
                     },
                 },
-                planner_prompt: plannerPrompt.trim() || null,
+                planner_prompt: `${requirements.objective} priority. Compare at most ${requirements.maxCandidates || 3} candidates. ${plannerPrompt.trim()}`.trim() || null,
                 ai_provider_id: aiProviderId || null,
             };
             let created = null;
@@ -337,6 +346,9 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
     const relaxedConfigs = relaxedAicCandidates(run);
     const clusterDetails = run?.planning_evidence?.find((item) => item.id.startsWith('cluster-overview:'))?.details;
     const usedAiProviderName = aiProviders.find((provider) => provider.id === run?.request?.ai_provider_id)?.name;
+    const evidenceLevel = run?.optimization?.ranking?.some(item => item.candidate_id === run.selected_candidate?.id)
+        ? 'Verified best within tested candidates'
+        : hasAicPrediction ? 'Predicted better; not measured here' : 'Recommendation; not performance verified';
 
     const content = (
         <>
@@ -375,6 +387,20 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
                         </label>
                         {requirements.hardwareCapacityMode === 'custom' && input('Custom GPU count', 'customGpuCount', { min: '1', step: '1', required: true })}
                     </div>
+                    <div className="mt-4 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3">
+                        <p className="text-xs font-semibold text-cyan-100">1 · Objective and hard boundary</p>
+                        <p className="mt-1 text-[11px] leading-4 text-slate-400">Agentic compares supported candidates against this objective. Unknown workload signals stay unknown and are not treated as satisfied.</p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <label className="text-xs text-slate-400">Primary objective<Select className="mt-1" value={requirements.objective} onChange={updateRequirement('objective')}><option value="latency">Latency first</option><option value="throughput">Throughput first</option><option value="cost">Meet latency with least resources</option><option value="reliability">Reliability first</option></Select></label>
+                            <p className="self-end text-[11px] leading-4 text-slate-500">Resource ceiling comes from the selected capacity mode above{requirements.hardwareCapacityMode === 'custom' && requirements.customGpuCount ? ` (${requirements.customGpuCount} accelerators)` : ''}.</p>
+                        </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-lg border border-theme-border bg-theme-bg/60 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-theme-muted">Hard constraints</p><p className="mt-1 text-xs text-theme-text">{requirements.hardwareCapacityMode === 'custom' && requirements.customGpuCount ? `${requirements.customGpuCount} accelerators maximum` : 'Capacity mode selected above'} · {requirements.ttftSloMs ? `TTFT ≤ ${requirements.ttftSloMs} ms` : 'TTFT target unknown'}</p></div>
+                        <div className="rounded-lg border border-theme-border bg-theme-bg/60 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-theme-muted">Optimization target</p><p className="mt-1 text-xs text-theme-text">{requirements.objective === 'cost' ? 'Meet latency with least resources' : `${requirements.objective} first`}</p></div>
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">Still unknown</p><p className="mt-1 text-xs text-amber-100">{requirements.inputTokens || requirements.outputTokens || requirements.concurrency || requirements.requestRate ? 'Some workload dimensions are provided; missing values remain unknown.' : 'Workload shape and demand are not provided.'}</p></div>
+                        <div className="rounded-lg border border-theme-border bg-theme-bg/60 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-theme-muted">Search boundary</p><p className="mt-1 text-xs text-theme-text">{requirements.maxCandidates} candidates · {requirements.maxIterations} rounds · {requirements.maxBenchmarks} benchmark runs</p></div>
+                    </div>
                     <details open className="mt-4 border-t border-slate-800 pt-3">
                         <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-slate-300"><ChevronDown size={14} />SLO <span className="font-normal text-slate-500">Optional target.</span></summary>
                         <div className="mt-3 grid grid-cols-2 gap-3">
@@ -399,13 +425,23 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
                         <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-slate-300"><ChevronDown size={14} />vLLM parameters</summary>
                         <div className="mt-3 grid gap-3">{vllmParameterControls}</div>
                     </details>}
+                    <details className="mt-4 border-t border-slate-800 pt-3">
+                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-slate-300"><ChevronDown size={14} />Search boundary <span className="font-normal text-slate-500">Stops unbounded optimization.</span></summary>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            {input('Maximum candidates', 'maxCandidates', { min: '1', max: '10', step: '1' })}
+                            {input('Optimization rounds', 'maxIterations', { min: '0', max: '3', step: '1' })}
+                            {input('Benchmark runs', 'maxBenchmarks', { min: '0', max: '4', step: '1' })}
+                            {input('Time limit (minutes)', 'maxDuration', { min: '1', max: '180', step: '1' })}
+                        </div>
+                        <label className="mt-3 flex items-start gap-2 text-xs text-slate-400"><input type="checkbox" checked={requirements.allowTrial} onChange={event => setRequirements(current => ({ ...current, allowTrial: event.target.checked }))} /><span><span className="block text-slate-300">Allow controlled trial deployment</span><span className="mt-1 block text-[11px] text-slate-500">When off, Agentic only recommends. When on, it may use the bounded benchmark budget above.</span></span></label>
+                    </details>
                     <PodPlacementControl compact className="mt-4 border-t border-slate-800 pt-3" value={placementReplicas} onChange={setPlacementReplicas} clusterId={draft?.clusterId} nodeName={placementNodeName} onNodeChange={setPlacementNodeName} listNodeLabels={listDeploymentNodeLabels} />
                     {creating && <GenerationProgress events={generationEvents} />}
                     <div className="mt-5 flex justify-end"><Button onClick={createPlan} isLoading={creating}><Sparkles size={16} />Generate recommendation</Button></div>
                 </div>
             </section>}
             {run && <section className="flex flex-col gap-5">
-                <div className="rounded-lg border border-slate-800 bg-slate-900/65 p-5"><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-white">{run.selected_candidate?.provider_ref}</h2><StatusChip status={run.status} label={run.status.replaceAll('_', ' ')} /><Badge tone={run.generator === 'ai-mcp' ? 'info' : 'neutral'} size="xs">{generatorLabel(run.generator)}</Badge></div><p className="mt-2 text-xs text-slate-400">Recommended for {draft.model}</p><p className="mt-2 text-xs leading-5 text-slate-300">{run.decision?.rationale}</p></div>
+                <div className="rounded-lg border border-slate-800 bg-slate-900/65 p-5"><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-white">{run.selected_candidate?.provider_ref}</h2><StatusChip status={run.status} label={run.status.replaceAll('_', ' ')} /><Badge tone={run.generator === 'ai-mcp' ? 'info' : 'neutral'} size="xs">{generatorLabel(run.generator)}</Badge><Badge tone={evidenceLevel.startsWith('Verified') ? 'success' : evidenceLevel.startsWith('Predicted') ? 'info' : 'warning'} size="xs">{evidenceLevel}</Badge></div><p className="mt-2 text-xs text-slate-400">Recommended for {draft.model} · objective: {run.request?.planning_facts?.operator_preference || 'configured objective'}</p><p className="mt-2 text-xs leading-5 text-slate-300">{run.decision?.rationale}</p><div className="mt-4 grid gap-2 text-[11px] text-slate-400 sm:grid-cols-3"><span>Candidate budget: {run.request?.execution_policy?.max_optimization_iterations ?? 0} rounds</span><span>Benchmark budget: {run.request?.execution_policy?.max_benchmark_runs ?? 0} runs</span><span>Time limit: {run.request?.execution_policy?.max_total_duration_minutes ?? 60} min</span></div></div>
                 <DeploymentPlanReview key={`${run.id}:${run.updated_at}`} candidate={run.selected_candidate} model={draft.model} mode="agentic" disabled={refining || !!deployingCandidateId || !canDeploy} onEdit={run.request?.ai_provider_id ? requestTopologyRevision : undefined} decisions={[
                     { id: 'selection', label: 'Why this candidate', status: 'recommended', reason: run.decision?.rationale || 'Selected from validated candidates.' },
                     { id: 'evidence', label: 'Evidence boundary', status: run.optimization?.ranking?.some(item => item.candidate_id === run.selected_candidate?.id) ? 'measured for the tested workload' : 'not benchmark verified', reason: run.optimization?.ranking?.find(item => item.candidate_id === run.selected_candidate?.id)?.benchmark_ids?.join(', ') || 'Scores and historical evidence support the recommendation; this candidate still requires workload validation.' },

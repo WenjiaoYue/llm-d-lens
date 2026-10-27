@@ -238,7 +238,7 @@ async def _supplementary_evidence(
             target_request_rate=facts.workload_profile.request_rate if facts.workload_profile else None,
             ttft_target_ms=facts.ttft_slo_ms,
             tpot_target_ms=facts.tpot_slo_ms,
-            max_candidates=3,
+            max_candidates=max(1, min(int(facts.max_candidates or 3), 10)),
         )
         support = await check_support(request)
         evidence.append(

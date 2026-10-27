@@ -244,6 +244,7 @@ class PlanningFacts:
     custom_gpu_count: int | None = None
     model_name: str | None = None
     model_config_dict: dict[str, Any] | None = None
+    max_candidates: int = 3
 
 
 def resolve_workload_signals(facts: PlanningFacts, *, prefill_heavy_threshold: float = 0.6) -> PlanningFacts:

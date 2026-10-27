@@ -1,5 +1,6 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { Badge, Button, Input, Panel, Select, LoadingState } from '../../../shared/ui';
+import { CheckCircle2, Circle, GitBranch, ShieldCheck } from 'lucide-react';
 import { deploymentPlan, candidatePlan } from '../model/deploymentPlan';
 import { DeploymentPlanGraph } from './DeploymentPlanGraph';
 const Scene = lazy(() => import('./DeploymentPlanScene'));
@@ -17,11 +18,40 @@ export function DeploymentPlanReview({ content = '', candidate, model, mode = 'm
         if (!Object.keys(patch).length) return;
         try { await onEdit({ node, patch }); setReplicas(''); setTp(''); setError(''); } catch (e) { setError(e.message || 'Unable to update configuration.'); }
     };
-    return <Panel title="Review your configuration" actions={<Badge tone="neutral">{mode === 'agentic' ? 'Agentic recommendation' : 'Manual configuration'}</Badge>}>
-        <p className="text-sm text-theme-muted mb-3">{content ? 'Generated resources and their declared relationships. This is not live cluster inventory.' : 'Candidate topology before YAML generation. Performance is not confirmed by this view.'}</p>
-        <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Configuration view">{[['2d', 'Overview'], ['3d', '3D explorer'], ['reason', 'Selection reasons'], ...(content ? [['yaml', 'YAML']] : [])].map(([id, label]) => <Button key={id} size="sm" variant={view === id ? 'primary' : 'secondary'} aria-pressed={view === id} onClick={() => setView(id)}>{label}</Button>)}</div>
+    const workflow = [
+        ['requirements', 'Requirements', true],
+        ['decision', mode === 'agentic' ? 'Candidate selection' : 'Rule completion', true],
+        ['review', 'Topology review', true],
+        ['validate', 'Validate & generate', Boolean(content)],
+        ['deploy', 'Deploy & observe', false],
+    ];
+    const enabledDecisions = decisions.filter(item => ['enabled', 'recommended', 'dependency', 'selected'].includes(String(item.status).toLowerCase())).length;
+    const nextAction = content
+        ? 'Review validation results, inspect any warnings, then continue to deployment.'
+        : mode === 'agentic'
+            ? 'Compare the recommendation and alternatives, then request a revision or approve the candidate.'
+            : 'Review the automatically completed mechanisms and generate YAML to run compatibility checks.';
+    return <Panel title="Configuration workbench" actions={<Badge tone="neutral">{mode === 'agentic' ? 'Agentic recommendation' : 'Manual configuration'}</Badge>}>
+        <p className="text-sm text-theme-muted mb-4">{content ? 'The same configuration snapshot powers the topology, YAML and validation views. Generated resources and their declared relationships are not live cluster inventory.' : 'Candidate topology before YAML generation. A shared configuration snapshot is ready for review; performance claims remain unverified until a workload is measured.'}</p>
+        <div className="mb-5 grid gap-2 sm:grid-cols-5" aria-label="Deployment workflow">
+            {workflow.map(([id, label, complete], index) => <div key={id} className="relative flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg px-2.5 py-2">
+                {complete ? <CheckCircle2 size={15} className="shrink-0 text-emerald-400" /> : <Circle size={15} className="shrink-0 text-theme-muted" />}
+                <span className={`text-[11px] ${complete ? 'text-theme-text' : 'text-theme-muted'}`}>{label}</span>
+                {index < workflow.length - 1 && <span className="absolute -right-2 hidden text-theme-muted sm:block">→</span>}
+            </div>)}
+        </div>
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-theme-border bg-theme-bg p-3"><div className="flex items-center gap-2 text-xs font-semibold"><GitBranch size={14} className="text-cyan-400" />Topology</div><p className="mt-1 text-[11px] text-theme-muted">{plan.nodes.length} components · {plan.edges.length} declared relationships</p></div>
+            <div className="rounded-lg border border-theme-border bg-theme-bg p-3"><div className="flex items-center gap-2 text-xs font-semibold"><ShieldCheck size={14} className="text-emerald-400" />Validation</div><p className="mt-1 text-[11px] text-theme-muted">{content ? 'Generated resources available for checks' : 'Pending YAML generation'}</p></div>
+            <div className="rounded-lg border border-theme-border bg-theme-bg p-3"><div className="text-xs font-semibold">Decision ledger</div><p className="mt-1 text-[11px] text-theme-muted">{enabledDecisions} selected or dependency decisions · {decisions.length} recorded</p></div>
+        </div>
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-cyan-500/25 bg-cyan-500/5 px-3 py-2.5 text-[11px] text-cyan-100"><span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-400" aria-hidden="true" /><span><strong className="font-semibold">Next step:</strong> {nextAction}</span></div>
+        <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Configuration view">{[['2d', 'Deployment topology (Overview)'], ['reason', 'Configuration basis'], ['3d', '3D editor (3D explorer)'], ...(content ? [['yaml', 'YAML']] : [])].map(([id, label]) => <Button key={id} size="sm" variant={view === id ? 'primary' : 'secondary'} aria-pressed={view === id} onClick={() => setView(id)}>{label}</Button>)}</div>
         {parsed.error && <p role="alert">Unable to display resources: {parsed.error}</p>}
-        {view === 'reason' ? <div className="space-y-3">{decisions.length ? decisions.map((item, index) => <div key={item.id || index} className="border-b border-theme-border pb-2"><strong className="text-sm">{item.label || item.id}</strong><Badge tone="neutral">{item.status}</Badge><p className="text-sm text-theme-muted">{item.reason}</p></div>) : <p className="text-sm text-theme-muted">This configuration inherits the selected Guide defaults and explicit overrides. No additional optimization decisions were recorded.</p>}</div> : view === 'yaml' ? <pre tabIndex={0} aria-label="Generated YAML" className="max-h-96 overflow-auto text-xs whitespace-pre">{content}</pre> : <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        {view === 'reason' ? <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-lg border border-theme-border p-3"><p className="text-[10px] uppercase tracking-wide text-theme-muted">Source</p><p className="mt-1 text-sm font-medium">{mode === 'agentic' ? 'Goal-driven candidate' : 'Deterministic completion'}</p></div><div className="rounded-lg border border-theme-border p-3"><p className="text-[10px] uppercase tracking-wide text-theme-muted">Evidence</p><p className="mt-1 text-sm font-medium">{content ? 'Generated and checkable' : 'Planning only'}</p></div><div className="rounded-lg border border-theme-border p-3"><p className="text-[10px] uppercase tracking-wide text-theme-muted">Performance</p><p className="mt-1 text-sm font-medium">{mode === 'agentic' ? 'Recommendation until measured' : 'Deployability first'}</p></div></div>
+            {decisions.length ? decisions.map((item, index) => <div key={item.id || index} className="flex gap-3 border-b border-theme-border pb-3"><Badge tone={String(item.status).toLowerCase().includes('reject') ? 'danger' : String(item.status).toLowerCase().includes('unknown') ? 'warning' : 'success'}>{item.status}</Badge><div><strong className="text-sm">{item.label || item.id}</strong><p className="mt-1 text-sm text-theme-muted">{item.reason}</p></div></div>) : <p className="text-sm text-theme-muted">No optimization decisions were recorded. The configuration inherits the selected Guide defaults and explicit overrides.</p>}
+        </div> : view === 'yaml' ? <pre tabIndex={0} aria-label="Generated YAML" className="max-h-96 overflow-auto text-xs whitespace-pre">{content}</pre> : <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="min-w-0">{view === '3d' ? <Suspense fallback={<LoadingState label="Loading 3D explorer" />}><Scene plan={plan} selected={selected} onSelect={select} /></Suspense> : <DeploymentPlanGraph plan={plan} selected={selected} onSelect={select} />}</div>
             <aside className="space-y-3 text-sm"><label className="block">Component<Select aria-label="Inspect component" value={selected} onChange={e => select(e.target.value)}><option value="">Choose a component</option>{plan.nodes.map(n => <option key={n.id} value={n.id}>{n.kind}: {n.name}</option>)}</Select></label>
                 {node ? <><strong className="block break-all">{node.name}</strong><p className="text-theme-muted">{node.detail}</p>{node.namespace && <p>Namespace: {node.namespace}</p>}{node.containers?.map(c => <p key={c.name} className="text-xs break-all">{c.name}: {c.image || 'Image not declared'}</p>)}
