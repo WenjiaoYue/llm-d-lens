@@ -36,6 +36,8 @@ from .models import (
     SaveRequest,
     SaveResponse,
 )
+from .decision_engine import build_plan
+from .plan_models import ConfigurationPlan, PlanRequest
 from .service import (
     delete_configuration_artifact,
     get_configuration_artifact,
@@ -106,6 +108,21 @@ def _configuration_errors(failure_message: str, client_errors: tuple[type[Except
 )
 async def capabilities() -> dict:
     return {"schema_version": "deployment-capabilities.v1", "providers": deployment_capabilities()}
+
+
+@router.post(
+    "/plan",
+    response_model=ConfigurationPlan,
+    summary="Build a Manual or Agentic deployment decision plan.",
+    description=(
+        "Resolve deployment requirements into a shared configuration plan. Manual plans select compatible "
+        "capabilities deterministically; Agentic plans return bounded candidates for comparison. This endpoint "
+        "does not deploy resources or claim performance validation."
+    ),
+    operation_id="build_configuration_plan",
+)
+async def plan(request: PlanRequest) -> ConfigurationPlan:
+    return build_plan(request)
 
 
 @router.post(

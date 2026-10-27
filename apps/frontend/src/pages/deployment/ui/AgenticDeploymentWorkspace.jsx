@@ -14,6 +14,8 @@ import { listDeploymentNodeLabels } from '../../optimization';
 import { listAIProviders } from '../../ai-providers';
 import { streamAgenticRecommendation, streamAgenticRefinement } from '../api/agenticDeploymentBackend';
 import { candidateAnalysis, generatorLabel, historicalBenchmarkLabel, historicalEvidenceSummary, relaxedAicCandidates } from '../lib/agenticPresentation';
+import { DeploymentRequirementsForm } from './DeploymentRequirementsForm';
+import { ConfigurationPlanPreview } from './ConfigurationPlanPreview';
 
 function api(path, options = {}) {
     return requestJson(path, { headers: { 'Content-Type': 'application/json' }, ...options });
@@ -180,6 +182,7 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
     const [refining, setRefining] = useState(false);
     const [generationEvents, setGenerationEvents] = useState([]);
     const [refinementEvents, setRefinementEvents] = useState([]);
+    const [agenticDecisionPlan, setAgenticDecisionPlan] = useState(null);
     const updateRequirement = (name) => (event) => setRequirements((current) => ({ ...current, [name]: event.target.value }));
     const numeric = (value) => (value ? Number(value) : null);
 
@@ -259,6 +262,16 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
             setError(failure.message || 'Unable to generate an Agentic recommendation');
         } finally {
             setCreating(false);
+        }
+    };
+
+    const buildAgenticDecisionPlan = async (value) => {
+        setRequirements(current => ({ ...current, objective: value.objective, customGpuCount: value.maxAccelerators, ttftSloMs: value.ttftMs, tpotSloMs: value.tpotMs, inputTokens: value.inputTokens, outputTokens: value.outputTokens, concurrency: value.concurrency, requestRate: value.requestRate }));
+        try {
+            const response = await api('/api/v1/configurations/plan', { method: 'POST', body: JSON.stringify({ mode: 'agentic', requirements: { model: draft?.model || 'unknown-model', cluster_id: draft?.clusterId || null, objective: value.objective, hard_constraints: { maxAccelerators: Number(value.maxAccelerators) || null }, workload: { inputTokens: Number(value.inputTokens) || null, outputTokens: Number(value.outputTokens) || null, concurrency: Number(value.concurrency) || null, requestRate: Number(value.requestRate) || null }, performance_targets: { ttftMs: Number(value.ttftMs) || null, tpotMs: Number(value.tpotMs) || null }, required_features: value.requiredFeatures || [] }, candidate_limit: 3 }) });
+            setAgenticDecisionPlan(response);
+        } catch (error) {
+            setError(error.message || 'Unable to build the Agentic candidate plan.');
         }
     };
 
@@ -368,6 +381,11 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
             </div>
             {error && <div role="alert" className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"><TriangleAlert size={15} />{error}</div>}
             {!run && <section className="flex flex-col gap-4">
+                <DeploymentRequirementsForm mode="agentic" onSubmit={buildAgenticDecisionPlan} disabled={creating} />
+                {agenticDecisionPlan && <ConfigurationPlanPreview plan={agenticDecisionPlan} onEdit={() => setAgenticDecisionPlan(null)} onContinue={() => { setAgenticDecisionPlan(null); createPlan(); }} />}
+                <details className="rounded-xl border border-theme-border bg-theme-card/40">
+                    <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold text-theme-text">Advanced execution and placement <span className="ml-2 font-normal text-theme-muted">optional runtime controls</span></summary>
+                    <div className="border-t border-theme-border p-4">
                 <div className="rounded-lg border border-slate-800 bg-slate-900/45 p-5">
                     <div className="grid gap-3">
                         <label className="text-xs text-slate-400">Use case
@@ -439,6 +457,8 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
                     {creating && <GenerationProgress events={generationEvents} />}
                     <div className="mt-5 flex justify-end"><Button onClick={createPlan} isLoading={creating}><Sparkles size={16} />Generate recommendation</Button></div>
                 </div>
+                    </div>
+                </details>
             </section>}
             {run && <section className="flex flex-col gap-5">
                 <div className="rounded-lg border border-slate-800 bg-slate-900/65 p-5"><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-white">{run.selected_candidate?.provider_ref}</h2><StatusChip status={run.status} label={run.status.replaceAll('_', ' ')} /><Badge tone={run.generator === 'ai-mcp' ? 'info' : 'neutral'} size="xs">{generatorLabel(run.generator)}</Badge><Badge tone={evidenceLevel.startsWith('Verified') ? 'success' : evidenceLevel.startsWith('Predicted') ? 'info' : 'warning'} size="xs">{evidenceLevel}</Badge></div><p className="mt-2 text-xs text-slate-400">Recommended for {draft.model} · objective: {run.request?.planning_facts?.operator_preference || 'configured objective'}</p><p className="mt-2 text-xs leading-5 text-slate-300">{run.decision?.rationale}</p><div className="mt-4 grid gap-2 text-[11px] text-slate-400 sm:grid-cols-3"><span>Candidate budget: {run.request?.execution_policy?.max_optimization_iterations ?? 0} rounds</span><span>Benchmark budget: {run.request?.execution_policy?.max_benchmark_runs ?? 0} runs</span><span>Time limit: {run.request?.execution_policy?.max_total_duration_minutes ?? 60} min</span></div></div>

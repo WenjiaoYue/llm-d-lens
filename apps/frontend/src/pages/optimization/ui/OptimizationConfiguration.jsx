@@ -1,4 +1,6 @@
 import { DeploymentPlanReview } from '../../deployment/ui/DeploymentPlanReview';
+import { ConfigurationPlanPreview } from '../../deployment/ui/ConfigurationPlanPreview';
+import { requestJson } from '../../../shared/api/httpClient';
 import { Checkbox, Select, Panel, Input } from '../../../shared/ui';
 import { guideVariantOptions, selectedGuideVariant } from '../../evaluation/model/capabilities.js';
 import { useHardwareProfiles } from '../../../shared/lib/useHardwareProfiles.js';
@@ -263,6 +265,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         maxAccelerators: '', streaming: true, lora: false, tools: false,
     });
     const [manualPreview, setManualPreview] = useState(null);
+    const [manualDecisionPlan, setManualDecisionPlan] = useState(null);
     useEffect(() => {
         if (!embedded || !planResult) return undefined;
         const frame = window.requestAnimationFrame(() => {
@@ -886,7 +889,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         }
     };
 
-    const buildManualPlan = () => {
+    const buildManualPlan = async () => {
         const available = Number(manualRequirements.maxAccelerators) || Number(budget) || 1;
         const estimate = estimateModelResources(model, available, clusterHardware?.vramGiB || 24);
         const tp = Math.max(1, estimate?.recommendedTp || 1);
@@ -910,6 +913,12 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         });
         setPlanResult(null);
         setPlanError('');
+        try {
+            const response = await requestJson('/api/v1/configurations/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'manual', requirements: { model: model.trim() || 'unknown-model', cluster_id: selectedClusterId || null, objective: manualRequirements.objective, hard_constraints: { maxAccelerators: Number(manualRequirements.maxAccelerators) || budget, streaming: manualRequirements.streaming, lora: manualRequirements.lora, tools: manualRequirements.tools }, workload: { inputTokens: Number(manualRequirements.inputTokens) || null, outputTokens: Number(manualRequirements.outputTokens) || null, concurrency: Number(manualRequirements.concurrency) || null, requestRate: Number(manualRequirements.requestRate) || null }, performance_targets: { ttftMs: Number(manualRequirements.ttft) || null, tpotMs: Number(manualRequirements.tpot) || null }, required_features: manualRequirements.requiredFeatures }, candidate_limit: 1 }) });
+            setManualDecisionPlan(response);
+        } catch (error) {
+            setPlanError(error.message || 'Unable to build the Manual decision plan.');
+        }
     };
 
     const generate = async (requestedBasis = resourceBasis) => {
@@ -1430,6 +1439,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                             <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-[11px] text-slate-500">Unset values stay unknown and will be shown as pending confirmation.</p><button type="button" onClick={buildManualPlan} className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/15"><WandSparkles className="h-3.5 w-3.5" />Build compatible plan</button></div>
                         </section>}
                         {manualPreview && !singleConfiguration && <section className="mb-5 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Manual plan preview</p><p className="mt-1 text-[11px] text-slate-400">Candidate mechanisms are separated from parameter sizing. Review this plan, then generate YAML for full compatibility validation.</p></div><span className="rounded-full border border-emerald-400/30 px-2 py-1 text-[10px] text-emerald-200">{manualPreview.objective} priority</span></div><div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-lg border border-theme-border bg-theme-bg/50 p-3"><p className="text-[10px] uppercase tracking-wide text-theme-muted">Sizing</p><p className="mt-1 text-sm font-semibold text-theme-text">{manualPreview.replicas} replicas × TP {manualPreview.tensorParallel}</p><p className="mt-1 text-[11px] text-theme-muted">{manualPreview.accelerators} accelerators reserved</p></div><div className="rounded-lg border border-theme-border bg-theme-bg/50 p-3"><p className="text-[10px] uppercase tracking-wide text-theme-muted">Model capacity</p><p className="mt-1 text-sm font-semibold text-theme-text">{manualPreview.estimate ? `${manualPreview.estimate.estimatedWeightMemoryGiB} GiB estimated` : 'Insufficient model metadata'}</p><p className="mt-1 text-[11px] text-theme-muted">Sizing is bounded by the selected budget.</p></div><div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"><p className="text-[10px] uppercase tracking-wide text-amber-300">Evidence boundary</p><p className="mt-1 text-sm font-semibold text-amber-100">Not benchmark verified</p><p className="mt-1 text-[11px] text-amber-200/80">Compatibility checks run during YAML generation.</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{manualPreview.mechanisms.map(item => <div key={item.label} className="flex items-start justify-between gap-3 rounded-lg border border-theme-border bg-theme-bg/40 px-3 py-2"><div><p className="text-xs font-medium text-theme-text">{item.label}</p><p className="mt-0.5 text-[11px] text-theme-muted">{item.reason}</p></div><span className={`shrink-0 text-[10px] ${item.state === 'unknown' ? 'text-amber-300' : item.state === 'disabled' ? 'text-theme-muted' : 'text-emerald-300'}`}>{item.state}</span></div>)}</div></section>}
+                        {manualDecisionPlan && !singleConfiguration && <ConfigurationPlanPreview plan={manualDecisionPlan} onEdit={() => setManualDecisionPlan(null)} onContinue={() => document.getElementById('configuration-advanced-source')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />}
                         {singleConfiguration && <div className="mb-5 border-b border-slate-800 pb-5">
                             <section>
                                 <div className="mb-4 border-l-2 border-emerald-400/70 bg-emerald-500/5 px-3 py-2">
@@ -1452,7 +1462,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                                 </div>
                             </section>
                         </div>}
-                        <details className="mb-4 overflow-hidden rounded-xl border border-slate-700/70 bg-slate-950/20">
+                        <details id="configuration-advanced-source" className="mb-4 overflow-hidden rounded-xl border border-slate-700/70 bg-slate-950/20">
                             <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold text-slate-300 [&::-webkit-details-marker]:hidden">Resolved capability source <span className="ml-2 font-normal text-slate-500">advanced · selected automatically from cluster, model and software capabilities</span><ChevronRight className="float-right h-4 w-4 text-slate-500" /></summary>
                             <div className="border-t border-slate-700/70 p-4">
                         <div className="guide-template-bar mb-4 border-l-2 border-emerald-400/70 bg-emerald-500/5 px-3 py-2">
