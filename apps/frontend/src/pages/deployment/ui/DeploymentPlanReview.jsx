@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useMemo, useState } from 'react';
 import { Badge, Button, Input, Panel, Select, LoadingState } from '../../../shared/ui';
 import { CheckCircle2, Circle, GitBranch, ShieldCheck } from 'lucide-react';
 import { deploymentPlan, candidatePlan } from '../model/deploymentPlan';
@@ -20,17 +20,17 @@ export function DeploymentPlanReview({ content = '', candidate, model, mode = 'm
     };
     const workflow = [
         ['requirements', 'Requirements', true],
-        ['decision', mode === 'agentic' ? 'Candidate selection' : 'Rule completion', true],
-        ['review', 'Topology review', true],
-        ['validate', 'Validate & generate', Boolean(content)],
-        ['deploy', 'Deploy & observe', false],
+        ['decision', 'Generated plan', true],
+        ['review', 'Review and edit', true],
+        ['validate', 'Validate', Boolean(content)],
+        ['deploy', 'Deploy', false],
     ];
     const enabledDecisions = decisions.filter(item => ['enabled', 'recommended', 'dependency', 'selected'].includes(String(item.status).toLowerCase())).length;
     const nextAction = content
         ? 'Review validation results, inspect any warnings, then continue to deployment.'
         : mode === 'agentic'
-            ? 'Compare the recommendation and alternatives, then request a revision or approve the candidate.'
-            : 'Review the automatically completed mechanisms and generate YAML to run compatibility checks.';
+            ? 'Review the recommendation and alternatives, then revise or approve the selected plan.'
+            : 'Review the completed plan, make optional edits, then generate and validate the deployment resources.';
     return <Panel title="Configuration workbench" actions={<Badge tone="neutral">{mode === 'agentic' ? 'Agentic recommendation' : 'Manual configuration'}</Badge>}>
         <p className="text-sm text-theme-muted mb-4">{content ? 'The same configuration snapshot powers the topology, YAML and validation views. Generated resources and their declared relationships are not live cluster inventory.' : 'Candidate topology before YAML generation. A shared configuration snapshot is ready for review; performance claims remain unverified until a workload is measured.'}</p>
         <div className="mb-5 grid gap-2 sm:grid-cols-5" aria-label="Deployment workflow">

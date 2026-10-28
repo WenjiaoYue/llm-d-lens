@@ -1,7 +1,7 @@
 import { MeasuredOptimizationControls } from './MeasuredOptimizationControls';
 import { DeploymentPlanReview } from './DeploymentPlanReview';
 import { requestJson } from '../../../shared/api/httpClient';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, CheckCircle2, ChevronDown, Cpu, FileStack, LoaderCircle, RotateCcw, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
 import { Badge, StatusChip } from '../../../shared/ui/Badge';
 import { Button } from '../../../shared/ui/Button';
@@ -368,8 +368,8 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
 
     const content = (
         <>
-            {!embedded && <ModuleHeader icon={Sparkles} title="Agentic deployment recommendation" description="Prism chooses a supported guide from the model, live cluster capacity, AIC, and prior evidence." actions={<div className="flex gap-2"><Button variant="secondary" onClick={reset}><RotateCcw size={15} />Reset</Button><Button variant="secondary" onClick={onBack}><ArrowLeft size={15} />Model details</Button></div>} />}
-            {embedded && <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-white">Agentic deployment plan</h2><p className="mt-1 text-sm text-slate-400">Prism chooses a supported guide from live cluster capacity and available evidence.</p></div><Button variant="secondary" onClick={reset}><RotateCcw size={15} />Reset</Button></div>}
+            {!embedded && <ModuleHeader icon={Sparkles} title="Agentic deployment plan" description="Prism compares compatible optimization plans against your target, workload and available resources." actions={<div className="flex gap-2"><Button variant="secondary" onClick={reset}><RotateCcw size={15} />Reset</Button><Button variant="secondary" onClick={onBack}><ArrowLeft size={15} />Model details</Button></div>} />}
+            {embedded && <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-white">Agentic deployment plan</h2><p className="mt-1 text-sm text-slate-400">Compare compatible optimization plans against your target, workload and available resources.</p></div><Button variant="secondary" onClick={reset}><RotateCcw size={15} />Reset</Button></div>}
             <div className="rounded-lg border border-slate-800 bg-slate-900/45 p-3">
                 <label className="block text-xs font-semibold text-slate-300">AI provider <span className="font-normal text-slate-500">(optional; powers the external planner used to rank candidates)</span></label>
                 <Select className="mt-1.5" value={aiProviderId} onChange={(event) => setAiProviderId(event.target.value)}>
@@ -485,4 +485,75 @@ export default function AgenticDeploymentWorkspace({ draft, embedded = false, on
         </>
     );
     return embedded ? <section className="flex flex-col gap-5">{content}</section> : <ModulePage contentClassName="flex flex-col gap-5">{content}</ModulePage>;
+}
+
+/** Manual deployment uses the same plan review surface as Agentic, but its
+ * decision is deterministic and produces one completed configuration. */
+export function ManualDeploymentWorkspace({ draft, embedded = false, onBack, onDeploymentStarted, vllmParameterControls }) {
+    const [requirements, setRequirements] = useState({ objective: 'throughput', maxAccelerators: '', ttftMs: '', tpotMs: '', inputTokens: '', outputTokens: '', concurrency: '', requestRate: '', requiredFeatures: [], forbiddenFeatures: [] });
+    const [plan, setPlan] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [deployment, setDeployment] = useState(false);
+    const update = next => setRequirements(next);
+    const generate = async value => {
+        setBusy(true); setError('');
+        try {
+            const response = await api('/api/v1/configurations/plan', { method: 'POST', body: JSON.stringify({
+                mode: 'manual',
+                requirements: {
+                    model: draft.model,
+                    cluster_id: draft.clusterId,
+                    objective: value.objective,
+                    hard_constraints: { maxAccelerators: Number(value.maxAccelerators) || null },
+                    workload: { inputTokens: Number(value.inputTokens) || null, outputTokens: Number(value.outputTokens) || null, concurrency: Number(value.concurrency) || null, requestRate: Number(value.requestRate) || null },
+                    performance_targets: { ttftMs: Number(value.ttftMs) || null, tpotMs: Number(value.tpotMs) || null },
+                    required_features: value.requiredFeatures || [],
+                    forbidden_features: value.forbiddenFeatures || [],
+                },
+                candidate_limit: 1,
+            }) });
+            setPlan(response);
+        } catch (failure) { setError(failure.message || 'Unable to generate the deployment plan.'); }
+        finally { setBusy(false); }
+    };
+    const deploy = async () => {
+        if (!plan || deployment) return;
+        setDeployment(true); setError('');
+        try {
+            const session = await api(`/api/cluster/session?clusterId=${encodeURIComponent(draft.clusterId)}`);
+            await api('/api/v1/deployments/standard-vllm-runs', { method: 'POST', body: JSON.stringify({
+                model: draft.model,
+                deployment_name: draft.deploymentName,
+                description: draft.description || '',
+                cluster_session_id: session.sessionId || session.session_id,
+                replicas: Number(plan.configuration?.topology?.replicas) || 1,
+                tensor_parallel_size: Number(plan.configuration?.topology?.tensor_parallel_size) || 1,
+                storage_type: 'model-cache',
+                storage_volume_id: draft.storageVolumeId,
+                max_model_len: draft.contextLength,
+                gpu_memory_utilization: draft.gpuMemoryUtilization,
+                max_num_seqs: draft.maxNumSeqs,
+                max_num_batched_tokens: draft.maxNumBatchedTokens,
+                vllm_arguments: draft.vllmArguments || [],
+                placement_replicas: 'prefer-same-node',
+            }) });
+            onDeploymentStarted?.();
+        } catch (failure) { setError(failure.message || 'Unable to start deployment.'); }
+        finally { setDeployment(false); }
+    };
+    const candidate = plan && { provider_ref: 'Generated compatible plan', replicas: Number(plan.configuration?.topology?.replicas) || 1, tensor_parallel_size: Number(plan.configuration?.topology?.tensor_parallel_size) || 1, max_model_len: draft.contextLength, gpu_memory_utilization: draft.gpuMemoryUtilization };
+    const content = <section className="flex flex-col gap-5">
+        <div><h2 className="text-lg font-semibold text-white">Manual deployment plan</h2><p className="mt-1 text-sm text-slate-400">Describe the outcome you need. Lens completes compatible optimizations and produces one deployable plan.</p></div>
+        {!plan && <DeploymentRequirementsForm mode="manual" initialValue={requirements} onSubmit={value => { update(value); generate(value); }} disabled={busy} />}
+        {error && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
+        {plan && <>
+            <ConfigurationPlanPreview plan={plan} onEdit={() => setPlan(null)} onContinue={() => {}} />
+            <DeploymentPlanReview candidate={candidate} model={draft.model} mode="manual" decisions={plan.decisions || []} disabled={deployment} />
+            <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setPlan(null)}>Edit requirements</Button><Button onClick={deploy} isLoading={deployment}>Validate and deploy</Button></div>
+        </>}
+        {vllmParameterControls && <details className="rounded-xl border border-theme-border bg-theme-card/40 px-4 py-3"><summary className="cursor-pointer text-xs font-semibold text-theme-text">Runtime overrides</summary><div className="mt-3 grid gap-3">{vllmParameterControls}</div></details>}
+        {onBack && <div><Button variant="secondary" onClick={onBack}>Back to model details</Button></div>}
+    </section>;
+    return embedded ? content : <ModulePage contentClassName="flex flex-col gap-5">{content}</ModulePage>;
 }

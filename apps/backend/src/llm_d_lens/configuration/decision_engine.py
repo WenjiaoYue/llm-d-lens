@@ -17,6 +17,30 @@ CAPABILITIES = (
 )
 
 
+def _workload_signals(requirements: DeploymentRequirements) -> dict[str, bool]:
+    """Normalize user intent into the signals used by the rule planner.
+
+    The planner deliberately consumes intent, rather than rendering fields. The
+    UI may call these values inputTokens/requestRate while the decision rules
+    reason about long context, repeated prefixes and prefill-heavy traffic.
+    """
+    workload = requirements.workload
+    input_tokens = workload.get("inputTokens", workload.get("input_tokens"))
+    request_rate = workload.get("requestRate", workload.get("request_rate"))
+    use_case = str(workload.get("useCase", workload.get("use_case", ""))).lower()
+    return {
+        "prefix_reuse": bool(workload.get("prefixReuse", workload.get("prefix_reuse")))
+        or "prefix_cache" in requirements.required_features
+        or "prefix_reuse" in requirements.required_features,
+        "long_context": bool(workload.get("longContext", workload.get("long_context")))
+        or (isinstance(input_tokens, (int, float)) and input_tokens >= 4096)
+        or use_case in {"long-inputs", "summarization"},
+        "prefill_heavy": bool(workload.get("prefillHeavy", workload.get("prefill_heavy")))
+        or use_case in {"long-inputs", "summarization"},
+        "request_rate": bool(request_rate),
+    }
+
+
 def _plan_id(request: PlanRequest) -> str:
     digest = sha256(request.model_dump_json().encode()).hexdigest()[:12]
     return f"{request.mode}-{digest}"
@@ -24,6 +48,7 @@ def _plan_id(request: PlanRequest) -> str:
 
 def _decisions(requirements: DeploymentRequirements, mode: str) -> tuple[list[str], list[OptimizationDecision]]:
     workload = requirements.workload
+    signals = _workload_signals(requirements)
     required = set(requirements.required_features)
     forbidden = set(requirements.forbidden_features)
     selected: list[str] = []
@@ -31,7 +56,7 @@ def _decisions(requirements: DeploymentRequirements, mode: str) -> tuple[list[st
     for capability_id, label, signal, explanation in CAPABILITIES:
         explicitly_required = capability_id in required
         explicitly_forbidden = capability_id in forbidden
-        known = bool(workload.get(signal))
+        known = signals.get(signal, bool(workload.get(signal)))
         if explicitly_forbidden:
             status = "user_disabled"
             reason = "Explicitly disabled by the user."
@@ -57,6 +82,27 @@ def _decisions(requirements: DeploymentRequirements, mode: str) -> tuple[list[st
 def build_plan(request: PlanRequest) -> ConfigurationPlan:
     selected, decisions = _decisions(request.requirements, request.mode)
     budget = request.requirements.hard_constraints.get("maxAccelerators")
+    workload = request.requirements.workload
+    configuration = {
+        "objective": request.requirements.objective,
+        "capabilities": [
+            {
+                "id": item.capability_id,
+                "label": item.label,
+                "status": item.status,
+                "reason": item.reason,
+                "parameters": item.parameters,
+            }
+            for item in decisions
+        ],
+        "topology": {
+            "replicas": 1,
+            "tensor_parallel_size": 1,
+            "max_accelerators": budget,
+        },
+        "workload": workload,
+        "performance_targets": request.requirements.performance_targets,
+    }
     candidates = []
     if request.mode == "agentic":
         for index in range(request.candidate_limit):
@@ -70,5 +116,6 @@ def build_plan(request: PlanRequest) -> ConfigurationPlan:
         resource_estimate={"max_accelerators": budget, "status": "bounded" if budget else "unknown"},
         candidates=candidates, evidence_level="recommendation",
         validation={"status": "pending", "checks": ["capability prerequisites", "conflicts", "resource budget"]},
+        configuration=configuration,
     )
 

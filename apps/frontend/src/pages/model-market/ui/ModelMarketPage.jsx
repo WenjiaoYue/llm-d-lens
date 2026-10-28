@@ -8,7 +8,7 @@ import { CATEGORIES, MODELS } from '@repo/shared/catalog';
 import { listStorageVolumes } from '../../storage';
 import { listModelCacheEntries } from '../../model-cache';
 import { StorageVolumeSelect } from '../../../shared/ui/StorageVolumeSelect';
-import { AgenticDeploymentWorkspace } from '../../deployment';
+import { AgenticDeploymentWorkspace, ManualDeploymentWorkspace } from '../../deployment';
 import { storeEvaluationIntent } from '../../evaluation';
 import { consumePendingModelMarketCluster } from '../model/transfer';
 import { standardRecommendation } from '../model/standardRecommendation';
@@ -109,6 +109,7 @@ export default function ModelMarketPage({ onNavigate, isActive = true }) {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [agenticDraft, setAgenticDraft] = useState(null);
+    const [manualDraft, setManualDraft] = useState(null);
     const [pendingCluster] = useState(() => consumePendingModelMarketCluster());
 
     useEffect(() => {
@@ -299,24 +300,19 @@ export default function ModelMarketPage({ onNavigate, isActive = true }) {
     };
 
     const openAdvanced = () => {
-        storeEvaluationIntent({
-            entrySource: 'model-market',
-            operation: 'create-evaluation',
-            initial_step: 'configurations',
-            return_target: 'optimization-evaluate-new',
-            name: deployName || formatDefaultName(selected),
-            deployment_name: deployName || formatDefaultName(selected),
-            deployment_description: deploymentDescription,
-            cluster_id: cluster,
-            workloads: [{ model: selected.repository, replicas, tensor_parallel_size: tensorParallelism }],
-            runtime: {
-                model_server: 'vllm',
-                model_source: storageVolumeId ? 'auto-cache' : 'huggingface',
-                storage_volume_id: storageVolumeId,
-                max_model_len: vllm.maxModelLen ?? plan.maxModelLen,
-            },
+        setManualDraft({
+            model: selected.repository,
+            deploymentName: deployName,
+            description: deploymentDescription,
+            clusterId: cluster,
+            modelWeightGiB: selected.sizeGiB,
+            contextLength: vllm.maxModelLen || plan.maxModelLen,
+            storageVolumeId,
+            maxNumSeqs: vllm.maxNumSeqs,
+            maxNumBatchedTokens: vllm.maxNumBatchedTokens,
+            gpuMemoryUtilization: vllm.gpuMemoryUtilization,
+            vllmArguments,
         });
-        onNavigate('optimization-evaluate-new');
     };
 
     const submit = async (requestedResourceBasis = resourceBasis) => {
@@ -463,6 +459,7 @@ export default function ModelMarketPage({ onNavigate, isActive = true }) {
                     {error && <p role="alert" className="mt-5 text-sm text-rose-300">{error}{error.startsWith('This model is not ready') && <> <button type="button" className="underline" onClick={() => onNavigate?.('model-cache')}>Open Model Cache</button></>}</p>}
                     {mode === 'advanced' && <div className="mt-7 flex justify-end"><Button type="submit" disabled={!cluster || !deployName || submitting}><Rocket size={16} aria-hidden="true" />{submitting ? 'Creating deployment...' : 'Configure deployment'}</Button></div>}
                 </form>
+                {mode === 'advanced' && manualDraft && <aside><ManualDeploymentWorkspace embedded draft={{ ...manualDraft, storageVolumeId, vllmArguments }} vllmParameterControls={vllmArgumentControls} onBack={() => setManualDraft(null)} onDeploymentStarted={() => onNavigate('optimization-deployments')} /></aside>}
                 {mode === 'agentic' && <aside><AgenticDeploymentWorkspace embedded draft={agenticDraft && { ...agenticDraft, storageVolumeId, vllmArguments }} vllmParameterControls={vllmArgumentControls} onBack={() => { setAgenticDraft(null); setMode('advanced'); }} onDeploymentStarted={() => onNavigate('optimization-deployments')} /></aside>}
             </div>
         </ModulePage>

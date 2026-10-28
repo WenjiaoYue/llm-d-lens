@@ -1,12 +1,12 @@
 import { DeploymentPlanReview } from '../../deployment/ui/DeploymentPlanReview';
 import { ConfigurationPlanPreview } from '../../deployment/ui/ConfigurationPlanPreview';
 import { requestJson } from '../../../shared/api/httpClient';
-import { Checkbox, Select, Panel, Input } from '../../../shared/ui';
+import { Select } from '../../../shared/ui';
 import { guideVariantOptions, selectedGuideVariant } from '../../evaluation/model/capabilities.js';
 import { useHardwareProfiles } from '../../../shared/lib/useHardwareProfiles.js';
 import { getHardwareProfiles } from '../../clusters';
 import { validateImportManifest } from '../../evaluation';
-import { OptimizationComparisonTree, ResourceBasisControl } from '../../evaluation';
+import { ResourceBasisControl } from '../../evaluation';
 import { recommendationBudget, selectedOptimizationPlan, withRecommendationBudget } from '../../evaluation';
 // Copyright 2026 Google LLC
 //
@@ -178,8 +178,10 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
     const clusterHardware = sharedContext?.clusterHardware ?? localClusterHardware;
     const [resourceBasis, setResourceBasis] = useState(initialArtifact?.deployable_configuration?.content?.runtime?.resourceBasis || 'available');
     const budget = recommendationBudget(clusterHardware, resourceBasis);
-    const [selectedOptimizations, setOptimizationSelection] = useState(initialOptimizationSelection || ['full']);
-    const optimizationSelection = deployOnPublish ? ['full'] : selectedOptimizations;
+    // Manual always produces the complete compatible configuration. Agentic
+    // owns candidate selection in its own workspace; this editor only reviews
+    // the resulting shared plan.
+    const optimizationSelection = ['full'];
     const [clusterHardwareLoading, setClusterHardwareLoading] = useState(false);
 
     // Shared model context.
@@ -264,7 +266,6 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         objective: 'throughput', ttft: '', tpot: '', inputTokens: '', outputTokens: '', concurrency: '', requestRate: '',
         maxAccelerators: '', streaming: true, lora: false, tools: false,
     });
-    const [manualPreview, setManualPreview] = useState(null);
     const [manualDecisionPlan, setManualDecisionPlan] = useState(null);
     useEffect(() => {
         if (!embedded || !planResult) return undefined;
@@ -898,23 +899,41 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         setTensorParallelVariants(String(tp));
         setPrefillReplicaVariants('1');
         setPrefillTensorParallelVariants(String(tp));
-        setManualPreview({
-            objective: manualRequirements.objective,
-            replicas,
-            tensorParallel: tp,
-            accelerators: replicas * tp,
-            estimate,
-            mechanisms: [
-                { label: 'Prefix reuse', state: manualRequirements.inputTokens ? 'candidate' : 'unknown', reason: manualRequirements.inputTokens ? 'Workload shape supplied; compatibility will be checked.' : 'Input shape is unknown.' },
-                { label: 'Streaming output', state: manualRequirements.streaming ? 'enabled' : 'disabled', reason: manualRequirements.streaming ? 'Required by the deployment request.' : 'Not requested.' },
-                { label: 'P/D disaggregation', state: 'candidate', reason: 'Enabled only when the selected model, runtime and cluster support it.' },
-                { label: 'KV cache composition', state: 'budgeted', reason: 'Capacity is derived from the resource budget; it is not set to a maximum.' },
-            ],
-        });
         setPlanResult(null);
         setPlanError('');
         try {
             const response = await requestJson('/api/v1/configurations/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'manual', requirements: { model: model.trim() || 'unknown-model', cluster_id: selectedClusterId || null, objective: manualRequirements.objective, hard_constraints: { maxAccelerators: Number(manualRequirements.maxAccelerators) || budget, streaming: manualRequirements.streaming, lora: manualRequirements.lora, tools: manualRequirements.tools }, workload: { inputTokens: Number(manualRequirements.inputTokens) || null, outputTokens: Number(manualRequirements.outputTokens) || null, concurrency: Number(manualRequirements.concurrency) || null, requestRate: Number(manualRequirements.requestRate) || null }, performance_targets: { ttftMs: Number(manualRequirements.ttft) || null, tpotMs: Number(manualRequirements.tpot) || null }, required_features: manualRequirements.requiredFeatures }, candidate_limit: 1 }) });
+            const generatedTopology = response.configuration?.topology || {};
+            const generatedReplicas = Number(generatedTopology.replicas) || replicas;
+            const generatedTp = Number(generatedTopology.tensor_parallel_size) || tp;
+            setReplicaVariants(String(generatedReplicas));
+            setTensorParallelVariants(String(generatedTp));
+            // Manual resolves the serving mechanism internally. Keep Guide and
+            // variant as generated implementation details instead of asking the
+            // operator to make a second, unrelated decision.
+            const capabilityIds = new Set(response.selected_capabilities || []);
+            const preferredGuides = capabilityIds.has('pd_disaggregation')
+                ? ['pd-disaggregation']
+                : capabilityIds.has('external_kv_cache')
+                    ? ['tiered-prefix-cache']
+                    : ['optimized-baseline', 'baseline-vllm'];
+            const generatedGuide = preferredGuides
+                .map(id => guides.find(item => item.id === id && item.deploymentCapability))
+                .find(Boolean)
+                || guides.find(item => item.deploymentCapability);
+            if (generatedGuide) {
+                const generatedAccelerator = generatedGuide.accelerators?.find(item => item.id === acceleratorVariantForHardware(clusterHardware))
+                    || generatedGuide.accelerators?.[0];
+                const generatedServer = generatedAccelerator?.modelServers?.find(item => item.id === 'vllm')
+                    || generatedAccelerator?.modelServers?.[0];
+                setSelection({
+                    guide: generatedGuide.id,
+                    accelerator: generatedAccelerator?.id || '',
+                    modelServer: generatedServer?.id || '',
+                });
+                const generatedVariants = generatedServer?.variants || [];
+                setGuideVariant(generatedVariants.includes('base') ? 'base' : generatedVariants[0] || '');
+            }
             setManualDecisionPlan(response);
         } catch (error) {
             setPlanError(error.message || 'Unable to build the Manual decision plan.');
@@ -1422,7 +1441,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                         {uploadError && <div role="alert" className="mb-3 flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200"><AlertTriangle className="h-4 w-4 shrink-0" />{uploadError}</div>}
                         <fieldset disabled={operationBusy} className="min-w-0 border-0 p-0">
                         {!singleConfiguration && <section className="mb-5 rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4">
-                            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Manual decision inputs</p><p className="mt-1 max-w-2xl text-[11px] leading-5 text-slate-400">Manual chooses the most complete compatible configuration under these constraints. It does not ask you to select a Guide or hand-tune every engine parameter.</p></div><span className="rounded-full border border-cyan-400/30 px-2 py-1 text-[10px] text-cyan-200">Rule-driven</span></div>
+                            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Deployment requirements</p><p className="mt-1 max-w-2xl text-[11px] leading-5 text-slate-400">Describe the outcome you need. Lens will select compatible mechanisms, size the topology, and complete the deployment configuration automatically.</p></div><span className="rounded-full border border-cyan-400/30 px-2 py-1 text-[10px] text-cyan-200">Automatic completion</span></div>
                             <div className="mt-4 grid gap-4 lg:grid-cols-3">
                                 <label className="block"><span className={labelClass}>Primary objective</span><select className={inputClass} value={manualRequirements.objective} onChange={event => setManualRequirements(current => ({ ...current, objective: event.target.value }))}><option value="latency">Lowest latency</option><option value="throughput">Highest throughput</option><option value="cost">Meet target with least resources</option></select></label>
                                 <label className="block"><span className={labelClass}>Maximum accelerators</span><input className={inputClass} type="number" min="1" value={manualRequirements.maxAccelerators} placeholder={String(budget || 'Detected capacity')} onChange={event => setManualRequirements(current => ({ ...current, maxAccelerators: event.target.value }))} /></label>
@@ -1436,10 +1455,9 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                                 <label className="block"><span className={labelClass}>Output tokens</span><input className={inputClass} type="number" min="1" value={manualRequirements.outputTokens} placeholder="Unknown" onChange={event => setManualRequirements(current => ({ ...current, outputTokens: event.target.value }))} /></label>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">{[['streaming', 'Streaming output'], ['lora', 'LoRA'], ['tools', 'Tool calling']].map(([id, label]) => <label key={id} className="inline-flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg/50 px-3 py-2 text-[11px] text-theme-text"><input type="checkbox" checked={manualRequirements[id]} onChange={event => setManualRequirements(current => ({ ...current, [id]: event.target.checked }))} />{label}</label>)}</div>
-                            <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-[11px] text-slate-500">Unset values stay unknown and will be shown as pending confirmation.</p><button type="button" onClick={buildManualPlan} className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/15"><WandSparkles className="h-3.5 w-3.5" />Build compatible plan</button></div>
+                            <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-[11px] text-slate-500">Unknown workload values remain unknown; Lens will not treat them as satisfied.</p><button type="button" onClick={buildManualPlan} className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/15"><WandSparkles className="h-3.5 w-3.5" />Generate complete plan</button></div>
                         </section>}
-                        {manualPreview && !singleConfiguration && <section className="mb-5 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Manual plan preview</p><p className="mt-1 text-[11px] text-slate-400">Candidate mechanisms are separated from parameter sizing. Review this plan, then generate YAML for full compatibility validation.</p></div><span className="rounded-full border border-emerald-400/30 px-2 py-1 text-[10px] text-emerald-200">{manualPreview.objective} priority</span></div><div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-lg border border-theme-border bg-theme-bg/50 p-3"><p className="text-[10px] uppercase tracking-wide text-theme-muted">Sizing</p><p className="mt-1 text-sm font-semibold text-theme-text">{manualPreview.replicas} replicas × TP {manualPreview.tensorParallel}</p><p className="mt-1 text-[11px] text-theme-muted">{manualPreview.accelerators} accelerators reserved</p></div><div className="rounded-lg border border-theme-border bg-theme-bg/50 p-3"><p className="text-[10px] uppercase tracking-wide text-theme-muted">Model capacity</p><p className="mt-1 text-sm font-semibold text-theme-text">{manualPreview.estimate ? `${manualPreview.estimate.estimatedWeightMemoryGiB} GiB estimated` : 'Insufficient model metadata'}</p><p className="mt-1 text-[11px] text-theme-muted">Sizing is bounded by the selected budget.</p></div><div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"><p className="text-[10px] uppercase tracking-wide text-amber-300">Evidence boundary</p><p className="mt-1 text-sm font-semibold text-amber-100">Not benchmark verified</p><p className="mt-1 text-[11px] text-amber-200/80">Compatibility checks run during YAML generation.</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{manualPreview.mechanisms.map(item => <div key={item.label} className="flex items-start justify-between gap-3 rounded-lg border border-theme-border bg-theme-bg/40 px-3 py-2"><div><p className="text-xs font-medium text-theme-text">{item.label}</p><p className="mt-0.5 text-[11px] text-theme-muted">{item.reason}</p></div><span className={`shrink-0 text-[10px] ${item.state === 'unknown' ? 'text-amber-300' : item.state === 'disabled' ? 'text-theme-muted' : 'text-emerald-300'}`}>{item.state}</span></div>)}</div></section>}
-                        {manualDecisionPlan && !singleConfiguration && <ConfigurationPlanPreview plan={manualDecisionPlan} onEdit={() => setManualDecisionPlan(null)} onContinue={() => document.getElementById('configuration-advanced-source')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />}
+                        {manualDecisionPlan && !singleConfiguration && <ConfigurationPlanPreview plan={manualDecisionPlan} onEdit={() => setManualDecisionPlan(null)} onContinue={() => document.querySelector('.configuration-disclosure')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />}
                         {singleConfiguration && <div className="mb-5 border-b border-slate-800 pb-5">
                             <section>
                                 <div className="mb-4 border-l-2 border-emerald-400/70 bg-emerald-500/5 px-3 py-2">
@@ -1462,7 +1480,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                                 </div>
                             </section>
                         </div>}
-                        <details id="configuration-advanced-source" className="mb-4 overflow-hidden rounded-xl border border-slate-700/70 bg-slate-950/20">
+                        {singleConfiguration && <details id="configuration-advanced-source" className="mb-4 overflow-hidden rounded-xl border border-slate-700/70 bg-slate-950/20">
                             <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold text-slate-300 [&::-webkit-details-marker]:hidden">Resolved capability source <span className="ml-2 font-normal text-slate-500">advanced · selected automatically from cluster, model and software capabilities</span><ChevronRight className="float-right h-4 w-4 text-slate-500" /></summary>
                             <div className="border-t border-slate-700/70 p-4">
                         <div className="guide-template-bar mb-4 border-l-2 border-emerald-400/70 bg-emerald-500/5 px-3 py-2">
@@ -1574,7 +1592,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                             </div>
                         </fieldset>}
                             </div>
-                        </details>
+                        </details>}
                         {!singleConfiguration && <TopologyPreview variants={topologyPreviewVariants} isPd={selection.guide === 'pd-disaggregation'} />}
                         <details className="configuration-disclosure group/advanced mt-4 overflow-hidden rounded-xl border border-cyan-500/40">
                             <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-cyan-100 [&::-webkit-details-marker]:hidden"><ChevronRight aria-hidden="true" className="float-right mt-1 h-4 w-4 text-cyan-300 transition-transform group-open/advanced:rotate-90" />Advanced settings <span className="ml-2 text-xs text-slate-500">{customRows.length + Object.values({ maxModelLen, maxNumSeqs, gpuMemoryUtilization, blockSize, maxNumBatchedTokens, ...guideSettings }).filter(value => value != null && String(value).trim()).length} overrides</span><span className="mt-1 block text-xs font-normal leading-5 text-slate-400">Optional runtime tuning, environment variables, cache, and routing. Leave blank to use Guide defaults.</span></summary>
@@ -1630,7 +1648,6 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                         {embedded && !catalogLoading && !selectedModelServer && <p className="mt-3 text-xs text-amber-300">This Guide does not support the runtime selected in Setup. Choose another Guide or edit Setup.</p>}
                         {!embedded && validationSubmitted && fieldErrors.length > 0 && <div role="alert" className="mt-3 flex items-center justify-between gap-3 text-xs text-rose-300"><span>{new Set(fieldErrors.map(error => error.field)).size} fields need attention</span><button type="button" className="underline" onClick={() => focusConfigurationError(editorRef.current, fieldErrors, true)}>Next error</button></div>}
                         {!embedded && <div className="mt-4 flex flex-col gap-4">
-                            <OptimizationCompletion policy={optimizationPolicy} onChange={setOptimizationPolicy} compositionCpuGiB={compositionCpuGiB} setCompositionCpuGiB={setCompositionCpuGiB} />
                             <ResourceBasisControl value={resourceBasis} hardware={clusterHardware} requiredCards={Math.max(1, ...topologyPreviewVariants.map(row => row.gpuCount))} disabled={operationBusy || catalogLoading} loading={planning} onGenerate={generate} label="Generate YAML" />
                         </div>}
                         </fieldset>
@@ -1677,9 +1694,7 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
                     )}
                 </div>
 
-            {embedded && onPublished && !singleConfiguration && !deployOnPublish && <div id="optimizationSelection"><OptimizationComparisonTree guide={selection.guide} selected={optimizationSelection} onChange={setOptimizationSelection} disabled={operationBusy} /></div>}
 
-            {embedded && <OptimizationCompletion policy={optimizationPolicy} onChange={setOptimizationPolicy} compositionCpuGiB={compositionCpuGiB} setCompositionCpuGiB={setCompositionCpuGiB} />}
             {embedded && <footer className="flex flex-wrap items-center justify-between gap-3 py-2">
                 <div className="min-w-0 flex-1" role="status" aria-live="polite">
                     {!operationBusy && validationSubmitted && fieldErrors.length > 0 && <button type="button" className="text-xs text-rose-300 underline" onClick={() => focusConfigurationError(editorRef.current, fieldErrors, true)}>{new Set(fieldErrors.map(error => error.field)).size} fields need attention · Next error</button>}
@@ -1722,19 +1737,4 @@ export default function OptimizationConfiguration({ onNavigate, onCancel, onPubl
         </section>
         </ConfigurationValidationContext.Provider>
     );
-}
-
-function OptimizationCompletion({ policy, onChange, compositionCpuGiB, setCompositionCpuGiB }) {
-    const entries = [
-        ['Prefix reuse', policy.prefixReuse === 'yes' ? 'enabled' : policy.prefixReuse === 'no' ? 'excluded' : 'unknown', policy.prefixReuse === 'yes' ? 'Workload evidence or user preference enables it.' : policy.prefixReuse === 'no' ? 'User selected no repeated prefixes.' : 'Workload signal is missing; preserved as unknown.'],
-        ['Chunked prefill', policy.excluded.includes('chunked') ? 'user disabled' : 'candidate', policy.excluded.includes('chunked') ? 'Excluded by the user.' : 'Checked against the selected Guide and resource budget during generation.'],
-        ['Native CPU KV cache', compositionCpuGiB ? 'candidate' : 'not requested', compositionCpuGiB ? `Adds ${compositionCpuGiB} GiB per replica and must pass resource checks.` : 'No cache composition requested.'],
-    ];
-    return <Panel title="Manual · compatible optimization completion">
-                                <p className="text-sm text-theme-muted">Manual fills every compatible mechanism it can prove safe to use. Parameters still respect the resource budget; unknown workload signals remain visible instead of being assumed.</p>
-                                <div className="mt-4 grid gap-2 sm:grid-cols-3">{entries.map(([label, status, reason]) => <div key={label} className="rounded-lg border border-theme-border bg-theme-bg p-3"><div className="flex items-center justify-between gap-2"><span className="text-xs font-medium">{label}</span><span className={`text-[10px] ${status === 'enabled' ? 'text-emerald-300' : status === 'unknown' ? 'text-amber-300' : 'text-theme-muted'}`}>{status}</span></div><p className="mt-1 text-[11px] leading-4 text-theme-muted">{reason}</p></div>)}</div>
-                                <label className="block text-sm mt-3">Do requests reuse prompt prefixes?<Select value={policy.prefixReuse} onChange={event => onChange(current => ({ ...current, prefixReuse: event.target.value }))}><option value="unknown">Unknown — preserve source behavior</option><option value="yes">Yes — enable when source support is known</option><option value="no">No repeated prefixes</option></Select></label>
-                                <label className="block text-sm mt-3">Add native CPU KV cache from another Guide (GiB per replica)<Input type="number" min="1" max="1024" value={compositionCpuGiB} onChange={event => setCompositionCpuGiB(event.target.value)} placeholder="Optional" /></label><p className="text-xs text-theme-muted mt-1">Supports baseline, precise routing, and NIXL P/D with matching source images. P/D preserves transport and adds a local cache to each role; runtime support is checked at deployment. Benchmark before choosing. Clear this field to remove the composition.</p>
-                                <details className="mt-3"><summary>Optimization exclusions</summary>{[['prefix', 'Disable prefix caching'], ['chunked', 'Disable chunked prefill']].map(([id, label]) => <Checkbox key={id} label={label} checked={policy.excluded.includes(id)} onChange={event => onChange(current => ({ ...current, excluded: event.target.checked ? [...current.excluded, id] : current.excluded.filter(value => value !== id) }))} />)}</details>
-                            </Panel>;
 }
