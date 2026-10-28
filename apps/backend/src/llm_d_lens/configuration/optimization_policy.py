@@ -86,7 +86,8 @@ def resolve_optimization_policy(request: dict, documents: list[dict]) -> tuple[d
             status, reason = 'enabled', 'Enabled by Manual completion using a flag declared by the pinned source.'
         elif known:
             status, reason = 'inherited', 'Preserved the source setting; additional workload evidence or an explicit choice is needed.'
-        decisions.append({'id': key, 'label': label, 'status': status, 'reason': reason})
+        effective_enabled = True if status == 'enabled' else enabled if status == 'inherited' else False if status == 'disabled' else None
+        decisions.append({'id': key, 'label': label, 'status': status, 'reason': reason, 'effective_enabled': effective_enabled})
     for guide, label in [('pd-disaggregation', 'Prefill / Decode separation'), ('precise-prefix-cache-routing', 'Precise cache routing'), ('tiered-prefix-cache', 'External KV cache')]:
         selected = request.get('guide') == guide
         decisions.append({'id': guide, 'label': label, 'status': 'selected' if selected else 'alternative', 'reason': 'Selected provider owns this topology and its dependencies.' if selected else 'A separate provider recipe; not overlaid without a validated combined adapter.'})

@@ -57,6 +57,8 @@ class MeasuredOptimizer:
     def start(self, run, request, http_request, owner, *, cluster_id=None):
         if run.id in self.tasks or run.status != AgenticDeploymentStatus.AWAITING_APPROVAL:
             raise ValueError('Optimization requires an idle plan awaiting approval.')
+        if getattr(run.request, "requirements", None) is not None and not run.request.execution_policy.allow_trials:
+            raise ValueError("Trial deployments are disabled for this plan. Enable trials in a new plan first.")
         if len(set(request.candidate_ids)) != len(request.candidate_ids):
             raise ValueError('Candidate IDs must be unique.')
         candidates = {c.id: c for c in run.candidates if c.deployable}
@@ -145,7 +147,7 @@ class MeasuredOptimizer:
             async with asyncio.timeout_at(deadline):
                 for candidate_id in request.candidate_ids:
                     candidate = next(c for c in run.candidates if c.id == candidate_id)
-                    child = run.model_copy(deep=True, update={'id': str(uuid4()), 'status': AgenticDeploymentStatus.AWAITING_APPROVAL, 'deployment_run_id': None, 'optimization': None})
+                    child = run.model_copy(deep=True, update={'id': str(uuid4()), 'status': AgenticDeploymentStatus.AWAITING_APPROVAL, 'deployment_run_id': None, 'optimization': None, 'configuration_plan': None})
                     child.selected_candidate = self.service._agentic_candidate(candidate)
                     self.service._runs[child.id] = child
                     state.update(child_run_id=child.id, deployment_run_id=None)

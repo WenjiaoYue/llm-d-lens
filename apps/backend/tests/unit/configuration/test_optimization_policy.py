@@ -42,6 +42,14 @@ def test_unknown_workload_and_agentic_do_not_enable_prefix():
         assert args(docs) == ['--no-enable-prefix-caching']
 
 
+def test_inherited_flag_reports_effective_state_not_just_provenance():
+    docs = [workload(['--enable-prefix-caching', '--no-enable-chunked-prefill'])]
+    _, decisions = resolve_optimization_policy(request(mode='agentic'), docs)
+    assert [item['status'] for item in decisions[:2]] == ['inherited', 'inherited']
+    assert decisions[0]['effective_enabled'] is True
+    assert decisions[1]['effective_enabled'] is False
+
+
 def test_exclusion_replaces_flag_without_duplicate_polarities():
     docs = [workload(['--enable-prefix-caching'])]
     resolve_optimization_policy(request(excluded=['prefix']), docs)

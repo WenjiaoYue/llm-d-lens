@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from llm_d_lens.ai_providers.client import AIRequestRecord, capture_ai_requests
 
@@ -88,6 +88,25 @@ class PlanningSnapshotStore:
                 result.append(run)
         return result
 
+    def load_run(self, run_id: str) -> AgenticDeploymentRun | None:
+        try:
+            UUID(run_id)
+        except ValueError:
+            return None
+        directory = self._base_dir / run_id
+        snapshots = sorted(directory.glob("*.json"), reverse=True)
+        if not snapshots:
+            return None
+        payload = json.loads(snapshots[0].read_text(encoding="utf-8"))
+        saved = payload.get("workflow_run") or payload.get("optimization_run")
+        if saved is None:
+            return None
+        run = AgenticDeploymentRun.model_validate(saved)
+        if run.status == AgenticDeploymentStatus.OPTIMIZING:
+            run.status = AgenticDeploymentStatus.FAILED
+            run.error = "Testing was interrupted. Clean up the recorded trial resources before retrying."
+        return run
+
     @staticmethod
     def _write_json(destination: Path, payload: dict[str, object]) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -119,6 +138,7 @@ class PlanningSnapshotStore:
             "created_at": created_at.isoformat(),
             "event": event,
             "run_id": run.id,
+            "workflow_run": run.model_dump(mode="json") if run.request.requirements is not None else None,
             "request": request,
             "resolved_planning_facts": asdict(facts),
             "cluster_snapshot": run.planning_cluster_snapshot,

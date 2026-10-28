@@ -1003,6 +1003,11 @@ async def prepare(request: Request):
 
 @router.post("/plan")
 async def plan(request: Request):
+    return await plan_resources(request, await request.json())
+
+
+async def plan_resources(request: Request, body: dict):
+    """Render the same source-bound resources for interactive and deployment-plan callers."""
     from .guide_bundle import build_guide_deployment_bundle
     from .guide_sources import (
         discover_local_cluster,
@@ -1030,7 +1035,6 @@ async def plan(request: Request):
             timings[name] = round((time.monotonic() - began) * 1000)
 
     try:
-        body = await request.json()
         guide, accelerator, model_server, model = (
             str(body.get(key) or "").strip() for key in ("guide", "accelerator", "modelServer", "model")
         )

@@ -1,6 +1,7 @@
 """Independent HTTP API for Agentic Deploy orchestration."""
 
 import logging
+import json
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -8,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from llm_d_lens.auth.access import current_principal, owner_for_create
 
 from .models import (
+    AgenticApprovalRequest,
     AgenticCandidateRefinementRequest,
     AgenticCandidateSelectionRequest,
     AgenticDeploymentCreateRequest,
@@ -15,6 +17,7 @@ from .models import (
 )
 from .service import service
 from .streaming import planning_stream_response
+from .configuration import planning_resource_request
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agentic-deployments", tags=["agentic-deployments"])
@@ -27,7 +30,13 @@ router = APIRouter(prefix="/api/agentic-deployments", tags=["agentic-deployments
     summary="Create a new Agentic Deployment plan.",
     description=(
         "Create a new Agentic Deployment plan. Provide the standard deployment inputs plus planning facts so Lens "
-        "can propose, score, and stage candidate deployment topologies."
+        "can propose, score, and stage candidate deployment topologies. Set planning_mode=manual for deterministic "
+        "selection without an external AI provider. Optional shared requirements enforce model/cluster identity, "
+        "accelerator limits and required/forbidden mechanisms. A configuration_plan reports planning checks "
+        "separately from pending manifest, admission, readiness and performance checks. Manual compares provider "
+        "and native CPU-cache combinations using live free capacity, target evidence, mechanism coverage and explicit "
+        "objective tie-breaks. Cache uses at most 8 GiB per serving replica and 25% of observed free host memory; "
+        "source compatibility remains pending until rendering. No cluster writes occur."
     ),
     operation_id="create_agentic_plan",
 )
@@ -97,15 +106,75 @@ async def get_agentic_deployment(run_id: str) -> AgenticDeploymentRun:
     summary="Select one candidate inside an existing Agentic Deployment plan.",
     description=(
         "Select one candidate inside an existing Agentic Deployment plan. Use this when the planner produced "
-        "multiple candidates and you want to pin one before approval or refinement."
+        "multiple candidates and you want to pin one before approval or refinement. Optional role, replicas and "
+        "tensor_parallel_size request a live-revalidated topology revision instead. Optional max_model_len, "
+        "gpu_memory_utilization, max_num_seqs and max_num_batched_tokens revise all serving roles. A revision returns a new run "
+        "with parent_run_id, preserves the original, and invalidates previous performance evidence. Invalid edits "
+        "return 409 and do not modify the original plan. render_resources=true renders source-pinned YAML and "
+        "checks manifest consistency for the selected candidate, without cluster writes. Rendering can fetch "
+        "official source files and read cluster inventory. With compare_combinations=true, Manual checks all retained "
+        "recipes and selects the first passing explicit ranking, recording source/resource exclusions and rationale. "
+        "All failures preserve the original recommendation and return 409. Intermediate selections are not published. "
+        "Admission, readiness and performance remain pending."
     ),
     operation_id="select_agentic_plan_candidate",
 )
 async def select_agentic_candidate(
     run_id: str,
     request: AgenticCandidateSelectionRequest,
+    http_request: Request,
 ) -> AgenticDeploymentRun:
     try:
+        edit_requested = bool(request.model_dump(exclude_none=True, include={
+            "replicas", "tensor_parallel_size", "max_model_len", "gpu_memory_utilization",
+            "max_num_seqs", "max_num_batched_tokens",
+        }))
+        if request.compare_combinations and not request.render_resources:
+            raise ValueError("Combination comparison requires render_resources=true.")
+        if request.render_resources:
+            from llm_d_lens.deploy.guide_planning import plan_resources
+            from llm_d_lens.storage.service import get_ready_volume
+
+            if edit_requested:
+                raise ValueError("Apply topology edits before rendering resources.")
+            run = service.get(run_id)
+            if run is None:
+                raise KeyError("deployment plan not found")
+            if run.selected_candidate.id != request.candidate_id or run.status != "awaiting_approval":
+                raise ValueError("Only the selected, idle candidate can be rendered.")
+            if run.configuration_plan is None:
+                raise ValueError("Regenerate this legacy plan before reviewing resources.")
+            expected_checksum = run.configuration_plan.configuration["checksum"] if run.configuration_plan else None
+            volume = await get_ready_volume(
+                run.request.storage_volume_id, cluster_id=run.request.requirements.cluster_id,
+            )
+            if request.compare_combinations:
+                async def render_trial(trial):
+                    body = planning_resource_request(trial)
+                    body["modelPvcClaimName"] = volume.pvc_name
+                    result = await plan_resources(http_request, body)
+                    payload = json.loads(result.body)
+                    if result.status_code in {400, 404, 409, 422}:
+                        raise ValueError(payload.get("error", "Source/resource compatibility check failed."))
+                    if result.status_code >= 400:
+                        raise HTTPException(status_code=result.status_code, detail=payload.get("error", "Resource generation failed."))
+                    return payload
+                return await service.compare_manual_resources(run_id, request.candidate_id, render_trial)
+            body = planning_resource_request(run)
+            body["modelPvcClaimName"] = volume.pvc_name
+            result = await plan_resources(http_request, body)
+            payload = json.loads(result.body)
+            if result.status_code >= 400:
+                raise HTTPException(status_code=result.status_code, detail=payload.get("error", "Resource generation failed."))
+            if (
+                run.status != "awaiting_approval"
+                or run.selected_candidate.id != request.candidate_id
+                or run.configuration_plan.configuration["checksum"] != expected_checksum
+            ):
+                raise ValueError("The plan changed during rendering. Generate resources for the current selection.")
+            return service.accept_rendered_plan(run, payload)
+        if edit_requested:
+            return await service.revise_candidate(run_id, request)
         return service.select_candidate(run_id, request.candidate_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -165,12 +234,25 @@ async def stream_refine_agentic_deployment(
     summary="Approve an Agentic Deployment plan so Lens can begin executing it.",
     description=(
         "Approve an Agentic Deployment plan so Lens can begin executing it. "
-        "Use this only after reviewing the selected candidate and evidence."
+        "Use this only after reviewing the selected candidate and evidence. Shared requirements-based plans "
+        "require generated resources and a matching configuration_checksum in the JSON body; stale or missing "
+        "review evidence returns 409. Capacity is refreshed before deploying the stored reviewed manifest."
     ),
     operation_id="approve_agentic_plan",
 )
-async def approve_agentic_deployment(run_id: str, request: Request = None) -> AgenticDeploymentRun:
+async def approve_agentic_deployment(
+    run_id: str, request: Request = None, approval: AgenticApprovalRequest | None = None,
+) -> AgenticDeploymentRun:
     try:
+        run = service.get(run_id)
+        if run is not None and run.request.requirements is not None and (
+            run.configuration_plan is None or run.configuration_plan.validation.get("status") != "resources_checked"
+        ):
+            raise ValueError("Generate and review the current configuration resources before approval.")
+        if run is not None and run.request.requirements is not None and (
+            approval is None or approval.configuration_checksum != run.configuration_plan.configuration["checksum"]
+        ):
+            raise ValueError("The configuration changed or was not reviewed. Confirm the current checksum before deployment.")
         return await service.approve(run_id, owner_user_id=owner_for_create(current_principal(request)))
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error

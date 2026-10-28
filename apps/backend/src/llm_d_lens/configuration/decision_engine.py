@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from hashlib import sha256
+from math import floor
 from typing import Any
 
 from .plan_models import ConfigurationPlan, DeploymentRequirements, OptimizationDecision, PlanRequest
@@ -80,7 +81,16 @@ def _decisions(requirements: DeploymentRequirements, mode: str) -> tuple[list[st
 
 
 def build_plan(request: PlanRequest) -> ConfigurationPlan:
-    selected, decisions = _decisions(request.requirements, request.mode)
+    _, decisions = _decisions(request.requirements, request.mode)
+    # This compatibility endpoint has no live facts or rendered resources.
+    # Intent alone must never attest that a mechanism has been enabled.
+    decisions = [
+        item.model_copy(update={
+            "status": "unknown",
+            "reason": "Requested or applicable by workload; live provider, dependency and resource validation is required.",
+        }) if item.status == "enabled" else item
+        for item in decisions
+    ]
     budget = request.requirements.hard_constraints.get("maxAccelerators")
     workload = request.requirements.workload
     configuration = {
@@ -95,27 +105,185 @@ def build_plan(request: PlanRequest) -> ConfigurationPlan:
             }
             for item in decisions
         ],
-        "topology": {
-            "replicas": 1,
-            "tensor_parallel_size": 1,
-            "max_accelerators": budget,
-        },
         "workload": workload,
         "performance_targets": request.requirements.performance_targets,
     }
-    candidates = []
-    if request.mode == "agentic":
-        for index in range(request.candidate_limit):
-            capabilities = selected[:]
-            if index and capabilities:
-                capabilities = capabilities[:-index] or capabilities
-            candidates.append({"id": f"candidate-{index + 1}", "capabilities": capabilities, "rank": index + 1, "evidence_level": "recommendation", "tradeoff": "Compared against the requested objective and hard constraints."})
     return ConfigurationPlan(
         plan_id=_plan_id(request), mode=request.mode, requirements=request.requirements,
-        selected_capabilities=selected, decisions=decisions,
-        resource_estimate={"max_accelerators": budget, "status": "bounded" if budget else "unknown"},
-        candidates=candidates, evidence_level="recommendation",
+        selected_capabilities=[], decisions=decisions,
+        resource_estimate={"max_accelerators": budget, "status": "unknown"},
+        candidates=[], evidence_level="recommendation",
         validation={"status": "pending", "checks": ["capability prerequisites", "conflicts", "resource budget"]},
         configuration=configuration,
     )
 
+
+PROVIDER_MECHANISMS = {
+    "optimized-baseline": set(),
+    "pd-disaggregation": {"pd_disaggregation"},
+    "precise-prefix-cache-routing": {"prefix_routing"},
+    "tiered-prefix-cache": {"external_kv_cache"},
+}
+
+
+def candidate_mechanisms(candidate) -> set[str]:
+    mechanisms = set(PROVIDER_MECHANISMS.get(candidate.provider_ref, ()))
+    if candidate.native_cpu_cache_gib:
+        mechanisms.add("external_kv_cache")
+    return mechanisms
+
+
+def manual_combinations(candidates, facts, requirements):
+    """Expand only the CPU-cache adapters owned by the source-bound renderer."""
+    output = list(candidates)
+    if requirements.workload.get("prefixReuse") is not True:
+        return output
+    for index, candidate in enumerate(candidates):
+        replicas = candidate.replicas + (candidate.prefill_replicas or 0)
+        capacity = floor(min(8.0, facts.cpu_buffer_gib * 0.25 / replicas) * 1000) / 1000
+        if candidate.provider_ref == "tiered-prefix-cache":
+            output[index] = candidate.model_copy(update={
+                "native_cpu_cache_gib": capacity if capacity >= 1 else None,
+                "deployable": candidate.deployable and capacity >= 1,
+                "rejection_reasons": [
+                    *candidate.rejection_reasons,
+                    *([] if capacity >= 1 else ["No discovered host-memory budget for CPU cache."]),
+                ],
+                "historical_benchmarks": [], "performance_estimate": None,
+                "performance_estimate_source": None, "score": None, "score_source": None,
+                "slo_status": "unknown", "slo_confidence": 0,
+            })
+        if (not candidate.deployable or candidate.native_cpu_cache_gib
+                or candidate.provider_ref not in {"optimized-baseline", "precise-prefix-cache-routing", "pd-disaggregation"}):
+            continue
+        # Reserve at least 75% of observed free host memory for serving and other
+        # workloads. Source rendering still checks per-node placement and limits.
+        if capacity < 1:
+            continue
+        output.append(candidate.model_copy(update={
+            "id": f"{candidate.id}-cpu-cache",
+            "native_cpu_cache_gib": capacity,
+            "historical_benchmarks": [], "performance_estimate": None,
+            "performance_estimate_source": None, "score": None, "score_source": None,
+            "slo_status": "unknown", "slo_confidence": 0,
+        }))
+    return output
+
+
+def rank_manual_candidates(candidates, requirements):
+    """Prefer established coverage, then an explicit, non-measured objective policy."""
+    def key(candidate):
+        mechanisms = candidate_mechanisms(candidate)
+        if requirements.objective == "cost":
+            preference = (candidate.required_gpus,)
+        elif requirements.objective == "latency":
+            preference = (int("prefix_routing" not in mechanisms), candidate.tensor_parallel_size)
+        elif requirements.objective == "reliability":
+            preference = (int(candidate.replicas < 2), candidate.required_gpus)
+        else:
+            preference = (int("pd_disaggregation" not in mechanisms), int("prefix_routing" not in mechanisms))
+        return (
+            {"satisfied": 0, "unknown": 1, "not_satisfied": 2}[candidate.slo_status],
+            -len(mechanisms), *preference, candidate.required_gpus, candidate.tensor_parallel_size, candidate.id,
+        )
+    return sorted((item for item in candidates if item.deployable), key=key)
+
+
+def candidate_requirement_errors(requirements, candidate) -> list[str]:
+    """Filter actual provider configurations, not a second speculative candidate list."""
+    if requirements is None:
+        return []
+    mechanisms = candidate_mechanisms(candidate)
+    errors = []
+    budget = requirements.hard_constraints.get("maxAccelerators")
+    if budget is not None and candidate.required_gpus > budget:
+        errors.append(f"Requires {candidate.required_gpus} accelerators; the hard limit is {budget}.")
+    for capability in requirements.forbidden_features:
+        if capability in mechanisms:
+            errors.append(f"{capability} is forbidden by the user.")
+    for capability in requirements.required_features:
+        if capability not in mechanisms:
+            errors.append(f"{capability} is required but is not established by this provider configuration.")
+    if "prefix_routing" in mechanisms and not requirements.workload.get("prefixReuse"):
+        errors.append("Prefix-aware routing requires a known repeated-prefix workload.")
+    if "external_kv_cache" in mechanisms and not requirements.workload.get("prefixReuse"):
+        errors.append("External KV cache requires a known reuse workload.")
+    if "pd_disaggregation" in mechanisms and not requirements.workload.get("prefillHeavy"):
+        errors.append("P/D applicability requires a prefill-heavy workload or an explicit workload preset.")
+    return errors
+
+
+def resolved_plan(run, configuration: dict) -> ConfigurationPlan:
+    selected = next(item for item in run.candidates if item.id == run.selected_candidate.id)
+    mechanisms = candidate_mechanisms(selected)
+    requirements = run.request.requirements or DeploymentRequirements(model=run.request.model)
+    labels = [
+        ("pd_disaggregation", "Prefill / Decode separation"),
+        ("prefix_routing", "Prefix-aware routing"),
+        ("external_kv_cache", "External KV cache"),
+        ("prefix_cache", "Engine prefix cache"),
+        ("chunked_prefill", "Chunked prefill"),
+        ("autoscaling", "Automatic scaling"),
+        ("speculative_decoding", "Speculative decoding"),
+    ]
+    decisions = []
+    for capability, label in labels:
+        rejected = [
+            reason for item in run.rejected_candidates if capability in candidate_mechanisms(item)
+            for reason in item.rejection_reasons
+        ]
+        if capability in requirements.forbidden_features:
+            status, reason = "user_disabled", "Excluded by the user's hard capability constraint."
+        elif capability in mechanisms:
+            if capability == "external_kv_cache" and selected.native_cpu_cache_gib:
+                status, reason = "unknown", (
+                    "Planned within the discovered host-memory budget. The pinned source connector, runtime image "
+                    "and per-node resource compatibility must pass rendering before this mechanism is enabled."
+                )
+            else:
+                status, reason = "enabled", "Included in the selected provider configuration; runtime readiness is still pending."
+        elif any(capability in candidate_mechanisms(item) for item in run.candidates):
+            status, reason = "conflict", (
+                f"Available in another planning-compatible combination. The explicit {requirements.objective}-first "
+                "rule selected the displayed recipe; no source-verified overlay joins these recipes."
+            )
+        elif capability in {"pd_disaggregation", "prefix_routing", "external_kv_cache"}:
+            signal = "prefillHeavy" if capability == "pd_disaggregation" else "prefixReuse"
+            if requirements.workload.get(signal) is None:
+                status, reason = "unknown", f"Missing workload evidence: {signal}. No applicability was assumed."
+            elif requirements.workload.get(signal) is False:
+                status, reason = "excluded", f"Workload prerequisite {signal} is not satisfied."
+            elif rejected:
+                status, reason = "excluded", "; ".join(dict.fromkeys(rejected))
+            else:
+                status, reason = "unknown", "No compatible provider or discovered resource budget established this mechanism."
+        else:
+            status, reason = "unknown", (
+                "Pinned source runtime flags must be inspected during resource generation."
+                if capability in {"prefix_cache", "chunked_prefill"}
+                else "No source-verified planner adapter establishes software support, dependencies and resource sizing."
+            )
+        parameters = {}
+        if capability == "external_kv_cache" and selected.native_cpu_cache_gib:
+            parameters = {"cpu_cache_gib_per_replica": selected.native_cpu_cache_gib}
+        decisions.append(OptimizationDecision(
+            capability_id=capability, label=label, status=status, reason=reason, parameters=parameters,
+        ))
+    return ConfigurationPlan(
+        plan_id=f"{run.id}:{run.revision}",
+        mode=run.request.planning_mode,
+        requirements=requirements,
+        selected_capabilities=sorted(item.capability_id for item in decisions if item.status == "enabled"),
+        decisions=decisions,
+        resource_estimate={
+            "accelerators": selected.required_gpus, "status": "estimated",
+            "cpu_cache_gib": (selected.native_cpu_cache_gib or 0) * (selected.replicas + (selected.prefill_replicas or 0)),
+        },
+        candidates=[item.model_dump(mode="json") for item in run.candidates],
+        validation={
+            "status": "planning_checked",
+            "checks": ["model memory", "accelerator capacity", "candidate requirements"],
+            "pending": ["rendered manifests", "cluster admission", "runtime readiness", "workload performance"],
+        },
+        configuration=configuration,
+    )

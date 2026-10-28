@@ -44,11 +44,20 @@ are no longer supported.
 
 ## Open the deployment creation flow
 
-In **Agentic** mode, TTFT and TPOT SLOs and input/output tokens per request (ISL/OSL)
-start unset (`null` when submitted empty). Gray example placeholders are references,
-not submitted defaults. The **SLO** section (**Optional target.**) is expanded by
-default, with TTFT and TPOT side by side. **Workload estimate** appears directly below **Preference**
-and is expanded by default; **vLLM parameters** follows it and is collapsed by default.
+Manual and Agentic share a short goals form and configuration workbench.
+General chat, throughput priority and no assumed prefix reuse are selected by default.
+Advanced settings are collapsed; request sizes start at 1024 input / 256 output
+tokens (reduced for smaller model contexts), explicitly labelled as planning
+assumptions. Load and latency targets remain optional, not invented measurements.
+Manual automatically generates/checks resources and summarizes enabled optimizations
+below the topology, with the complete checklist under **Configuration basis**.
+It checks retained source combinations
+and explains exclusions and the first passing selection. If none pass, it preserves the recommendation
+but blocks deployment. Review and edit in either **Overview** or **3D explorer**, then
+explicitly confirm the reviewed version before deployment. Runtime controls live
+in the shared component inspector, not in the initial form. The 3D view provides
+logical resource layers, focus, zoom and reset controls, not actual node placement.
+The **Ready to deploy?** section explains each remaining action before approval.
 
 Deployment creation requires models registered in [Model Cache](/user-guide/model-cache).
 Select a registered cache volume containing the ready model and its revision on the
@@ -81,7 +90,10 @@ not a network isolation boundary.
 2. In the page header, click **Create**.
 3. Follow [Create a deployment](/user-guide/model-market). The new deployment appears in this list after submission.
 
-In **Manual**, open **Advanced settings** in the configuration editor and select **Replica placement**. The default prefers one node but can use others when necessary. The presets group all model-server Pods in the same rendered deployment manifest, including separate Prefill and Decode Deployments; router Pods are excluded. **Require one node** keeps the group on the same node; optionally select a live Node label to restrict eligible nodes. **Distribute evenly across nodes** balances the group across eligible nodes using hostname topology spread (up to one Pod of skew); Pods may remain Pending if the balance cannot be maintained with available capacity. **Require separate nodes** needs one eligible node per Pod in the group and leaves extra Pods Pending if there are not enough nodes. Neither distribution preset supports LeaderWorkerSet workloads. The label list comes from the selected cluster. Agentic deployments use the soft same-node replica preference without an affinity selector in their forms. Tensor-parallel devices are requested by each model-server Pod, so TP stays within that Pod; multi-Pod LeaderWorkerSet workers prefer the same node but can spread when necessary.
+The shared creation workflow uses the soft same-node placement preference.
+Existing deployment APIs and the separate Configuration editor retain their
+placement controls. TP devices are requested by each model-server Pod; planned
+placement is not shown as actual cluster placement before deployment.
 
 ## RuntimeClass Policy
 

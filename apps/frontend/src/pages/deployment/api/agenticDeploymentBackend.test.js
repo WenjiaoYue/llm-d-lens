@@ -1,6 +1,76 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { streamAgenticRecommendation, streamAgenticRefinement } from './agenticDeploymentBackend.js';
+import { candidateEvidence, defaultRequirements, DEFAULT_REQUIREMENTS, deploymentPlanningRequest, requirementsFromRun, streamAgenticRecommendation, streamAgenticRefinement } from './agenticDeploymentBackend.js';
+
+const draft = { model: 'test/model', clusterId: 'cluster-a', deploymentName: 'test', storageVolumeId: 'cache-a', contextLength: 40960 };
+test('restoring a saved plan preserves requirements, unknowns and trial limits', () => {
+    for (const values of [
+        DEFAULT_REQUIREMENTS,
+        { ...DEFAULT_REQUIREMENTS, objective: 'latency', maxAccelerators: '8', ttftMs: '200', tpotMs: '40',
+            inputTokens: '1024', outputTokens: '256', requestRate: '0.5', prefixReuse: 'no',
+            useCase: 'summarization', requiredFeatures: ['pd_disaggregation'],
+            forbiddenFeatures: ['external_kv_cache'], maxCandidates: '5', maxDuration: '20', allowTrial: true },
+    ]) {
+        const request = deploymentPlanningRequest(draft, values, 'session-a', 'agentic', 'provider-a');
+        assert.deepEqual(requirementsFromRun({ request }), values);
+    }
+});
+
+test('both modes use explicit conservative assumptions without inventing performance targets', () => {
+    for (const mode of ['manual', 'agentic']) {
+        const request = deploymentPlanningRequest(draft, DEFAULT_REQUIREMENTS, 'session-a', mode, 'provider');
+        assert.equal(request.planning_mode, mode);
+        assert.equal(request.max_model_len, 40960);
+        assert.equal(request.planning_facts.workload_profile.mean_input_tokens, 1024);
+        assert.equal(request.planning_facts.workload_profile.mean_output_tokens, 256);
+        assert.equal(request.planning_facts.workload_profile.shared_prefix_ratio, 0);
+        assert.equal(request.planning_facts.ttft_slo_ms, null);
+        assert.ok(!request.requirements.unknowns.includes('prefixReuse'));
+        assert.equal(request.requirements.workload.prefillHeavy, false);
+        assert.equal(request.requirements.workload.concurrency, null);
+        assert.equal(request.ai_provider_id, mode === 'manual' ? null : 'provider');
+        assert.equal(request.execution_policy.mode, 'approval_required');
+        assert.equal(request.planning_facts.max_candidates, mode === 'manual' ? 10 : 3);
+    }
+});
+
+test('suggested request sizes respect small model contexts without changing runtime context', () => {
+    for (const context of [256, 512, 1024, 1280, 40960]) {
+        const values = defaultRequirements(context);
+        assert.ok(Number(values.inputTokens) + Number(values.outputTokens) <= context);
+        const request = deploymentPlanningRequest({ ...draft, contextLength: context }, values, 'session-a', 'manual');
+        assert.equal(request.max_model_len, context);
+    }
+    assert.deepEqual(defaultRequirements(undefined), DEFAULT_REQUIREMENTS);
+});
+
+test('cleared values and legacy unknown evidence remain unspecified when restoring', () => {
+    const values = { ...DEFAULT_REQUIREMENTS, inputTokens: '', outputTokens: '', useCase: 'unknown', prefixReuse: 'unknown' };
+    const request = deploymentPlanningRequest(draft, values, 'session-a', 'manual');
+    assert.equal(request.requirements.workload.inputTokens, null);
+    assert.equal(request.requirements.workload.prefixReuse, null);
+    assert.deepEqual(requirementsFromRun({ request }), { ...values, maxCandidates: '10' });
+});
+test('request mapping rejects invalid budgets instead of applying silent defaults', () => {
+    for (const values of [
+        { maxAccelerators: '0' }, { maxAccelerators: '1.5' }, { maxAccelerators: 'Infinity' },
+        { inputTokens: '-4' }, { concurrency: '4', requestRate: '2' }, { maxCandidates: '11' },
+    ]) assert.throws(() => deploymentPlanningRequest(draft, { ...DEFAULT_REQUIREMENTS, ...values }, 'session-a', 'manual'));
+    const request = deploymentPlanningRequest(draft, { ...DEFAULT_REQUIREMENTS, maxAccelerators: '2', forbiddenFeatures: ['pd_disaggregation'] }, 'session-a', 'agentic');
+    assert.equal(request.requirements.hard_constraints.maxAccelerators, 2);
+    assert.deepEqual(request.requirements.forbidden_features, ['pd_disaggregation']);
+});
+
+test('only the measured winner is labelled best, not every ranked candidate', () => {
+    const run = { selected_candidate: { id: 'a' }, candidates: [], optimization: {
+        status: 'completed', best_candidate_id: 'b', ranking: [{ candidate_id: 'a' }, { candidate_id: 'b' }],
+    } };
+    assert.match(candidateEvidence(run), /not the verified winner/);
+    run.selected_candidate.id = 'b';
+    assert.match(candidateEvidence(run), /Best verified candidate/);
+    run.selected_candidate.id = 'c';
+    assert.match(candidateEvidence(run), /performance not verified/);
+});
 
 test('agentic recommendation stream preserves events across response chunks', async (t) => {
     const signal = new AbortController().signal;

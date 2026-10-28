@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from llm_d_lens.ai_providers.client import AIRequestRecord
 from llm_d_lens.configuration.models import ModelSecretConfiguration
+from llm_d_lens.configuration.plan_models import ConfigurationPlan, DeploymentRequirements
 from llm_d_lens.deploy.standard_kubernetes_service import StandardKubernetesServiceRequest
 
 from .facts import PlanningEvidence
@@ -35,6 +36,7 @@ class AgenticExecutionPolicy(BaseModel):
     max_optimization_iterations: int = Field(default=0, ge=0, le=3)
     max_benchmark_runs: int = Field(default=0, ge=0, le=4)
     max_total_duration_minutes: int = Field(default=60, ge=1, le=180)
+    allow_trials: bool = Field(default=False, description="Permit separately approved trial deployments; planning never starts trials.")
 
 
 class AgenticDeploymentCreateRequest(StandardKubernetesServiceRequest):
@@ -44,6 +46,12 @@ class AgenticDeploymentCreateRequest(StandardKubernetesServiceRequest):
     planning_facts: PlanningFacts
     planner_prompt: str | None = Field(default=None, max_length=2_000)
     ai_provider_id: str | None = Field(default=None, max_length=200)
+    planning_mode: Literal["manual", "agentic"] = Field(
+        default="agentic", description="Manual uses deterministic selection without an external AI provider."
+    )
+    requirements: DeploymentRequirements | None = Field(
+        default=None, description="Shared deployment intent. Constraints are enforced before ranking and approval."
+    )
 
 
 class AgenticCandidateRefinementRequest(BaseModel):
@@ -70,6 +78,22 @@ class AgenticCandidate(BaseModel):
 
 class AgenticCandidateSelectionRequest(BaseModel):
     candidate_id: str = Field(min_length=1)
+    role: Literal["decode", "prefill"] = "decode"
+    replicas: int | None = Field(default=None, ge=1, le=128)
+    tensor_parallel_size: int | None = Field(default=None, ge=1, le=128)
+    render_resources: bool = Field(default=False, description="Render and validate the selected configuration without deploying.")
+    compare_combinations: bool = Field(
+        default=False,
+        description="With render_resources in Manual mode, check retained combinations against pinned source and select the first passing explicit ranking. Report rejected combinations; never deploy.",
+    )
+    max_model_len: int | None = Field(default=None, ge=256, le=1_048_576)
+    gpu_memory_utilization: float | None = Field(default=None, ge=0.5, le=0.98, allow_inf_nan=False)
+    max_num_seqs: int | None = Field(default=None, ge=1, le=4096)
+    max_num_batched_tokens: int | None = Field(default=None, ge=256, le=131072)
+
+
+class AgenticApprovalRequest(BaseModel):
+    configuration_checksum: str = Field(min_length=1, description="Checksum of the exact generated configuration reviewed by the user.")
 
 
 class AgenticDecisionMetadata(BaseModel):
@@ -112,5 +136,8 @@ class AgenticDeploymentRun(BaseModel):
     deployment_execution_id: str | None = None
     optimization: dict | None = None
     error: str | None = None
+    configuration_plan: ConfigurationPlan | None = None
+    revision: int = 1
+    parent_run_id: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

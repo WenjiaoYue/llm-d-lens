@@ -115,9 +115,10 @@ async def capabilities() -> dict:
     response_model=ConfigurationPlan,
     summary="Build a Manual or Agentic deployment decision plan.",
     description=(
-        "Resolve deployment requirements into a shared configuration plan. Manual plans select compatible "
-        "capabilities deterministically; Agentic plans return bounded candidates for comparison. This endpoint "
-        "does not deploy resources or claim performance validation."
+        "Inspect deployment intent without accessing a cluster. Applicability signals remain unknown until live "
+        "provider and resource validation; this compatibility endpoint returns no executable candidates, topology "
+        "or enabled mechanisms. Use the deployment planning workflow for a live-validated configuration. "
+        "This endpoint does not deploy resources or claim performance validation."
     ),
     operation_id="build_configuration_plan",
 )

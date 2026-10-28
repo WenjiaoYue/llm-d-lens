@@ -70,8 +70,8 @@ export function deploymentPlan(content = '') {
 export function candidatePlan(candidate, model) {
     if (!candidate) return { nodes: [], edges: [], content: '' };
     const nodes = [{ id: 'model', name: model || 'Selected model', kind: 'Model requirement', tier: 0, detail: candidate.provider_ref }];
-    if (candidate.prefill_replicas) nodes.push({ id: 'prefill', name: 'Prefill', kind: 'Planned workload', tier: 1, detail: `${candidate.prefill_replicas} replicas × TP ${candidate.prefill_tensor_parallel_size}` });
-    nodes.push({ id: 'decode', name: candidate.prefill_replicas ? 'Decode' : 'Model server', kind: 'Planned workload', tier: 1, detail: `${candidate.replicas} replicas × TP ${candidate.tensor_parallel_size}` });
+    if (candidate.prefill_replicas) nodes.push({ id: 'prefill', role: 'prefill', name: 'Prefill', kind: 'Planned workload', tier: 1, detail: `${candidate.prefill_replicas} replicas × TP ${candidate.prefill_tensor_parallel_size}` });
+    nodes.push({ id: 'decode', role: 'decode', name: candidate.prefill_replicas ? 'Decode' : 'Model server', kind: 'Planned workload', tier: 1, detail: `${candidate.replicas} replicas × TP ${candidate.tensor_parallel_size}` });
     const edges = nodes.slice(1).map(n => ({ from: 'model', to: n.id, label: 'served by' }));
     if (candidate.native_cpu_cache_gib) {
         for (const role of candidate.prefill_replicas ? ['prefill', 'decode'] : ['decode']) {

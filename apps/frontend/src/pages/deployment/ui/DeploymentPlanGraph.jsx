@@ -7,13 +7,13 @@ export function DeploymentPlanGraph({ plan, selected, onSelect }) {
     const nodes = layoutPlan(plan), height = Math.max(250, ...nodes.map(n => n.y + 80));
     const byId = new Map(nodes.map(n => [n.id, n]));
     const legend = [
-        ['Requirements', 0],
+        ['Routing / model', 0],
         ['Runtime components', 1],
         ['Supporting resources', 2],
     ];
     return <div className="rounded-lg border border-theme-border bg-theme-bg">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-theme-border px-4 py-3">
-            <div><p className="text-xs font-semibold text-theme-text">Declared deployment relationships</p><p className="mt-0.5 text-[11px] text-theme-muted">Select a node to inspect its parameters. Arrows come from resource references in the generated configuration.</p></div>
+            <div><p className="text-xs font-semibold text-theme-text">{plan.content ? 'Deployment resources' : 'Planned architecture'}</p><p className="mt-0.5 text-[11px] text-theme-muted">{plan.content ? 'Select a component to inspect or edit it. Arrows follow declared resource references.' : 'Select a workload to adjust replicas and parallelism. Generate YAML to inspect the full resource graph.'}</p></div>
             <div className="flex flex-wrap gap-2" aria-label="Topology legend">{legend.map(([label, tier]) => <span key={label} className="inline-flex items-center gap-1.5 text-[10px] text-theme-muted"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_SERIES[tier] }} />{label}</span>)}</div>
         </div>
         <div className="overflow-auto"><svg role="group" aria-label="Deployment resource relationships" viewBox={`0 0 940 ${height}`} style={{ minWidth: 700, width: '100%' }}>

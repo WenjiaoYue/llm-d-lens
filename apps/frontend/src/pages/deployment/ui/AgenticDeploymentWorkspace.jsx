@@ -1,559 +1,197 @@
-import { MeasuredOptimizationControls } from './MeasuredOptimizationControls';
-import { DeploymentPlanReview } from './DeploymentPlanReview';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, CheckCircle2, Circle } from 'lucide-react';
+import { Badge, Button, EmptyState, LoadingState, ModulePage, Panel, Select } from '../../../shared/ui';
 import { requestJson } from '../../../shared/api/httpClient';
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, CheckCircle2, ChevronDown, Cpu, FileStack, LoaderCircle, RotateCcw, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
-import { Badge, StatusChip } from '../../../shared/ui/Badge';
-import { Button } from '../../../shared/ui/Button';
-import { EmptyState } from '../../../shared/ui/EmptyState';
-import { ModuleHeader } from '../../../shared/ui/ModuleHeader';
-import { ModulePage } from '../../../shared/ui/ModulePage';
-import { Select } from '../../../shared/ui/FormControls';
-import PodPlacementControl from '../../../shared/ui/PodPlacementControl';
-import { listDeploymentNodeLabels } from '../../optimization';
+import { usePolling } from '../../../shared/lib/usePolling';
+import { cn } from '../../../shared/lib/cn';
+import { useAuth } from '../../auth';
 import { listAIProviders } from '../../ai-providers';
-import { streamAgenticRecommendation, streamAgenticRefinement } from '../api/agenticDeploymentBackend';
-import { candidateAnalysis, generatorLabel, historicalBenchmarkLabel, historicalEvidenceSummary, relaxedAicCandidates } from '../lib/agenticPresentation';
 import { DeploymentRequirementsForm } from './DeploymentRequirementsForm';
-import { ConfigurationPlanPreview } from './ConfigurationPlanPreview';
+import { DeploymentPlanReview } from './DeploymentPlanReview';
+import { MeasuredOptimizationControls } from './MeasuredOptimizationControls';
+import { candidateEvidence, defaultRequirements, deploymentPlanningRequest, requirementsFromRun, streamAgenticRecommendation } from '../api/agenticDeploymentBackend';
 
-function api(path, options = {}) {
-    return requestJson(path, { headers: { 'Content-Type': 'application/json' }, ...options });
-}
+const api = (path, body) => requestJson(path, body === undefined ? {} : {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+});
 
-const DEFAULT_REQUIREMENTS = {
-    ttftSloMs: '', tpotSloMs: '',
-    hardwareCapacityMode: 'free', customGpuCount: '',
-    useCase: 'general-chat', inputTokens: '', outputTokens: '', concurrency: '', requestRate: '',
-    objective: 'throughput', maxCandidates: '3', maxIterations: '0', maxBenchmarks: '0', maxDuration: '60', allowTrial: false,
-};
-
-const GENERATION_STAGES = [
-    { id: 'generation', label: 'Generating candidate', phases: ['initialization', 'validation', 'generation', 'ai', 'tools'], completionPhase: 'generation' },
-    { id: 'candidate_validation', label: 'Validate candidate list', phases: ['candidate_validation'], completionPhase: 'candidate_validation' },
-    { id: 'scoring', label: 'Scoring candidate', phases: ['scoring'], completionPhase: 'scoring' },
-];
-
-function GenerationProgress({ events }) {
-    const [expandedStageId, setExpandedStageId] = useState(null);
-    const stageEvents = GENERATION_STAGES.map((stage) => ({
-        ...stage,
-        events: events.filter((event) => stage.phases.includes(event.phase)),
-    }));
-    const latestStartedIndex = stageEvents.reduce(
-        (latest, stage, index) => stage.events.length ? index : latest, 0,
-    );
-
-    return (
-        <div role="status" aria-live="polite" className="mt-4 overflow-hidden border-t border-slate-800 pt-4">
-            <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
-                <LoaderCircle size={15} className="animate-spin text-cyan-300" />
-                <h3 className="text-xs font-semibold text-slate-200">Generating recommendation</h3>
-            </div>
-            <div className="grid grid-cols-3 gap-2 bg-slate-950/45 px-4 py-4" role="progressbar" aria-label="Recommendation generation progress">
-                {stageEvents.map((stage, index) => {
-                    const started = stage.events.length > 0;
-                    const finished = index < latestStartedIndex || stage.events.some((event) => (
-                        event.phase === stage.completionPhase && (event.status === 'complete' || event.status === 'success' || event.status === 'fallback')
-                    ));
-                    const fallback = stage.events.some((event) => event.status === 'fallback');
-                    const expanded = expandedStageId === stage.id;
-                    return <button key={stage.id} type="button" disabled={!started} aria-expanded={expanded} onClick={() => setExpandedStageId(expanded ? null : stage.id)} className="min-w-0 text-left disabled:cursor-default">
-                        <span className={`block h-1.5 overflow-hidden rounded-full ${fallback ? 'bg-amber-400' : finished ? 'bg-emerald-400/80' : 'bg-slate-800'}`}>
-                            {started && !finished && !fallback && <span className="benchmark-progress block h-full w-1/3 rounded-full bg-cyan-400" />}
-                        </span>
-                        <span className={`mt-1 block text-[9px] leading-4 ${fallback ? 'text-amber-300' : expanded || started && !finished ? 'text-cyan-300' : finished ? 'text-emerald-300' : 'text-slate-500'}`}>{stage.label}</span>
-                    </button>;
-                })}
-            </div>
-            {expandedStageId && (() => {
-                const stage = stageEvents.find((item) => item.id === expandedStageId);
-                return <div className="max-h-56 space-y-2 overflow-y-auto border-t border-slate-800 bg-slate-950/70 px-4 py-3">
-                    {stage.events.map((event, index) => (
-                        <div key={`${event.phase}-${event.round || 0}-${index}`} className="border-l border-slate-700 pl-3">
-                            <p className={`text-[11px] leading-4 ${event.status === 'fallback' ? 'text-amber-200' : 'text-slate-300'}`}>{event.message}</p>
-                            {(event.round || event.duration_ms !== undefined) && <p className="mt-0.5 text-[10px] text-slate-500">{event.round ? `AI round ${event.round}` : ''}{event.round && event.duration_ms !== undefined ? ' · ' : ''}{event.duration_ms !== undefined ? `${event.duration_ms} ms` : ''}</p>}
-                        </div>
-                    ))}
-                </div>;
-            })()}
-        </div>
-    );
-}
-
-function CandidateRow({ candidate, selected, analysis, onDeploy, deploying, canDeploy }) {
-    const prefill = candidate.prefill_replicas
-        ? `Prefill ${candidate.prefill_replicas} x TP ${candidate.prefill_tensor_parallel_size}`
-        : null;
-    const historicalEvidence = historicalEvidenceSummary(candidate.historical_benchmarks);
-
-    return (
-        <div className={`grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-slate-800/70 px-4 py-3 last:border-b-0 ${selected ? 'bg-emerald-500/8' : ''}`}>
-            <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate text-xs font-semibold text-slate-100">{candidate.provider_ref}</span>
-                    {selected && <Badge tone="success" size="xs">Recommended</Badge>}
-                    {candidate.score !== null && candidate.score !== undefined && <Badge tone="info" size="xs">{candidate.score_source === 'openai-compatible' ? 'AI score' : 'Deterministic score'}: {Math.round(candidate.score * 100)}/100</Badge>}
-                    <Badge tone={candidate.slo_status === 'satisfied' ? 'success' : candidate.slo_status === 'not_satisfied' ? 'danger' : 'neutral'} size="xs">
-                        SLO {candidate.slo_status === 'not_satisfied' ? 'not met' : candidate.slo_status} ({Math.round((candidate.slo_confidence || 0) * 100)}%)
-                    </Badge>
-                </div>
-                <p className="mt-1 truncate font-mono text-[10px] text-slate-500">{candidate.id}</p>
-            </div>
-            <div className="text-right text-[11px] text-slate-400">
-                <div>{candidate.replicas} decode x TP {candidate.tensor_parallel_size}</div>
-                {prefill && <div className="mt-1 text-slate-500">{prefill}</div>}
-                <div className="mt-1 font-mono text-slate-300">{candidate.required_gpus} GPU</div>
-                {candidate.allocatable_kv_cache_gib !== undefined && candidate.allocatable_kv_cache_gib !== null && (
-                    <div className="mt-1 text-[10px] text-emerald-400 font-mono">
-                        KV: {candidate.allocatable_kv_cache_gib} GiB{candidate.max_concurrent_requests ? ` · Max ${candidate.max_concurrent_requests} req` : ''}
-                    </div>
-                )}
-                {canDeploy && <Button variant={selected ? 'primary' : 'outline'} size="xs" className="mt-2" onClick={() => onDeploy(candidate.id)} isLoading={deploying}><CheckCircle2 size={13} />Review recommendation</Button>}
-            </div>
-            <details className="col-span-full border-t border-slate-800/70 pt-2">
-                <summary className="cursor-pointer text-[11px] text-slate-400">Why this option</summary>
-                <div className="mt-2 space-y-1 text-[11px] leading-4 text-slate-400">
-                    <p>{analysis.performance}</p>
-                    <p>{analysis.resources}</p>
-                    {candidate.allocatable_kv_cache_gib !== undefined && candidate.allocatable_kv_cache_gib !== null && (
-                        <p className="text-cyan-300/90 font-mono text-[10px]">
-                            Capacity: {candidate.allocatable_kv_cache_gib} GiB KV Cache allocatable{candidate.per_request_kv_cache_gib ? ` (${candidate.per_request_kv_cache_gib} GiB/req)` : ''}{candidate.max_concurrent_requests ? `, max ~${candidate.max_concurrent_requests} concurrent requests` : ''}.
-                        </p>
-                    )}
-                    <p className="text-slate-500">{analysis.ranking}</p>
-                    {historicalEvidence && <div className="border-t border-slate-800/70 pt-2">
-                        <p className="font-medium text-slate-300">Historical benchmarks: {historicalEvidence.sampleCount} record(s), {historicalEvidence.successfulCount} succeeded, {historicalEvidence.failedCount} failed.</p>
-                        <ul className="mt-1 space-y-1 font-mono text-[10px] text-slate-500">
-                            {candidate.historical_benchmarks.map((sample) => <li key={sample.benchmark_id}>{historicalBenchmarkLabel(sample)}</li>)}
-                        </ul>
-                    </div>}
-                </div>
-            </details>
-        </div>
-    );
-}
-
-function evidenceLabel(item, hasAicPrediction) {
-    if (item.id === 'aic:support' && hasAicPrediction) return null;
-    if (item.id === 'aic:search') return 'AIC performance prediction';
-    if (item.id.startsWith('cluster-overview:')) return 'Live cluster capacity';
-    if (item.id === 'deploy-history') return 'Deployment history';
-    if (item.id === 'simulation-history') return 'Simulation history';
-    return item.source;
-}
-
-function fallbackSummary(reason) {
-    if (reason === 'rate_limit') return 'The external planner is rate limited.';
-    if (reason === 'timeout') return 'The external planner did not respond in time.';
-    if (reason === 'transport') return 'The external planner could not be reached.';
-    if (reason === 'invalid_response') return 'The external planner returned an invalid response.';
-    return 'The external planner is unavailable, so Prism used its built-in ranking.';
-}
-
-function generatorFallbackSummary(reason) {
-    if (reason === 'all_ai_candidates_invalid') return 'Every AI-generated candidate failed deterministic validation.';
-    if (reason === 'mcp_unavailable') return 'The MCP planning tools could not be reached.';
-    if (reason === 'invalid_response') return 'The AI generator returned an invalid candidate response.';
-    return 'The configured AI generator could not be reached.';
-}
-
-export default function AgenticDeploymentWorkspace({ draft, embedded = false, onBack, onDeploymentStarted, vllmParameterControls }) {
-    const [run, setRun] = useState(null);
-    const savedPlanKey = `lens-agentic-plan:${draft?.clusterId}:${draft?.model}`;
+export function DeploymentWorkflow({ draft, mode = 'agentic', embedded = false, onBack, onDeploymentStarted }) {
+    const { can } = useAuth();
+    const permitted = can('deployment:run:create');
+    const [run, setRun] = useState(null), [requirements, setRequirements] = useState(() => defaultRequirements(draft?.contextLength));
+    const [busy, setBusy] = useState(false), [error, setError] = useState(''), [events, setEvents] = useState([]);
+    const [providers, setProviders] = useState([]), [provider, setProvider] = useState('');
+    const [restoring, setRestoring] = useState(true), [reviewedChecksum, setReviewedChecksum] = useState('');
+    const [editing, setEditing] = useState(false);
+    const abort = useRef(null), mounted = useRef(true);
+    const key = `lens-deployment-plan:${mode}:${draft?.clusterId}:${draft?.model}:${draft?.deploymentName}`;
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; abort.current?.abort(); };
+    }, []);
     useEffect(() => {
         let active = true;
-        const id = sessionStorage.getItem(savedPlanKey);
-        if (id) api(`/api/agentic-deployments/${encodeURIComponent(id)}`).then(value => { if (active) setRun(value); }).catch(() => {});
+        setRun(null); setReviewedChecksum(''); setRestoring(true);
+        setRequirements(defaultRequirements(draft?.contextLength)); setProvider('');
+        const id = sessionStorage.getItem(key);
+        if (!id) { setRestoring(false); return undefined; }
+        api(`/api/agentic-deployments/${encodeURIComponent(id)}`).then(value => {
+            if (active) {
+                setRequirements(requirementsFromRun(value));
+                setProvider(value.request.ai_provider_id || '');
+                setRun(value);
+            }
+        }).catch(failure => { if (active) setError(`Unable to restore the saved plan: ${failure.message}`); })
+            .finally(() => { if (active) setRestoring(false); });
         return () => { active = false; };
-    }, [savedPlanKey]);
-    useEffect(() => { if (run) sessionStorage.setItem(savedPlanKey, run.id); }, [savedPlanKey, run?.id]);
-    const [reviewedCandidateId, setReviewedCandidateId] = useState('');
-    const [creating, setCreating] = useState(false);
-    const [deployingCandidateId, setDeployingCandidateId] = useState('');
-    const [error, setError] = useState('');
-    const [requirements, setRequirements] = useState(DEFAULT_REQUIREMENTS);
-    const [placementReplicas, setPlacementReplicas] = useState('prefer-same-node');
-    const [placementNodeName, setPlacementNodeName] = useState('');
-    const [plannerPrompt, setPlannerPrompt] = useState('');
-    const [aiProviders, setAiProviders] = useState([]);
-    const [aiProviderId, setAiProviderId] = useState('');
-    const [refinementPrompt, setRefinementPrompt] = useState('');
-    const [refining, setRefining] = useState(false);
-    const [generationEvents, setGenerationEvents] = useState([]);
-    const [refinementEvents, setRefinementEvents] = useState([]);
-    const [agenticDecisionPlan, setAgenticDecisionPlan] = useState(null);
-    const [agenticFormValue, setAgenticFormValue] = useState(null);
-    const updateRequirement = (name) => (event) => setRequirements((current) => ({ ...current, [name]: event.target.value }));
-    const numeric = (value) => (value ? Number(value) : null);
-
-    useEffect(() => { setPlacementNodeName(''); }, [draft?.clusterId]);
-
+    }, [key, draft?.contextLength]);
     useEffect(() => {
-        let cancelled = false;
-        listAIProviders().then((items) => {
-            if (cancelled) return;
-            setAiProviders(items);
-            // Auto-select the first saved provider so the operator doesn't have
-            // to manually pick one to get AI-assisted ranking by default.
-            setAiProviderId((current) => current || (items[0]?.id ?? ''));
-        }).catch(() => {});
-        return () => { cancelled = true; };
-    }, []);
-
-    const createPlan = async (requirementsOverride = requirements) => {
-        if (numeric(requirementsOverride.concurrency) !== null && numeric(requirementsOverride.requestRate) !== null) {
-            setError('AIC accepts only one load target: Concurrent requests or Request rate (QPS). Both were provided; choose one and clear the other because AIC does not support joint load targets.');
-            return;
-        }
-        if (!draft?.storageVolumeId) {
-            setError('Select a model cache storage before creating an Agentic recommendation.');
-            return;
-        }
-        setCreating(true);
-        setError('');
-        setGenerationEvents([{ phase: 'initialization', status: 'running', message: 'Connecting to the recommendation service.' }]);
+        if (mode !== 'agentic') return undefined;
+        let active = true;
+        listAIProviders().then(items => { if (active) setProviders(items); })
+            .catch(failure => { if (active) setError(`Unable to load AI providers: ${failure.message}`); });
+        return () => { active = false; };
+    }, [mode]);
+    const accept = value => {
+        if (!mounted.current) return;
+        setRun(value); setReviewedChecksum(''); sessionStorage.setItem(key, value.id);
+    };
+    const active = run?.status === 'optimizing' || run?.status === 'deploying';
+    usePolling(async () => {
+        if (!run) return;
+        try {
+            const value = await api(`/api/agentic-deployments/${encodeURIComponent(run.id)}`);
+            if (mounted.current) setRun(value);
+        } catch (failure) { if (mounted.current) setError(failure.message); }
+    }, { enabled: Boolean(run) && !busy, intervalMs: active ? 5000 : 15000 });
+    const generate = async value => {
+        setRequirements(value); setBusy(true); setError(''); setReviewedChecksum(''); setEvents([]);
+        const controller = new AbortController();
+        abort.current = controller;
         try {
             const session = await api(`/api/cluster/session?clusterId=${encodeURIComponent(draft.clusterId)}`);
-            const clusterSessionId = session.sessionId || session.session_id;
-            if (!clusterSessionId) throw new Error('The selected cluster did not return an active session');
-            const payload = {
-                model: draft.model, deployment_name: draft.deploymentName, description: draft.description || '',
-                cluster_session_id: clusterSessionId, replicas: 1, tensor_parallel_size: 1,
-                storage_type: 'model-cache', storage_volume_id: draft.storageVolumeId,
-                max_model_len: draft.contextLength, gpu_memory_utilization: draft.gpuMemoryUtilization,
-                max_num_seqs: draft.maxNumSeqs, max_num_batched_tokens: draft.maxNumBatchedTokens,
-                vllm_arguments: draft.vllmArguments || [],
-                placement_replicas: placementReplicas,
-                placement_node_label: placementReplicas === 'same-node' && placementNodeName ? { key: 'kubernetes.io/hostname', value: placementNodeName } : null,
-                execution_policy: {
-                    mode: requirements.allowTrial ? 'automatic' : 'approval_required',
-                    max_optimization_iterations: Number(requirements.maxIterations) || 0,
-                    max_benchmark_runs: Number(requirements.maxBenchmarks) || 0,
-                    max_total_duration_minutes: Number(requirements.maxDuration) || 60,
-                },
-                planning_facts: {
-                    model_weight_gib: draft.modelWeightGiB, vram_per_gpu_gib: 1, free_gpu_count: 0,
-                    hardware_capacity_mode: requirementsOverride.hardwareCapacityMode,
-                    custom_gpu_count: requirementsOverride.hardwareCapacityMode === 'custom' ? numeric(requirementsOverride.customGpuCount) : null,
-                    context_length: draft.contextLength, use_case: requirementsOverride.useCase,
-                    operator_preference: requirementsOverride.objective,
-                    max_candidates: Number(requirementsOverride.maxCandidates) || 3,
-                    ttft_slo_ms: numeric(requirementsOverride.ttftSloMs), tpot_slo_ms: numeric(requirementsOverride.tpotSloMs),
-                    workload_profile: {
-                        mean_input_tokens: numeric(requirementsOverride.inputTokens),
-                        p95_input_tokens: numeric(requirementsOverride.inputTokens),
-                        mean_output_tokens: numeric(requirementsOverride.outputTokens),
-                        concurrency: numeric(requirementsOverride.concurrency),
-                        request_rate: numeric(requirementsOverride.requestRate),
-                    },
-                },
-                planner_prompt: `${requirementsOverride.objective} priority. Compare at most ${requirementsOverride.maxCandidates || 3} candidates. ${plannerPrompt.trim()}`.trim() || null,
-                ai_provider_id: aiProviderId || null,
-            };
-            let created = null;
+            const payload = deploymentPlanningRequest(draft, value, session.sessionId || session.session_id, mode, provider);
+            let result;
             await streamAgenticRecommendation(payload, (type, data) => {
-                if (type === 'progress') setGenerationEvents((current) => [...current.slice(-59), data]);
-                if (type === 'complete') created = data;
-                if (type === 'error') throw new Error(data.message || 'Unable to generate an Agentic recommendation');
-            });
-            if (!created) throw new Error('Recommendation stream ended before returning a result');
-            setRun(created);
-        } catch (failure) {
-            setError(failure.message || 'Unable to generate an Agentic recommendation');
-        } finally {
-            setCreating(false);
-        }
-    };
-
-    const buildAgenticDecisionPlan = async (value) => {
-        const nextRequirements = { ...requirements, objective: value.objective, customGpuCount: value.maxAccelerators, ttftSloMs: value.ttftMs, tpotSloMs: value.tpotMs, inputTokens: value.inputTokens, outputTokens: value.outputTokens, concurrency: value.concurrency, requestRate: value.requestRate };
-        setRequirements(nextRequirements);
-        setAgenticFormValue(nextRequirements);
-        try {
-            const response = await api('/api/v1/configurations/plan', { method: 'POST', body: JSON.stringify({ mode: 'agentic', requirements: { model: draft?.model || 'unknown-model', cluster_id: draft?.clusterId || null, objective: value.objective, hard_constraints: { maxAccelerators: Number(value.maxAccelerators) || null }, workload: { inputTokens: Number(value.inputTokens) || null, outputTokens: Number(value.outputTokens) || null, concurrency: Number(value.concurrency) || null, requestRate: Number(value.requestRate) || null }, performance_targets: { ttftMs: Number(value.ttftMs) || null, tpotMs: Number(value.tpotMs) || null }, required_features: value.requiredFeatures || [] }, candidate_limit: 3 }) });
-            setAgenticDecisionPlan(response);
-        } catch (error) {
-            setError(error.message || 'Unable to build the Agentic candidate plan.');
-        }
-    };
-
-    const refinePlan = async () => {
-        if (!run || !refinementPrompt.trim()) return;
-        setReviewedCandidateId('');
-        setRefining(true);
-        setError('');
-        setRefinementEvents([{ phase: 'initialization', status: 'running', message: 'Connecting to the recommendation service.' }]);
-        try {
-            let refined = null;
-            await streamAgenticRefinement(run.id, { planner_prompt: refinementPrompt.trim() }, (type, data) => {
-                if (type === 'progress') setRefinementEvents((current) => [...current.slice(-59), data]);
-                if (type === 'complete') refined = data;
-                if (type === 'error') throw new Error(data.message || 'Unable to recalculate the recommendation');
-            });
-            if (!refined) throw new Error('Recalculation stream ended before returning a result');
-            setRun(refined);
-            setRefinementPrompt('');
-        } catch (failure) {
-            setError(failure.message || 'Unable to recalculate the recommendation');
-        } finally {
-            setRefining(false);
-        }
-    };
-
-    const reset = () => {
-        if (run?.status === 'optimizing') return;
-        setReviewedCandidateId('');
-        sessionStorage.removeItem(savedPlanKey);
-        setRun(null);
-        setRequirements(DEFAULT_REQUIREMENTS);
-        setPlannerPrompt('');
-        setRefinementPrompt('');
-        setGenerationEvents([]);
-        setRefinementEvents([]);
-        setError('');
-    };
-
-    const deployCandidate = async (candidateId, confirm = false) => {
-        if (!run || run.status !== 'awaiting_approval' || refining || deployingCandidateId) return;
-        if (confirm && (reviewedCandidateId !== candidateId || run.selected_candidate?.id !== candidateId)) return;
-        setDeployingCandidateId(candidateId);
-        setError('');
-        try {
-            if (run.selected_candidate?.id !== candidateId) {
-                const updated = await api(`/api/agentic-deployments/${encodeURIComponent(run.id)}/select`, {
-                    method: 'POST', body: JSON.stringify({ candidate_id: candidateId }),
-                });
-                setRun(updated);
+                if (type === 'progress' && mounted.current) setEvents(current => [...current.slice(-29), data]);
+                if (type === 'complete') result = data;
+                if (type === 'error') throw new Error(data.message || 'Planning failed.');
+            }, controller.signal);
+            if (!result) throw new Error('Planning ended without a validated configuration.');
+            accept(result);
+            if (mode === 'manual') {
+                setEvents(current => [...current, { phase: 'resources', status: 'running', message: 'Comparing retained combinations against pinned source manifests and current cluster resources.' }]);
+                try {
+                    const rendered = await api(`/api/agentic-deployments/${encodeURIComponent(result.id)}/select`, {
+                        candidate_id: result.selected_candidate.id, render_resources: true, compare_combinations: true,
+                    });
+                    accept(rendered);
+                    if (mounted.current) setEvents(current => [...current, { phase: 'resources', status: 'complete', message: 'Generated topology and YAML share the checked configuration. Runtime readiness and performance remain unverified.' }]);
+                } catch (failure) {
+                    if (mounted.current) setError(`The recommendation is preserved, but resource checks failed: ${failure.message}. Review the decision list and retry resource generation; deployment remains blocked.`);
+                }
             }
-            if (!confirm) { setReviewedCandidateId(candidateId); return; }
-            await api(`/api/agentic-deployments/${encodeURIComponent(run.id)}/approve`, { method: 'POST' });
-            onDeploymentStarted();
         } catch (failure) {
-            setError(failure.message || 'Unable to start deployment');
-        } finally {
-            setDeployingCandidateId('');
-        }
+            if (mounted.current) setError(controller.signal.aborted ? 'Planning cancelled. No deployment was started.' : failure.message);
+        } finally { if (mounted.current) setBusy(false); abort.current = null; }
     };
-
-    const requestTopologyRevision = async ({ node, patch }) => {
-        if (!run || !run.request?.ai_provider_id) throw new Error('Select an AI provider to request a revised candidate.');
-        setRefining(true); setReviewedCandidateId('');
-        try {
-            const prompt = `Revise the ${node.id === 'prefill' ? 'prefill' : 'decode'} topology: ${JSON.stringify(patch)}. Preserve the original hard constraints. Reject this request explicitly if it cannot be satisfied; re-evaluate all affected evidence.`;
-            let updated = null;
-            await streamAgenticRefinement(run.id, { planner_prompt: prompt }, (type, data) => {
-                if (type === 'progress') setRefinementEvents(current => [...current.slice(-59), data]);
-                if (type === 'complete') updated = data;
-                if (type === 'error') throw new Error(data.message || 'Refinement failed');
-            });
-            if (!updated) throw new Error('No revised candidate returned.');
-            setRun(updated);
-        } finally { setRefining(false); }
-    };
-    const input = (label, name, props = {}) => (
-        <label className="text-xs text-slate-400">{label}
-            <input className="mt-1 h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 text-sm text-slate-200 placeholder:text-theme-muted" type="number" placeholder="Optional" value={requirements[name]} onChange={updateRequirement(name)} {...props} />
-        </label>
-    );
-    const hasAicPrediction = run?.planning_evidence?.some((item) => item.id === 'aic:search' && item.status === 'available');
-    const canDeploy = run?.status === 'awaiting_approval';
-    const aicConfigs = run?.planning_evidence?.find((item) => item.id === 'aic:search')?.details?.candidates?.candidates || [];
-    const relaxedConfigs = relaxedAicCandidates(run);
-    const clusterDetails = run?.planning_evidence?.find((item) => item.id.startsWith('cluster-overview:'))?.details;
-    const usedAiProviderName = aiProviders.find((provider) => provider.id === run?.request?.ai_provider_id)?.name;
-    const evidenceLevel = run?.optimization?.ranking?.some(item => item.candidate_id === run.selected_candidate?.id)
-        ? 'Verified best within tested candidates'
-        : hasAicPrediction ? 'Predicted better; not measured here' : 'Recommendation; not performance verified';
-
-    const content = (
-        <>
-            {!embedded && <ModuleHeader icon={Sparkles} title="Agentic deployment plan" description="Prism compares compatible optimization plans against your target, workload and available resources." actions={<div className="flex gap-2"><Button variant="secondary" onClick={reset}><RotateCcw size={15} />Reset</Button><Button variant="secondary" onClick={onBack}><ArrowLeft size={15} />Model details</Button></div>} />}
-            {embedded && <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-white">Agentic deployment plan</h2><p className="mt-1 text-sm text-slate-400">Compare compatible optimization plans against your target, workload and available resources.</p></div><Button variant="secondary" onClick={reset}><RotateCcw size={15} />Reset</Button></div>}
-            <div className="rounded-lg border border-slate-800 bg-slate-900/45 p-3">
-                <label className="block text-xs font-semibold text-slate-300">AI provider <span className="font-normal text-slate-500">(optional; powers the external planner used to rank candidates)</span></label>
-                <Select className="mt-1.5" value={aiProviderId} onChange={(event) => setAiProviderId(event.target.value)}>
-                    <option value="">Default (no external AI provider)</option>
-                    {aiProviders.map((provider) => (
-                        <option key={provider.id} value={provider.id}>{provider.name}</option>
-                    ))}
-                </Select>
-                {aiProviders.length === 0 && (
-                    <p className="mt-1.5 text-xs text-slate-500">No AI providers configured yet. Add one under Resources → External providers.</p>
-                )}
-            </div>
-            {error && <div role="alert" className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"><TriangleAlert size={15} />{error}</div>}
-            {!run && <section className="flex flex-col gap-4">
-                <DeploymentRequirementsForm mode="agentic" onSubmit={buildAgenticDecisionPlan} disabled={creating} />
-                {agenticDecisionPlan && <ConfigurationPlanPreview plan={agenticDecisionPlan} onEdit={() => setAgenticDecisionPlan(null)} onContinue={() => { setAgenticDecisionPlan(null); createPlan(agenticFormValue || requirements); }} />}
-                <details className="rounded-xl border border-theme-border bg-theme-card/40">
-                    <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold text-theme-text">Advanced execution and placement <span className="ml-2 font-normal text-theme-muted">optional runtime controls</span></summary>
-                    <div className="border-t border-theme-border p-4">
-                <div className="rounded-lg border border-slate-800 bg-slate-900/45 p-5">
-                    <div className="grid gap-3">
-                        <label className="text-xs text-slate-400">Use case
-                            <Select className="mt-1" value={requirements.useCase} onChange={updateRequirement('useCase')}>
-                                <option value="general-chat">General chat</option>
-                                <option value="code-generation">Code generation</option>
-                                <option value="long-inputs">Long-input analysis</option>
-                                <option value="summarization">Document summarization</option>
-                            </Select>
-                        </label>
-                        <label className="text-xs text-slate-400">GPU capacity for planning
-                            <Select className="mt-1" value={requirements.hardwareCapacityMode} onChange={updateRequirement('hardwareCapacityMode')}>
-                                <option value="free">Currently free GPUs</option>
-                                <option value="all">All cluster GPUs</option>
-                                <option value="custom">Custom GPU count</option>
-                            </Select>
-                        </label>
-                        {requirements.hardwareCapacityMode === 'custom' && input('Custom GPU count', 'customGpuCount', { min: '1', step: '1', required: true })}
-                    </div>
-                    <div className="mt-4 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3">
-                        <p className="text-xs font-semibold text-cyan-100">1 · Objective and hard boundary</p>
-                        <p className="mt-1 text-[11px] leading-4 text-slate-400">Agentic compares supported candidates against this objective. Unknown workload signals stay unknown and are not treated as satisfied.</p>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                            <label className="text-xs text-slate-400">Primary objective<Select className="mt-1" value={requirements.objective} onChange={updateRequirement('objective')}><option value="latency">Latency first</option><option value="throughput">Throughput first</option><option value="cost">Meet latency with least resources</option><option value="reliability">Reliability first</option></Select></label>
-                            <p className="self-end text-[11px] leading-4 text-slate-500">Resource ceiling comes from the selected capacity mode above{requirements.hardwareCapacityMode === 'custom' && requirements.customGpuCount ? ` (${requirements.customGpuCount} accelerators)` : ''}.</p>
-                        </div>
-                    </div>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        <div className="rounded-lg border border-theme-border bg-theme-bg/60 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-theme-muted">Hard constraints</p><p className="mt-1 text-xs text-theme-text">{requirements.hardwareCapacityMode === 'custom' && requirements.customGpuCount ? `${requirements.customGpuCount} accelerators maximum` : 'Capacity mode selected above'} · {requirements.ttftSloMs ? `TTFT ≤ ${requirements.ttftSloMs} ms` : 'TTFT target unknown'}</p></div>
-                        <div className="rounded-lg border border-theme-border bg-theme-bg/60 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-theme-muted">Optimization target</p><p className="mt-1 text-xs text-theme-text">{requirements.objective === 'cost' ? 'Meet latency with least resources' : `${requirements.objective} first`}</p></div>
-                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">Still unknown</p><p className="mt-1 text-xs text-amber-100">{requirements.inputTokens || requirements.outputTokens || requirements.concurrency || requirements.requestRate ? 'Some workload dimensions are provided; missing values remain unknown.' : 'Workload shape and demand are not provided.'}</p></div>
-                        <div className="rounded-lg border border-theme-border bg-theme-bg/60 p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-theme-muted">Search boundary</p><p className="mt-1 text-xs text-theme-text">{requirements.maxCandidates} candidates · {requirements.maxIterations} rounds · {requirements.maxBenchmarks} benchmark runs</p></div>
-                    </div>
-                    <details open className="mt-4 border-t border-slate-800 pt-3">
-                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-slate-300"><ChevronDown size={14} />SLO <span className="font-normal text-slate-500">Optional target.</span></summary>
-                        <div className="mt-3 grid grid-cols-2 gap-3">
-                            {input('TTFT SLO (ms)', 'ttftSloMs', { min: '1', placeholder: 'e.g. 2000' })}
-                            {input('TPOT SLO (ms)', 'tpotSloMs', { min: '1', placeholder: 'e.g. 30' })}
-                        </div>
-                    </details>
-                    <details open className="mt-4 border-t border-slate-800 pt-3">
-                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-slate-300"><ChevronDown size={14} />Preference <span className="font-normal text-slate-500">Optional deployment preference.</span></summary>
-                        <textarea className="mt-3 min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-slate-200" value={plannerPrompt} onChange={(event) => setPlannerPrompt(event.target.value)} maxLength={2000} placeholder="Describe your deployment preference." />
-                    </details>
-                    <details open className="mt-4 border-t border-slate-800 pt-3">
-                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-slate-300"><ChevronDown size={14} />Workload estimate <span className="font-normal text-slate-500">Optional request shape and demand.</span></summary>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                            {input('Input tokens per request', 'inputTokens', { min: '1', step: '1', placeholder: 'e.g. 4000' })}
-                            {input('Output tokens per request', 'outputTokens', { min: '1', step: '1', placeholder: 'e.g. 1000' })}
-                            {input('Concurrent requests', 'concurrency', { min: '1', step: '1' })}
-                            {input('Request rate (QPS)', 'requestRate', { min: '0.01', step: 'any' })}
-                        </div>
-                    </details>
-                    {vllmParameterControls && <details className="mt-4 border-t border-slate-800 pt-3">
-                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-slate-300"><ChevronDown size={14} />vLLM parameters</summary>
-                        <div className="mt-3 grid gap-3">{vllmParameterControls}</div>
-                    </details>}
-                    <details className="mt-4 border-t border-slate-800 pt-3">
-                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-slate-300"><ChevronDown size={14} />Search boundary <span className="font-normal text-slate-500">Stops unbounded optimization.</span></summary>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                            {input('Maximum candidates', 'maxCandidates', { min: '1', max: '10', step: '1' })}
-                            {input('Optimization rounds', 'maxIterations', { min: '0', max: '3', step: '1' })}
-                            {input('Benchmark runs', 'maxBenchmarks', { min: '0', max: '4', step: '1' })}
-                            {input('Time limit (minutes)', 'maxDuration', { min: '1', max: '180', step: '1' })}
-                        </div>
-                        <label className="mt-3 flex items-start gap-2 text-xs text-slate-400"><input type="checkbox" checked={requirements.allowTrial} onChange={event => setRequirements(current => ({ ...current, allowTrial: event.target.checked }))} /><span><span className="block text-slate-300">Allow controlled trial deployment</span><span className="mt-1 block text-[11px] text-slate-500">When off, Agentic only recommends. When on, it may use the bounded benchmark budget above.</span></span></label>
-                    </details>
-                    <PodPlacementControl compact className="mt-4 border-t border-slate-800 pt-3" value={placementReplicas} onChange={setPlacementReplicas} clusterId={draft?.clusterId} nodeName={placementNodeName} onNodeChange={setPlacementNodeName} listNodeLabels={listDeploymentNodeLabels} />
-                    {creating && <GenerationProgress events={generationEvents} />}
-                    <div className="mt-5 flex justify-end"><Button onClick={createPlan} isLoading={creating}><Sparkles size={16} />Generate recommendation</Button></div>
-                </div>
-                    </div>
-                </details>
-            </section>}
-            {run && <section className="flex flex-col gap-5">
-                <div className="rounded-lg border border-slate-800 bg-slate-900/65 p-5"><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-white">{run.selected_candidate?.provider_ref}</h2><StatusChip status={run.status} label={run.status.replaceAll('_', ' ')} /><Badge tone={run.generator === 'ai-mcp' ? 'info' : 'neutral'} size="xs">{generatorLabel(run.generator)}</Badge><Badge tone={evidenceLevel.startsWith('Verified') ? 'success' : evidenceLevel.startsWith('Predicted') ? 'info' : 'warning'} size="xs">{evidenceLevel}</Badge></div><p className="mt-2 text-xs text-slate-400">Recommended for {draft.model} · objective: {run.request?.planning_facts?.operator_preference || 'configured objective'}</p><p className="mt-2 text-xs leading-5 text-slate-300">{run.decision?.rationale}</p><div className="mt-4 grid gap-2 text-[11px] text-slate-400 sm:grid-cols-3"><span>Candidate budget: {run.request?.execution_policy?.max_optimization_iterations ?? 0} rounds</span><span>Benchmark budget: {run.request?.execution_policy?.max_benchmark_runs ?? 0} runs</span><span>Time limit: {run.request?.execution_policy?.max_total_duration_minutes ?? 60} min</span></div></div>
-                <DeploymentPlanReview key={`${run.id}:${run.updated_at}`} candidate={run.selected_candidate} model={draft.model} mode="agentic" disabled={refining || !!deployingCandidateId || !canDeploy} onEdit={run.request?.ai_provider_id ? requestTopologyRevision : undefined} decisions={[
-                    { id: 'selection', label: 'Why this candidate', status: 'recommended', reason: run.decision?.rationale || 'Selected from validated candidates.' },
-                    { id: 'evidence', label: 'Evidence boundary', status: run.optimization?.ranking?.some(item => item.candidate_id === run.selected_candidate?.id) ? 'measured for the tested workload' : 'not benchmark verified', reason: run.optimization?.ranking?.find(item => item.candidate_id === run.selected_candidate?.id)?.benchmark_ids?.join(', ') || 'Scores and historical evidence support the recommendation; this candidate still requires workload validation.' },
-                    ...(run.rejected_candidates || []).map(item => ({ id: item.id, label: item.provider_ref, status: 'rejected', reason: (item.rejection_reasons || []).join('; ') })),
-                ]} />
-                {reviewedCandidateId === run.selected_candidate?.id && canDeploy && <div className="flex justify-end"><Button onClick={() => deployCandidate(reviewedCandidateId, true)} isLoading={!!deployingCandidateId} disabled={refining}>Confirm and deploy reviewed candidate</Button></div>}
-                <MeasuredOptimizationControls key={run.id} run={run} onUpdate={updated => { setReviewedCandidateId(''); setRun(updated); }} onReview={deployCandidate} disabled={refining || !!deployingCandidateId || (!canDeploy && run.status !== 'optimizing')} />
-                {run.generator_fallback_reason && <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-100"><span className="font-semibold">Built-in candidate generation used.</span> {generatorFallbackSummary(run.generator_fallback_reason)}</div>}
-                {run.planner_fallback_reason && <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-100"><span className="font-semibold">Built-in ranking used.</span> {fallbackSummary(run.planner_fallback_reason)}</div>}
-                <div className="grid gap-4">
-                    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/45"><div className="flex items-center gap-2 border-b border-slate-800 bg-slate-950/55 px-4 py-3"><Cpu size={15} className="text-cyan-300" /><h3 className="text-xs font-semibold text-slate-200">Validated alternatives</h3></div>{run.candidates?.map((candidate, index) => <CandidateRow key={candidate.id} candidate={candidate} selected={candidate.id === run.selected_candidate?.id} analysis={candidateAnalysis(candidate, index, aicConfigs, relaxedConfigs, clusterDetails)} onDeploy={deployCandidate} deploying={deployingCandidateId === candidate.id} canDeploy={canDeploy && !refining && !deployingCandidateId} />)}{canDeploy && <div className="border-t border-slate-800 p-3"><textarea className="min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-slate-200" value={refinementPrompt} onChange={(event) => setRefinementPrompt(event.target.value)} maxLength={2000} placeholder="Describe unmet needs. The external planner can choose and score up to ten validated candidates." />{refining && <GenerationProgress events={refinementEvents} />}<div className="mt-2 flex justify-end"><Button size="xs" variant="secondary" onClick={refinePlan} isLoading={refining} disabled={!refinementPrompt.trim()}>Recalculate selection</Button></div></div>}</div>
-                    <div className="rounded-lg border border-slate-800 bg-slate-900/45"><div className="flex items-center gap-2 border-b border-slate-800 bg-slate-950/55 px-4 py-3"><FileStack size={15} className="text-cyan-300" /><h3 className="text-xs font-semibold text-slate-200">Decision evidence</h3></div><div className="divide-y divide-slate-800/70">
-                        {run.decision_metadata && <div className="p-3"><p className="text-xs font-semibold text-slate-200">{run.decision_metadata.planner === 'openai-compatible' ? 'External planner' : 'Prism deterministic planner'}</p><p className="mt-1 text-[11px] text-slate-400">Candidates: {run.generator === 'ai-mcp' ? 'AI-generated with MCP evidence' : 'Prism deterministic generator'}</p>{usedAiProviderName && <p className="mt-1 text-[11px] text-slate-400">AI provider: {usedAiProviderName}</p>}{run.generator_model && <p className="mt-1 text-[11px] text-slate-400">Generator model: {run.generator_model}</p>}{run.decision_metadata.planner_model && <p className="mt-1 text-[11px] text-slate-400">Scoring model: {run.decision_metadata.planner_model}</p>}<p className="mt-2 text-[11px] leading-4 text-slate-400">{run.decision_metadata.selection_method}</p><p className="mt-2 text-[11px] leading-4 text-slate-500">{run.decision_metadata.score_method}</p></div>}
-                        {run.planning_evidence?.length ? run.planning_evidence.map((item) => { const label = evidenceLabel(item, hasAicPrediction); if (!label) return null; const used = (run.decision_evidence_ids || []).includes(item.id); return <div key={`${item.source}:${item.id}`} className="p-3"><div className="flex items-center justify-between gap-2"><span className="text-xs text-slate-200">{label}</span><Badge tone={used ? 'success' : 'neutral'} size="xs">{used ? 'used for selection' : 'context only'}</Badge></div>{item.id === 'aic:search' && <p className="mt-1 text-[10px] text-slate-500">Support was verified before the prediction search.</p>}</div>; }) : <EmptyState icon={<ShieldCheck size={24} />} title="No evidence available" message="The recommendation remains constrained by the live cluster checks." />}
-                    </div></div>
-                </div>
-            </section>}
-        </>
-    );
-    return embedded ? <section className="flex flex-col gap-5">{content}</section> : <ModulePage contentClassName="flex flex-col gap-5">{content}</ModulePage>;
-}
-
-/** Manual deployment uses the same plan review surface as Agentic, but its
- * decision is deterministic and produces one completed configuration. */
-export function ManualDeploymentWorkspace({ draft, embedded = false, onBack, onDeploymentStarted, vllmParameterControls }) {
-    const [requirements, setRequirements] = useState({ objective: 'throughput', maxAccelerators: '', ttftMs: '', tpotMs: '', inputTokens: '', outputTokens: '', concurrency: '', requestRate: '', requiredFeatures: [], forbiddenFeatures: [] });
-    const [plan, setPlan] = useState(null);
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState('');
-    const [deployment, setDeployment] = useState(false);
-    const update = next => setRequirements(next);
-    const generate = async value => {
+    const mutate = async (action, body) => {
         setBusy(true); setError('');
         try {
-            const response = await api('/api/v1/configurations/plan', { method: 'POST', body: JSON.stringify({
-                mode: 'manual',
-                requirements: {
-                    model: draft.model,
-                    cluster_id: draft.clusterId,
-                    objective: value.objective,
-                    hard_constraints: { maxAccelerators: Number(value.maxAccelerators) || null },
-                    workload: { inputTokens: Number(value.inputTokens) || null, outputTokens: Number(value.outputTokens) || null, concurrency: Number(value.concurrency) || null, requestRate: Number(value.requestRate) || null },
-                    performance_targets: { ttftMs: Number(value.ttftMs) || null, tpotMs: Number(value.tpotMs) || null },
-                    required_features: value.requiredFeatures || [],
-                    forbidden_features: value.forbiddenFeatures || [],
-                },
-                candidate_limit: 1,
-            }) });
-            setPlan(response);
-        } catch (failure) { setError(failure.message || 'Unable to generate the deployment plan.'); }
-        finally { setBusy(false); }
+            const value = await api(`/api/agentic-deployments/${encodeURIComponent(run.id)}/${action}`, body);
+            accept(value);
+            return value;
+        } catch (failure) {
+            if (mounted.current) setError(failure.message);
+            throw failure;
+        } finally { if (mounted.current) setBusy(false); }
     };
+    const choose = async id => { try { await mutate('select', { candidate_id: id }); } catch { /* mutate presents the error. */ } };
+    const render = async () => { try { await mutate('select', { candidate_id: run.selected_candidate.id, render_resources: true }); } catch { /* mutate presents the error. */ } };
+    const edit = ({ node, patch }) => mutate('select', {
+        candidate_id: run.selected_candidate.id, role: node.role === 'prefill' ? 'prefill' : 'decode',
+        replicas: patch.replicas, tensor_parallel_size: patch.tensorParallelSize,
+        max_model_len: patch.max_model_len, gpu_memory_utilization: patch.gpu_memory_utilization,
+        max_num_seqs: patch.max_num_seqs, max_num_batched_tokens: patch.max_num_batched_tokens,
+    });
     const deploy = async () => {
-        if (!plan || deployment) return;
-        setDeployment(true); setError('');
-        try {
-            const session = await api(`/api/cluster/session?clusterId=${encodeURIComponent(draft.clusterId)}`);
-            await api('/api/v1/deployments/standard-vllm-runs', { method: 'POST', body: JSON.stringify({
-                model: draft.model,
-                deployment_name: draft.deploymentName,
-                description: draft.description || '',
-                cluster_session_id: session.sessionId || session.session_id,
-                replicas: Number(plan.configuration?.topology?.replicas) || 1,
-                tensor_parallel_size: Number(plan.configuration?.topology?.tensor_parallel_size) || 1,
-                storage_type: 'model-cache',
-                storage_volume_id: draft.storageVolumeId,
-                max_model_len: draft.contextLength,
-                gpu_memory_utilization: draft.gpuMemoryUtilization,
-                max_num_seqs: draft.maxNumSeqs,
-                max_num_batched_tokens: draft.maxNumBatchedTokens,
-                vllm_arguments: draft.vllmArguments || [],
-                placement_replicas: 'prefer-same-node',
-            }) });
-            onDeploymentStarted?.();
-        } catch (failure) { setError(failure.message || 'Unable to start deployment.'); }
-        finally { setDeployment(false); }
+        try { const result = await mutate('approve', { configuration_checksum: reviewedChecksum }); if (result.deployment_run_id) onDeploymentStarted?.(); }
+        catch { /* mutate presents the error. */ }
     };
-    const candidate = plan && { provider_ref: 'Generated compatible plan', replicas: Number(plan.configuration?.topology?.replicas) || 1, tensor_parallel_size: Number(plan.configuration?.topology?.tensor_parallel_size) || 1, max_model_len: draft.contextLength, gpu_memory_utilization: draft.gpuMemoryUtilization };
-    const content = <section className="flex flex-col gap-5">
-        <div><h2 className="text-lg font-semibold text-white">Manual deployment plan</h2><p className="mt-1 text-sm text-slate-400">Describe the outcome you need. Lens completes compatible optimizations and produces one deployable plan.</p></div>
-        {!plan && <DeploymentRequirementsForm mode="manual" initialValue={requirements} onSubmit={value => { update(value); generate(value); }} disabled={busy} />}
-        {error && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
-        {plan && <>
-            <ConfigurationPlanPreview plan={plan} onEdit={() => setPlan(null)} onContinue={() => {}} />
-            <DeploymentPlanReview candidate={candidate} model={draft.model} mode="manual" decisions={plan.decisions || []} disabled={deployment} />
-            <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setPlan(null)}>Edit requirements</Button><Button onClick={deploy} isLoading={deployment}>Validate and deploy</Button></div>
+    const reset = () => { sessionStorage.removeItem(key); setRun(null); setReviewedChecksum(''); setError(''); setEvents([]); };
+    const plan = run?.configuration_plan;
+    const manifest = plan?.configuration?.content?.officialGuide?.renderedManifest || '';
+    const checked = Boolean(manifest) && plan?.validation?.status === 'resources_checked';
+    const reviewed = checked && reviewedChecksum === plan?.configuration?.checksum;
+    const locked = busy || active || !permitted || (run && run.status !== 'awaiting_approval');
+    const stage = run?.deployment_run_id ? 3 : run ? 2 : busy ? 1 : 0;
+    const stages = ['Deployment goals', mode === 'manual' ? 'Build plan' : 'Compare plans', 'Review and edit', 'Deploy and observe'];
+    const content = <section className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-xl font-semibold text-theme-text">{mode === 'manual' ? 'Manual deployment' : 'Agentic deployment'}</h2><p className="mt-1 text-sm text-theme-muted">{mode === 'manual' ? 'Build a compatible starting point, then make it yours.' : 'Set your goal. Compare recommendations before you commit resources.'}</p></div>
+            {onBack && <Button variant="secondary" size="sm" disabled={busy || active || editing} onClick={onBack}><ArrowLeft size={14} />Change target</Button>}
+        </div>
+        <ol className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Deployment workflow">
+            {stages.map((label, index) => <li key={label} aria-current={stage === index ? 'step' : undefined} className={cn('flex items-center gap-3 rounded-lg border border-theme-border p-3 text-xs', stage === index ? 'bg-theme-card font-semibold text-theme-text ring-1 ring-inset ring-current' : 'text-theme-muted')}>
+                {index < stage ? <CheckCircle2 size={16} aria-label="Complete" /> : <Circle size={16} aria-label={stage === index ? 'Current' : 'Pending'} />}<span>{index + 1}. {label}</span>
+            </li>)}
+        </ol>
+        {error && <Panel title="Action could not complete"><p role="alert" className="text-sm text-theme-text">{error}</p></Panel>}
+        {!permitted && <EmptyState title="Deployment permission required" message="Ask an administrator for deployment-create access to this cluster." />}
+        {restoring ? <LoadingState label="Restoring deployment plan" /> : !run && <DeploymentRequirementsForm mode={mode} initialValue={requirements} onSubmit={generate} disabled={busy || !permitted}>
+            <label className="block text-sm">AI provider<Select className="mt-1" value={provider} onChange={event => setProvider(event.target.value)}>
+                <option value="">Built-in planner (no external AI)</option>
+                {providers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </Select><span className="mt-2 block text-xs text-theme-muted">Optional. Select a provider to use AI-assisted proposals; otherwise Lens compares plans with built-in rules.</span></label>
+        </DeploymentRequirementsForm>}
+        {events.length > 0 && <Panel padding="sm"><details open={busy && !run}><summary className="cursor-pointer text-sm font-medium">{busy ? 'Building your deployment plan' : 'Planning activity'}<span className="ml-2 text-xs font-normal text-theme-muted">{events.length} updates</span></summary>
+            {busy && <p role="status" className="mt-3 text-sm text-theme-muted">{events.at(-1)?.message}</p>}
+            <ol className="mt-4 max-h-56 space-y-2 overflow-auto" aria-live="polite">
+            {events.map((event, index) => <li key={index} className="flex items-start gap-2 text-sm"><Badge tone={event.status === 'complete' ? 'success' : 'neutral'}>{event.phase}</Badge><span>{event.message}</span></li>)}
+        </ol></details>{busy && !run && <Button className="mt-3" variant="secondary" onClick={() => abort.current?.abort()}>Cancel planning</Button>}</Panel>}
+        {run && <>
+            <Panel title="Your deployment plan" tone="subtle" actions={<Badge tone={checked ? 'success' : 'neutral'}>{checked ? 'Resources checked' : 'Review required'}</Badge>}>
+                <div className="grid gap-4 md:grid-cols-3">
+                    <div><p className="text-xs text-theme-muted">Evidence</p><p className="mt-1 text-sm">{candidateEvidence(run)}</p></div>
+                    <div><p className="text-xs text-theme-muted">Planned accelerators</p><p className="mt-1 text-sm">{plan?.resource_estimate?.accelerators ?? run.selected_candidate?.required_gpus ?? 'Calculated during resource checks'}</p></div>
+                    <div><p className="text-xs text-theme-muted">Selection source</p><p className="mt-1 text-sm">{run.parent_run_id ? 'User revision; original plan preserved' : run.generator === 'ai-mcp' ? 'AI proposals with deterministic checks' : 'Deterministic rules'}</p></div>
+                </div>
+                <p className="mt-4 text-sm text-theme-muted">{run.decision?.rationale || 'User-modified configuration. Prior performance evidence does not validate this revision.'}</p>
+                {run.generator_fallback_reason && <p className="mt-2 text-sm text-theme-muted">AI generation fallback: {run.generator_fallback_reason}. The displayed plan was generated deterministically.</p>}
+                {run.planner_fallback_reason && <p className="mt-2 text-sm text-theme-muted">AI comparison fallback: {run.planner_fallback_reason}.</p>}
+            </Panel>
+            <DeploymentPlanReview content={manifest} candidate={run.selected_candidate} model={draft.model} mode={mode} decisions={plan?.decisions || []} onEdit={edit} onEditingChange={setEditing} disabled={locked} validation={plan?.validation} revision={run.revision} runtime={run.request} maxAccelerators={plan?.requirements?.hard_constraints?.maxAccelerators} />
+            <Panel padding="sm"><details open={mode === 'agentic'}><summary className="cursor-pointer text-sm font-semibold">{mode === 'manual' ? 'Compare compatible alternatives' : 'Candidate comparison'} <span className="font-normal text-theme-muted">({run.candidates.length})</span></summary>
+                <p className="my-3 text-xs text-theme-muted">Changing a candidate replaces the working plan. Generate and check its resources before approval.</p>
+                <fieldset disabled={locked || editing} className="min-w-0 overflow-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-theme-border text-theme-muted"><th className="p-2">Provider recipe</th><th className="p-2">Accelerators</th><th className="p-2">Target evidence</th><th className="p-2">Selection</th></tr></thead><tbody>
+                    {run.candidates.map(item => <tr key={item.id} className="border-b border-theme-border"><td className="p-2">{item.provider_ref}{item.native_cpu_cache_gib ? ` + CPU KV cache (${item.native_cpu_cache_gib} GiB / serving replica)` : ''}<p className="text-xs text-theme-muted">{item.replicas} replicas / TP {item.tensor_parallel_size}{item.prefill_replicas ? `; prefill ${item.prefill_replicas} / TP ${item.prefill_tensor_parallel_size}` : ''}</p></td><td className="p-2">{item.required_gpus}</td><td className="p-2">{item.slo_status === 'satisfied' ? 'Prediction / historical support; not verified here' : item.slo_status === 'not_satisfied' ? 'Targets not met by available evidence' : 'Not benchmarked for your targets'}</td><td className="p-2"><Button size="sm" variant={run.selected_candidate.id === item.id ? 'primary' : 'secondary'} disabled={locked || run.selected_candidate.id === item.id} onClick={() => choose(item.id)}>{run.selected_candidate.id === item.id ? 'Selected' : 'Review alternative'}</Button></td></tr>)}
+                </tbody></table></fieldset>
+                {run.rejected_candidates?.length > 0 && <details className="mt-3 text-sm"><summary>Excluded candidates ({run.rejected_candidates.length})</summary><ul className="mt-2 space-y-2">{run.rejected_candidates.map(item => <li key={item.id}>{item.provider_ref}: {item.rejection_reasons.join('; ')}</li>)}</ul></details>}
+            </details></Panel>
+            <Panel title={run.deployment_run_id ? 'Deployment submitted' : 'Ready to deploy?'} actions={<Badge tone={reviewed || run.deployment_run_id ? 'success' : 'warning'}>{run.status.replaceAll('_', ' ')}</Badge>}>
+                <p className="mb-4 text-sm text-theme-muted">{run.deployment_run_id ? 'Deployment has been submitted. Open Deployments to follow readiness and inspect logs.' : !checked ? 'Next: generate the deployment resources and run compatibility checks. Nothing will be installed yet.' : !reviewed ? 'Next: review the topology, YAML and checks, then confirm this configuration version.' : 'Your review is recorded. Approval will deploy this exact version using current cluster capacity.'}</p>
+                <details><summary className="mb-3 cursor-pointer text-sm font-medium">Resource checks and remaining validation</summary>
+                <div className="grid gap-4 md:grid-cols-2"><div><h3 className="text-sm font-semibold">Completed checks</h3><ul className="mt-2 space-y-1 text-sm text-theme-muted">{(plan?.validation?.checks || []).map(check => <li key={check}>{check}</li>)}</ul></div><div><h3 className="text-sm font-semibold">Still pending</h3><ul className="mt-2 space-y-1 text-sm text-theme-muted">{(plan?.validation?.pending || ['Regenerate this legacy plan']).map(check => <li key={check}>{check}</li>)}</ul></div></div>
+                </details>
+                {plan?.validation?.warnings?.map(warning => <p key={warning} className="mt-2 text-sm">{warning}</p>)}
+                <p className="mt-4 text-xs text-theme-muted">Generated YAML is not proof of admission, readiness or performance. Approval rechecks current capacity and deploys this reviewed manifest. Deployment may still fail; observe its run status.</p>
+                {editing && <p role="status" className="mt-3 text-sm text-theme-muted">Apply or cancel the component edit before changing the plan or approving deployment.</p>}
+                <fieldset disabled={editing} className="mt-4 flex flex-wrap justify-end gap-2">
+                    {!run.deployment_run_id && <>
+                        <Button variant="secondary" disabled={locked} onClick={reset}>Change requirements</Button>
+                        {!checked && <Button disabled={locked || !plan} onClick={render} isLoading={busy}>Generate and check YAML</Button>}
+                        {checked && !reviewed && <Button disabled={locked} onClick={() => setReviewedChecksum(plan.configuration.checksum)}>Confirm configuration review</Button>}
+                        {checked && reviewed && <Button disabled={locked} onClick={deploy} isLoading={busy}>Approve and deploy reviewed version</Button>}
+                    </>}
+                    {run.deployment_run_id && <Button variant="secondary" onClick={onDeploymentStarted}>Observe deployment</Button>}
+                </fieldset>
+            </Panel>
+            {mode === 'agentic' && (run.request.execution_policy.allow_trials || run.optimization) && <MeasuredOptimizationControls key={run.id} run={run} onUpdate={accept} onReview={choose} disabled={busy || !permitted || editing} />}
         </>}
-        {vllmParameterControls && <details className="rounded-xl border border-theme-border bg-theme-card/40 px-4 py-3"><summary className="cursor-pointer text-xs font-semibold text-theme-text">Runtime overrides</summary><div className="mt-3 grid gap-3">{vllmParameterControls}</div></details>}
-        {onBack && <div><Button variant="secondary" onClick={onBack}>Back to model details</Button></div>}
     </section>;
-    return embedded ? content : <ModulePage contentClassName="flex flex-col gap-5">{content}</ModulePage>;
+    return embedded ? content : <ModulePage>{content}</ModulePage>;
+}
+
+export default function AgenticDeploymentWorkspace(props) {
+    return <DeploymentWorkflow {...props} mode="agentic" />;
 }

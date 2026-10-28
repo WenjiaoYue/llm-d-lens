@@ -13,6 +13,180 @@ are no longer supported.
 
 ## Python domain contracts
 
+### Shared Manual / Agentic planning
+
+The new creation UI uses the existing Agentic run lifecycle for both decision
+modes. Legacy requests without `requirements` keep their existing behavior.
+
+<Tabs>
+<TabItem value="rest-api" label="REST API">
+
+**`POST /api/agentic-deployments`** returns `201` with an
+`AgenticDeploymentRun`. The browser's `/stream` variant returns progress and
+the same completed run over SSE. Neither operation deploys resources.
+
+In addition to the Standard serving and active-session fields:
+
+- `planning_mode`: `manual` or `agentic` (default). Manual never initializes an external AI planner.
+- `requirements`: model and cluster identity, objective, `hard_constraints.maxAccelerators`,
+  workload, performance targets, required/forbidden mechanism IDs and unknown fields.
+  Supported mechanism controls are `pd_disaggregation`, `prefix_routing` and `external_kv_cache`.
+- `planning_facts.max_candidates`: retained-candidate limit, 1–10 for the shared workflow.
+  Live free resources override client-supplied hardware facts.
+- `execution_policy.max_total_duration_minutes`: planning deadline, 1–180.
+- `execution_policy.allow_trials`: defaults to false. Enabling it permits a later,
+  separately approved `/optimize` request; it never starts testing during planning.
+
+```json
+{
+  "model": "Qwen/Qwen3-8B",
+  "deployment_name": "reviewed-model",
+  "cluster_session_id": "00000000-0000-0000-0000-000000000001",
+  "storage_type": "model-cache",
+  "storage_volume_id": "registered-cache-id",
+  "replicas": 1,
+  "tensor_parallel_size": 1,
+  "planning_mode": "manual",
+  "planning_facts": {
+    "model_weight_gib": 16,
+    "vram_per_gpu_gib": 1,
+    "free_gpu_count": 0,
+    "max_candidates": 3
+  },
+  "requirements": {
+    "model": "Qwen/Qwen3-8B",
+    "cluster_id": "registered-cluster-id",
+    "objective": "throughput",
+    "hard_constraints": {"maxAccelerators": 4},
+    "workload": {"prefixReuse": null, "prefillHeavy": null},
+    "performance_targets": {"ttftMs": null, "tpotMs": null},
+    "required_features": [],
+    "forbidden_features": ["external_kv_cache"]
+  },
+  "execution_policy": {"mode": "approval_required", "allow_trials": false}
+}
+```
+
+Replace the example IDs with an active session, its actual cluster and a ready
+model cache. Invalid identities, unsupported constraints, unknown required
+mechanisms and infeasible resource limits return `422`.
+
+The response includes `configuration_plan`, `revision` and optional `parent_run_id`.
+The shared plan retains requirements, mechanism decisions, resource estimates,
+the exact deployable `configuration`, and separate completed/pending checks.
+`planning_checked` does not mean manifests, admission or performance passed.
+
+For Manual requests with structured requirements, planning also expands native CPU
+KV-cache adapters for baseline, precise routing and P/D. Standalone tiered cache
+is sized through `guideSettings.cacheCpuGiB`; compositions use
+`guideComposition.nativeCpuCacheGiB`. Each serving replica receives at most
+8 GiB; total cache allocation is at most 25% of observed free host memory.
+Unknown memory does not authorize an automatic cache allocation.
+`resource_estimate.cpu_cache_gib` records the total. Planned cache decisions stay
+`unknown` until source-bound rendering succeeds. Sequence count is clamped to
+the selected model/VRAM concurrency estimate when available.
+
+Manual ranks target evidence, then mechanism coverage, then the objective:
+throughput prefers P/D then precise routing; latency prefers precise routing;
+cost prefers fewer accelerators; reliability prefers multiple serving replicas.
+Remaining ties prefer fewer accelerators. Retained alternatives favor recipe/cache
+diversity. Rationale exposes this policy, not a measured optimum. Cache compositions
+do not inherit performance evidence from their uncomposed topology.
+
+**`POST /api/agentic-deployments/{run_id}/select`** returns `200`:
+
+- `{"candidate_id":"..."}` selects an already validated alternative.
+- `{"candidate_id":"...","role":"decode","replicas":2}` creates a new, live-validated
+  user revision. `role` is `decode` or `prefill`. Optional `tensor_parallel_size`
+  and `replicas` are 1–128. Optional runtime edits are `max_model_len`
+  (256–1048576), `gpu_memory_utilization` (0.5–0.98), `max_num_seqs` (1–4096)
+  and `max_num_batched_tokens` (256–131072). Runtime edits affect all serving roles.
+- `{"candidate_id":"...","render_resources":true}` generates source-pinned YAML
+  using the same renderer as Configuration and validates manifest consistency.
+  It reads cluster/storage state and may fetch official sources, but does not
+  install anything. Do not combine rendering with edits.
+
+Edits preserve the original run, set `parent_run_id`, increment `revision`, and
+invalidate old resource checks and performance evidence. Failed edits return
+`409`. Rendering errors retain their status; a concurrently changed selection
+is rejected. Successful rendering sets `validation.status=resources_checked`;
+the manifest is in `configuration_plan.configuration.content.officialGuide.renderedManifest`.
+The Manual browser flow retains up to 10 recipe/cache alternatives and invokes
+`{"candidate_id":"...","render_resources":true,"compare_combinations":true}`.
+This Manual-only option checks retained recipes against pinned source without
+publishing intermediate selections. It reports rejected candidates and selects
+the first passing displayed ranking. If none pass, `409` preserves the original
+recommendation and blocks approval. Permission and unexpected server errors
+propagate rather than being treated as recipe incompatibility.
+Without `compare_combinations`, rendering preserves the explicit candidate choice.
+Effective source-enabled prefix caching
+and chunked prefill are recorded as enabled even when inherited from a Guide.
+Prefix caching required by a sized CPU-cache recipe is recorded as `dependency`.
+Cache revisions preserve the allocation per replica and recheck the 25% host-memory
+budget; approval refreshes this budget again.
+Admission, readiness and workload performance remain pending.
+
+**`POST /api/agentic-deployments/{run_id}/approve`** returns `202`. New shared
+plans must have reviewed/generated resources; otherwise it returns `409`.
+Send `{"configuration_checksum":"<reviewed configuration checksum>"}`; a missing
+or stale checksum also returns `409`. Concurrent approval or candidate mutation
+is rejected while approval is in progress.
+Capacity is refreshed before submitting the stored configuration to Deploy.
+The response contains `deployment_run_id`. Generation is not a guarantee of
+admission or readiness. Legacy approval remains compatible.
+
+Shared plans reject the legacy `/refine` prompt-only operation with `409`:
+create another plan with changed structured requirements instead.
+Completed new runs/revisions are recoverable from snapshots through the existing
+`GET /api/agentic-deployments/{run_id}` endpoint.
+
+**`POST /api/v1/configurations/plan`** remains an intent-inspection compatibility
+endpoint. It performs no cluster reads and returns no executable candidates,
+no topology and no enabled mechanisms. Workload applicability remains unknown
+until real planning; it no longer invents candidate rankings.
+
+</TabItem>
+<TabItem value="python-api" label="Python API">
+
+`AgenticDeploymentService.create` owns shared decision planning;
+`revise_candidate` revalidates edits and preserves the original.
+`planning_resource_request` maps the selected configuration to
+`llm_d_lens.deploy.guide_planning.plan_resources(request, body)`, the existing
+authenticated rendering contract. `accept_rendered_plan` validates and records
+its successful result. `approve` delegates to Deploy; HTTP callers must use the
+approval endpoint to enforce the resource-review gate.
+
+```python
+from llm_d_lens.agentic.models import (
+    AgenticCandidateSelectionRequest,
+    AgenticDeploymentCreateRequest,
+)
+from llm_d_lens.agentic.service import service
+
+async def create_and_revise(payload: dict):
+    # payload contains an active session and ready cache, as in the REST example.
+    request = AgenticDeploymentCreateRequest.model_validate(payload)
+    original = await service.create(request)
+    revised = await service.revise_candidate(
+        original.id,
+        AgenticCandidateSelectionRequest(
+            candidate_id=original.selected_candidate.id,
+            role="decode",
+            replicas=2,
+        ),
+    )
+    assert revised.parent_run_id == original.id
+    assert revised.configuration_plan.validation["status"] == "planning_checked"
+    return revised
+```
+
+The pure compatibility helper is
+`llm_d_lens.configuration.decision_engine.build_plan(PlanRequest(...))`;
+it only inspects intent, never creates an executable deployment.
+
+</TabItem>
+</Tabs>
+
 The models in `llm_d_lens.deploy.contracts` and the
 `llm_d_lens.deploy.service.DeploymentService` protocol define the internal
 Configuration-to-Deploy boundary. They are not additional HTTP endpoints.

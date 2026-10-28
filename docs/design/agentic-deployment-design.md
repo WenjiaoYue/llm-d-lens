@@ -125,19 +125,49 @@ flowchart TD
 
 ### UI inputs and interaction
 
-The UI is only the input and review surface for the workflow above. The entry points are
-`src/components/ModelMarketPage.jsx` and
-`src/components/AgenticDeploymentWorkspace.jsx`:
+The entry is `apps/frontend/src/pages/model-market/ui/ModelMarketPage.jsx`.
+`DeploymentWorkflow` in `pages/deployment/ui/AgenticDeploymentWorkspace.jsx` owns
+both modes; `ManualDeploymentWorkspace.jsx` selects deterministic mode.
 
-- Model Cache storage sits directly below Cluster in Model Market and is shared by Manual and
-  Agentic; users can enter Agentic mode first, and required-field validation runs only when
-  generating a recommendation.
-- The Agentic workspace provides Use case, optional SLO/workload/preference inputs, plus
-  alternatives, score-source, and evidence display.
-- The initial response shows the top three scored candidates; the external planner also returns
-  at most three candidates.
-- Users may only choose an existing deployable candidate; they cannot submit a new provider, TP,
-  replica count, or CLI parameters through the UI or prompt.
+- Model, cluster and ready model cache precede a compact Manual workload/preference
+  form with expandable optional constraints. Agentic retains three-step inputs.
+  Blank values remain unknown; cluster inventory is backend-discovered.
+- New requests carry `planning_mode` and structured `requirements`. Manual never
+  calls external AI. It expands the existing source-bound CPU cache adapters,
+  ranks target evidence, coverage and explicit objective rules, and then prefers
+  smaller resource use. Alternatives retain recipe diversity. Cache capacity is
+  at most 8 GiB per serving replica and 25% of observed free host memory in total;
+  source compatibility remains pending until rendering. No uncomposed performance
+  evidence is inherited by cache variants.
+- Both modes use the existing candidate validator, configuration builder,
+  source-pinned resource renderer and deployment approval lifecycle. The old
+  `/configurations/plan` compatibility helper inspects intent only; it cannot
+  fabricate executable topologies or ranked candidates.
+- Manual automatically compares retained recipes against pinned source after
+  planning. It reports source/resource exclusions and selects the first passing
+  displayed ranking, without publishing intermediate selections. If none pass,
+  the recommendation is preserved and approval is blocked. Explicit candidate
+  rendering never changes the choice. Its decision checklist is always visible.
+- Default review is the 2D resource graph. 3D is optional and selection is
+  read-only. Sidebar edits show topology resource deltas and require explicit
+  application. Manual edits require the 3D view. Runtime fields apply to every
+  serving role. Cache edits preserve per-replica capacity and recheck host memory.
+- Applied edits are live-revalidated new runs linked by `parent_run_id`, with
+  incremented `revision`. Original recommendations remain intact; YAML checks
+  and performance evidence do not carry over.
+- Source rendering records the exact manifest under the shared configuration.
+  Approval refreshes capacity before passing that manifest to Deploy. Admission,
+  readiness and performance remain separate pending checks.
+- New workflow snapshots retain complete runs for restoration. Trials are
+  disabled by default and require an independently confirmed bounded workload.
+  A measured ranking entry is not labelled the winner unless it is the recorded
+  best candidate of a completed comparison.
+
+The existing planner/scorer details below still describe legacy API behavior.
+Structured shared workflows reject prompt-only refinement; changed requirements
+produce a new plan. The currently supported provider combinations are not an
+exhaustive optimization catalog. Unknown mechanisms, dependency-install policy,
+and unrestricted YAML round-trip editing must not be presented as implemented.
 
 ### Implementation details and constraints
 

@@ -200,6 +200,7 @@ ROUTE_PERMISSIONS: tuple[RoutePermission, ...] = (
     RoutePermission("GET", "/api/v1/configurations/artifacts/{artifact_id}/bundle", "configuration:artifact:read"),
     RoutePermission("GET", "/api/v1/configurations/artifacts/{artifact_id}/manifest", "configuration:artifact:read"),
     RoutePermission("GET", "/api/v1/configurations/capabilities", "configuration:artifact:read"),
+    RoutePermission("POST", "/api/v1/configurations/plan", "configuration:artifact:render"),
     RoutePermission("POST", "/api/v1/configurations/render", "configuration:artifact:render"),
     RoutePermission("POST", "/api/v1/configurations/resolve", "configuration:artifact:render"),
     RoutePermission("POST", "/api/v1/configurations/save", "configuration:artifact:save"),
