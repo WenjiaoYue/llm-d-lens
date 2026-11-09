@@ -110,6 +110,10 @@ def test_drift_ignores_server_defaults_and_finds_real_changes(llmrepo, cluster):
     report = {item["object"]: item for item in compare(Kube(runner=cluster), plan)}
     assert report["Deployment/model-a"]["differences"] == ["spec.replicas"]
     assert drift({"a": [1, {"b": 2}]}, {"a": [1, {"b": 3}], "c": 1}) == ["a[1].b"]
+    # A quantity written as a number comes back from the server as its string.
+    assert drift({"limits": {"nvidia.com/gpu": 4}}, {"limits": {"nvidia.com/gpu": "4"}}) == []
+    assert drift({"limits": {"nvidia.com/gpu": 4}}, {"limits": {"nvidia.com/gpu": "8"}}) == ["limits.nvidia.com/gpu"]
+    assert drift({"enabled": True}, {"enabled": "True"}) == ["enabled"]
 
 
 def test_the_pull_secret_openshift_adds_to_a_service_account_is_not_drift(llmrepo, cluster):
@@ -167,3 +171,17 @@ def test_import_command(llmrepo, cluster, tmp_path, capsys, monkeypatch):
     assert inventory.read(Kube(runner=cluster), "model-a-serving", "team-model") is None
     assert main(["-o", "json", *base, "--name", "team-model"]) == 0
     assert json.loads(capsys.readouterr().out)["imported"] == 2
+
+
+def test_a_claim_being_deleted_does_not_stop_an_import(llmrepo, cluster, tmp_path, capsys, monkeypatch):
+    """An import creates no pod: the running ones keep the claim. A rollout of the instance still refuses."""
+    monkeypatch.setattr("lens.commands.RUNNER", cluster)
+    deployed_with_kubectl_apply(llmrepo, cluster)
+    claim = cluster.get("model-a-serving", "persistentvolumeclaims", "model-a-cache")
+    claim["metadata"]["deletionTimestamp"] = "2026-01-02T03:04:05Z"
+    base = ["--state-dir", str(tmp_path), "import", STACK, "--source", str(llmrepo), "-n", "model-a-serving"]
+    assert main([*base, "--name", "team-model", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "WARNING  PersistentVolumeClaim/model-a-cache is being deleted" in out and "BLOCKED" not in out
+    assert main([*base, "--name", "team-model"]) == 0
+    assert inventory.read(Kube(runner=cluster), "model-a-serving", "team-model")["phase"] == "Imported"

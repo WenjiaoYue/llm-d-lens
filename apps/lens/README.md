@@ -103,7 +103,9 @@ llmd teardown optimized-baseline -n <namespace>
 - objects only an administrator may apply. `--admin-yaml FILE` writes them; pass `--skip-admin-parts` once
   they are applied;
 - privileged containers and hostPath volumes. Pass `--allow-privileged` once an administrator has granted them;
-- missing Secrets and claims, missing permissions, and objects another tool already deployed.
+- missing Secrets and claims, missing permissions, and objects another tool already deployed;
+- a claim that is being deleted, or Lost. Pods that already mount it keep running, but a new pod cannot
+  mount it, so it stays Pending. `scale` and `rollouts` refuse for the same reason.
 
 The llm-d router chart creates a ClusterRole and ClusterRoleBinding so that the endpoint picker can check who
 scrapes its metrics. Without an administrator, `--set router.monitoring.prometheus.auth.enabled=false` turns
@@ -215,7 +217,10 @@ scales, the steps, and the groups each role keeps serving during a step. It refu
 - several DisaggregatedSets would roll at once;
 - roles are added or removed;
 - a step would leave a role below its `--floor`;
-- a step would leave a role with no group serving. `--allow-outage` accepts that outage.
+- a step would leave a role with no group serving. `--allow-outage` accepts that outage;
+- the stack path differs from the one the instance runs. `--switch-stack` rolls it to that path instead,
+  for example from the overlay a team runs to the copy it prepared a change in. The record then follows
+  the new path, and keeps the old one as `previousStack`.
 
 The llm-d guides' vLLM overlays drain each pod as it stops: a `preStop` sleep, then vLLM's
 `--shutdown-timeout`. `--no-drain` relies on that. A stack that holds the controller's scale-down until a drain
