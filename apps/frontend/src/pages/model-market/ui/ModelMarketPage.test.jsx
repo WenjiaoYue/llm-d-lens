@@ -5,8 +5,24 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MODELS } from '@repo/shared/catalog';
 import { AuthContext } from '../../auth/AuthContext.js';
 import AgenticDeploymentWorkspace from '../../deployment/ui/AgenticDeploymentWorkspace.jsx';
-import ModelMarketPage from './ModelMarketPage.jsx';
+import ManualDeploymentWorkspace from '../../deployment/ui/ManualDeploymentWorkspace.jsx';
+import { DeploymentRequirementsForm } from '../../deployment/ui/DeploymentRequirementsForm.jsx';
+import { DeploymentPlanReview } from '../../deployment/ui/DeploymentPlanReview.jsx';
+import ModelMarketPage, { ModelCard } from './ModelMarketPage.jsx';
 import { standardRecommendation } from '../model/standardRecommendation.js';
+
+const authenticated = child => createElement(AuthContext.Provider, { value: { can: () => true } }, child);
+
+test('model cards retain catalog styling, natural height and full-width model type', () => {
+    const html = renderToStaticMarkup(createElement(ModelCard, { model: MODELS[0], onSelect() {} }));
+    assert.match(html, /type="button"/);
+    assert.match(html, /\bh-auto\b/);
+    assert.doesNotMatch(html, /\bh-8\b/);
+    assert.match(html, /\bwhitespace-normal\b/);
+    assert.match(html, /dark:bg-slate-900/);
+    assert.match(html, /dark:hover:border-cyan-400\/60/);
+    assert.match(html, /class="col-span-2"><dt[^>]*>Model type/);
+});
 
 test('deployment context uses the exact model card metadata for every listed context', () => {
     for (const model of MODELS.filter((model) => model.contextLength != null)) {
@@ -22,120 +38,85 @@ test('deployment context keeps the default only when model card context is missi
     }
 });
 
-test('Agentic deployment shows reference placeholders without setting latency or workload defaults', () => {
-    const html = renderToStaticMarkup(createElement(AgenticDeploymentWorkspace, {
-        draft: {}, embedded: true,
+test('both deployment modes identify the model and cluster without redundant numbered stages', () => {
+    for (const Workspace of [ManualDeploymentWorkspace, AgenticDeploymentWorkspace]) {
+        const html = renderToStaticMarkup(authenticated(createElement(Workspace, { draft: { model: 'fixture/model', modelTitle: 'Fixture Model', clusterName: 'Research cluster', deploymentName: 'long-generated-name' }, embedded: true })));
+        assert.match(html, /<h2[^>]*>Fixture Model<\/h2>/);
+        assert.match(html, />Model<\/dt>/);
+        assert.match(html, />Cluster<\/dt>/);
+        assert.match(html, /Research cluster/);
+        assert.match(html, /Deployment target details/);
+        assert.doesNotMatch(html, /aria-label="Deployment workflow"|<h2[^>]*>long-generated-name/);
+        assert.doesNotMatch(html, /Custom vLLM parameters|GPU capacity for planning|Template-based deployment/);
+    }
+});
+
+test('workload inputs are optional hints, not assumed traffic or compatibility gates', () => {
+    for (const mode of ['manual', 'agentic']) {
+        const html = renderToStaticMarkup(createElement(DeploymentRequirementsForm, { mode }));
+        assert.match(html, /Mean input tokens<input[^>]*value=""/);
+        assert.match(html, /Mean output tokens<input[^>]*value=""/);
+        assert.match(html, /Concurrent requests<input[^>]*value=""/);
+        assert.match(html, /Use this or QPS, not both/);
+        assert.doesNotMatch(html, />Unknown</);
+        assert.match(html, /<details[^>]*><summary[^>]*>Request size/);
+        assert.match(html, /No live deployment is changed/);
+        assert.match(html, /does not switch optimizations on or off/);
+        assert.doesNotMatch(html, /<details[^>]* open|aria-label="Requirement steps"|>Continue</);
+        assert.doesNotMatch(html, /Tensor parallel|gpu-memory-utilization/);
+    }
+});
+
+test('Manual review restores 3D topology and allows component editing', () => {
+    const html = renderToStaticMarkup(createElement(DeploymentPlanReview, {
+        candidate: { id: 'a', replicas: 1, tensor_parallel_size: 1, provider_ref: 'optimized-baseline' },
+        model: 'test/model',
+        onEdit() {},
+        decisions: [
+            { capability_id: 'prefix_cache', label: 'Prefix caching', status: 'dependency', reason: 'Required by the cache connector.' },
+            { capability_id: 'autoscaling', label: 'Autoscaling', status: 'unknown', reason: 'Missing source support.' },
+        ],
     }));
-    for (const [label, example] of [
-        ['TTFT SLO \\(ms\\)', '2000'],
-        ['TPOT SLO \\(ms\\)', '30'],
-        ['Mean input tokens per request', '4000'],
-        ['Mean output tokens per request', '1000'],
-    ]) {
-        assert.match(html, new RegExp(`${label}<input[^>]*placeholder:text-theme-muted[^>]*placeholder="e.g. ${example}"[^>]*value=""`));
-    }
-    assert.match(html, /Concurrent requests<input[^>]*value=""/);
-    assert.match(html, /Request rate \(QPS\)<input[^>]*value=""/);
-    assert.doesNotMatch(html, /End-to-end latency/);
-    assert.doesNotMatch(html, /Planning hardware identity|Simulated target hardware model|Cluster default \(may include a test override\)/);
+    assert.match(html, /Prefix caching/);
+    assert.match(html, /2D overview/);
+    assert.match(html, /Inference flow/);
+    assert.match(html, /Verify/);
+    assert.match(html, /3D explorer/);
+    assert.doesNotMatch(html, /Needs information/);
 });
 
-test('Agentic deployment expands SLO and workload sections and keeps vLLM parameters collapsed', () => {
-    const html = renderToStaticMarkup(createElement(AgenticDeploymentWorkspace, {
-        draft: {}, embedded: true,
-        vllmParameterControls: createElement('span', null, 'Parameter controls'),
-    }));
-    const sections = [...html.matchAll(/<details\b([^>]*)><summary[^>]*>(.*?)<\/summary>/g)];
-    const slo = sections.findIndex(([, , summary]) => summary.includes('SLO'));
-    const preference = sections.findIndex(([, , summary]) => summary.includes('Preference'));
-    const workload = sections.findIndex(([, , summary]) => summary.includes('Workload estimate'));
-    const vllm = sections.findIndex(([, , summary]) => summary.includes('vLLM parameters'));
-    assert.notEqual(slo, -1);
-    assert.equal(preference, slo + 1);
-    assert.equal(workload, preference + 1);
-    assert.equal(vllm, workload + 1);
-    assert.match(sections[slo][1], /\bopen=""/);
-    assert.match(sections[slo][2], /Optional target/);
-    assert.match(sections[workload][1], /\bopen=""/);
-    assert.doesNotMatch(sections[vllm][1], /\bopen\b/);
-    assert.match(html, /Parameter controls/);
-    const sloSection = html.match(/<details\b[^>]*><summary[^>]*>.*?SLO .*?<\/summary>(.*?)<\/details>/)?.[1];
-    assert.ok(sloSection);
-    assert.match(sloSection, /^<div class="[^"]*\bgrid-cols-2\b[^"]*"><label[^>]*>TTFT SLO/);
-    assert.match(sloSection, /<\/label><label[^>]*>TPOT SLO/);
-});
-
-test('Agentic deployment submits empty SLO and workload fields as null, not placeholder examples', async (t) => {
-    let tree;
-    function Capture() {
-        tree = AgenticDeploymentWorkspace({
-            draft: { clusterId: 'cluster-1', storageVolumeId: 'cache-1', model: 'Qwen/test' },
-            embedded: true,
-        });
-        return tree;
-    }
-    renderToStaticMarkup(createElement(Capture));
-    function findGenerate(node) {
-        if (!node || typeof node !== 'object') return undefined;
-        if (node.props?.onClick?.name === 'createPlan') return node;
-        return [node.props?.children].flat(Infinity).map(findGenerate).find(Boolean);
-    }
-    const payloads = [];
-    t.mock.method(globalThis, 'fetch', async (url, options) => {
-        if (url === '/api/cluster/session?clusterId=cluster-1') {
-            return Response.json({ sessionId: 'session-1' });
-        }
-        assert.equal(url, '/api/agentic-deployments/stream');
-        payloads.push(JSON.parse(options.body));
-        return new Response('event: complete\ndata: {"id":"run-1"}\n\n', {
-            headers: { 'Content-Type': 'text/event-stream' },
-        });
-    });
-    await findGenerate(tree).props.onClick();
-    assert.equal(payloads.length, 1);
-    const facts = payloads[0].planning_facts;
-    assert.equal(facts.ttft_slo_ms, null);
-    assert.equal(facts.tpot_slo_ms, null);
-    assert.deepEqual(facts.workload_profile, {
-        mean_input_tokens: null,
-        mean_output_tokens: null,
-        concurrency: null,
-        request_rate: null,
-    });
-});
-
-test('model catalog keeps search with category filters and preserves model configuration actions', (testContext) => {
+test('model catalog preserves search and removes legacy pre-generation runtime controls', t => {
     let hasReturnDraft = false;
-    const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
     Object.defineProperty(globalThis, 'sessionStorage', {
         configurable: true,
         value: {
-            getItem: (key) => hasReturnDraft && key === 'prism_model_market_return_draft'
-                ? JSON.stringify({ model: MODELS[0].repository }) : null,
+            getItem: key => hasReturnDraft && key === 'prism_model_market_return_draft' ? JSON.stringify({ model: MODELS[0].repository }) : null,
             removeItem() {},
         },
     });
-    testContext.after(() => {
-        if (originalStorage) Object.defineProperty(globalThis, 'sessionStorage', originalStorage);
-        else delete globalThis.sessionStorage;
-    });
-    const renderPage = (canDeploy = true) => renderToStaticMarkup(createElement(AuthContext.Provider, { value: { can: () => canDeploy } },
-        createElement(ModelMarketPage, { onNavigate() {} })));
-    const catalog = renderPage();
-    const header = catalog.match(/<header\b[\s\S]*?<\/header>/)?.[0] || '';
-    assert.match(header, />Model Catalog<\/h1>/);
-    assert.doesNotMatch(header, /aria-label="Search models"/);
-    assert.match(catalog, /role="tablist" aria-label="Model categories"[\s\S]*aria-label="Search models"[\s\S]*<section/);
-    assert.doesNotMatch(catalog, /Select a model|Popular open models across/);
+    t.after(() => { if (original) Object.defineProperty(globalThis, 'sessionStorage', original); else delete globalThis.sessionStorage; });
+    const renderPage = canDeploy => renderToStaticMarkup(createElement(AuthContext.Provider, { value: { can: () => canDeploy } }, createElement(ModelMarketPage, { onNavigate() {} })));
+    const catalog = renderPage(true);
+    assert.match(catalog, /role="tablist" aria-label="Model categories"/);
+    assert.match(catalog, /aria-label="Search models"/);
+    assert.match(catalog, /class="w-52 sm:w-64"/);
+    assert.match(catalog, /lg:w-auto lg:flex-1/);
+    assert.match(catalog, /grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3/);
     hasReturnDraft = true;
-    const html = renderPage();
+    const html = renderPage(true);
     assert.match(html, />Model Catalog<\/button>/);
-    for (const page of [html, renderPage(false)]) {
-        assert.doesNotMatch(page.match(/<header\b[\s\S]*?<\/header>/)?.[0] || '', />Model Catalog<\/button>/);
-        assert.match(page, /<\/header>[\s\S]*>Model Catalog<\/button>[\s\S]*<(?:form|div)/);
-    }
     assert.match(html, />Manual</);
-    assert.match(html, /Template-based deployment/);
-    assert.match(html, /Configure deployment/);
-    assert.doesNotMatch(html, /Template-based benchmark configuration|>Advanced</);
+    assert.match(html, />Agentic</);
+    assert.match(html, /Compatible optimizations/);
+    assert.match(html, /Goal-based recommendation/);
+    assert.match(html, /Planning strategy/);
+    assert.match(html, /Model files/);
+    assert.match(html, /Prepare model files/);
+    assert.doesNotMatch(html, /aria-current="step"|1\. Target|2\. Deployment plan/);
+    assert.match(html, /Nothing deploys without your confirmation/);
+    assert.match(html, /Build deployment plan/);
+    assert.doesNotMatch(html, /Name and notes|Notes<textarea|Complete the workload picture/);
+    assert.doesNotMatch(html, />Replicas<|>Tensor parallelism<|Custom vLLM parameters|Template-based deployment/);
+    assert.match(renderPage(false), /Your role cannot create deployments/);
 });
