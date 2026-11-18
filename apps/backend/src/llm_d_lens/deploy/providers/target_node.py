@@ -65,9 +65,36 @@ def apply_placement(manifest: str, placement: dict[str, Any]) -> tuple[str, int]
     modelserver_group = sha256("/".join(modelserver_names).encode()).hexdigest()[:32]
     changed = 0
     for document in documents:
-        if not isinstance(document, dict) or document.get("kind") not in {"Deployment", "LeaderWorkerSet"}:
+        if not isinstance(document, dict) or document.get("kind") not in {
+            "Deployment",
+            "LeaderWorkerSet",
+            "DisaggregatedSet",
+        }:
             continue
-        if document["kind"] == "LeaderWorkerSet":
+        if document["kind"] == "DisaggregatedSet":
+            spec = document.get("spec") or {}
+            policy = spec.get("placementPolicy") or {}
+            slices = spec.get("slices") or 1
+            if policy.get("type", "None") != "None" and policy.get("topology") == "kubernetes.io/hostname":
+                if replicas in {"balanced", "spread"}:
+                    raise ValueError(
+                        "Pod placement that separates replicas conflicts with slice placement that keeps "
+                        "each slice on one node; choose prefer-same-node or same-node."
+                    )
+                if replicas == "same-node" and slices > 1:
+                    raise ValueError(
+                        "Requiring one node conflicts with slice placement that puts each slice on a different node."
+                    )
+            templates = [
+                template
+                for role in spec.get("roles") or []
+                if isinstance(role, dict)
+                for template in (
+                    ((role.get("spec") or {}).get("leaderWorkerTemplate") or {}).get("leaderTemplate"),
+                    ((role.get("spec") or {}).get("leaderWorkerTemplate") or {}).get("workerTemplate"),
+                )
+            ]
+        elif document["kind"] == "LeaderWorkerSet":
             if replicas in {"balanced", "spread"}:
                 raise ValueError("distributed replica placement is not supported for LeaderWorkerSet")
             group_templates = document.get("spec", {}).get("leaderWorkerTemplate", {})

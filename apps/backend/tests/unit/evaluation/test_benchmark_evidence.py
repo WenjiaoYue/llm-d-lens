@@ -95,6 +95,23 @@ def sample_metrics(run):
     return run["matrix_results"][0]["stage_metrics"][0]["metrics"]
 
 
+def test_source_evidence_derives_topology_from_reviewed_manifest(run):
+    from tests.unit.agentic.test_source_plan import bundle
+
+    content = run["deployment_configuration"]["content"]
+    content.pop("decode")
+    content["officialGuide"] = {"renderedManifest": bundle()["files"][0]["content"]}
+    run["deployment_configuration"].update(provider_ref="source-composition", checksum=configuration_checksum(content))
+    _, candidate = evidence.configuration_snapshot(run)
+    assert candidate.decode_tp == 1
+    assert candidate.decode_replicas == 1
+    assert candidate.prefill_tp is None
+    content["officialGuide"]["renderedManifest"] = ""
+    run["deployment_configuration"]["checksum"] = configuration_checksum(content)
+    with pytest.raises(ValueError, match="saved rendered manifest"):
+        evidence.configuration_snapshot(run)
+
+
 def test_uses_actual_p95_fraction_and_original_time_not_medians_or_current_facts(run):
     records, issues = evidence.normalize_evaluate_run(run)
     assert not issues

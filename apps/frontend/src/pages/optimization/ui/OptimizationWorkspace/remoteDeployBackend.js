@@ -117,6 +117,10 @@ export async function getDeploymentExecutionPods(executionId) {
     return payload;
 }
 
+export async function getDeploymentExecutionPlan(executionId, { signal } = {}) {
+    return requestJson(`/api/v1/deployments/executions/${encodeURIComponent(executionId)}/plan`, { signal });
+}
+
 export async function getDeploymentExecutionPodLogs(executionId, podName, { container, tail = 200, previous = false } = {}) {
     const params = new URLSearchParams();
     if (container) params.set('container', container);

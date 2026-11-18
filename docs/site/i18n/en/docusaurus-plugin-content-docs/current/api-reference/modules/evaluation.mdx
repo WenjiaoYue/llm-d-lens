@@ -298,6 +298,12 @@ this behavior.
     - `sla_targets` (`BenchmarkSlaTargets`)
     - `specification_file`, `http_proxy`, `https_proxy`, `no_proxy`, `benchmark_source`, `use_baseline_endpoint`
 
+    When `specification_file` is omitted, source-composed and direct-vLLM deployments
+    use `guides/optimized-baseline` for existing-endpoint benchmarking. This does not
+    replace their deployed configuration. Other Guides retain their matching specification;
+    an explicit request value takes precedence over `LLM_D_BENCH_SPECIFICATION_FILE`.
+    Source-backed evidence derives topology from the checksum-verified rendered manifest.
+
     ```json
     {
       "deployment_execution_id": "00000000-0000-4000-8000-000000000001",

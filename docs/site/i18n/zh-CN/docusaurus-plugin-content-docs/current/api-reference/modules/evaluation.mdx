@@ -158,6 +158,12 @@ prefix caching、单个 FullAttention cache group 和 `parallelism=1`。
     - `sla_targets`（`BenchmarkSlaTargets`）
     - `specification_file`、`http_proxy`、`https_proxy`、`no_proxy`、`benchmark_source`、`use_baseline_endpoint`
 
+    省略 `specification_file` 时，源码组合部署和直接 vLLM 部署使用
+    `guides/optimized-baseline` 对现有端点进行压测，不会替换已部署配置。
+    其他 Guide 使用对应规格；请求中显式提供的值优先于
+    `LLM_D_BENCH_SPECIFICATION_FILE` 环境变量。
+    源码部署的证据拓扑从校验和验证通过的最终渲染清单提取。
+
     ```json
     {
       "deployment_execution_id": "00000000-0000-4000-8000-000000000001",

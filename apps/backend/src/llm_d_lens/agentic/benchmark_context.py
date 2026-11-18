@@ -184,6 +184,25 @@ def configuration_snapshot(run: dict) -> tuple[DeployableConfiguration, Candidat
     content = configuration.content
     decode = content.get("decode") or content.get("serving") or {}
     prefill = content.get("prefill") or {}
+    if configuration.provider_ref == "source-composition":
+        import yaml
+
+        from llm_d_lens.configuration.manifest_facts import vllm_argument_value, workload_roles
+
+        manifest = (content.get("officialGuide") or {}).get("renderedManifest")
+        if not isinstance(manifest, str) or not manifest.strip():
+            raise ValueError("Source evidence requires the saved rendered manifest")
+        roles = {}
+        for workload in workload_roles(list(yaml.safe_load_all(manifest))):
+            for container in workload["pod"].get("containers", []):
+                if container.get("name") != "modelserver":
+                    continue
+                role = "prefill" if workload["role"] == "prefill" else "decode"
+                if role in roles:
+                    raise ValueError("Source evidence requires one model workload per role")
+                tp = vllm_argument_value(container, {"--tensor-parallel-size"}, workload["name"])
+                roles[role] = {"tensorParallelSize": int(tp) if tp is not None else 1, "replicaCount": workload["replicas"]}
+        decode, prefill = roles.get("decode", {}), roles.get("prefill", {})
     candidate = CandidateConfiguration.model_validate(
         {
             "topology": configuration.provider_ref,
@@ -191,7 +210,8 @@ def configuration_snapshot(run: dict) -> tuple[DeployableConfiguration, Candidat
             "decode_replicas": decode.get("replicaCount"),
             "prefill_tp": prefill.get("tensorParallelSize"),
             "prefill_replicas": prefill.get("replicaCount"),
-            "optimizations": tuple(filter(None, [content.get("guideVariant")])),
+            "optimizations": tuple(filter(None, [content.get("guideVariant"),
+                f"native-cpu-cache:{content['guideComposition']['nativeCpuCacheGiB']:g}GiB" if content.get('guideComposition') else None])),
         },
         strict=True,
     )
