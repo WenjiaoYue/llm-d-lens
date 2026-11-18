@@ -167,18 +167,21 @@ def test_pod_placement_applies_to_disaggregated_roles_and_rejects_slice_conflict
     with pytest.raises(ValueError, match="conflicts with slice placement"):
         apply_placement(yaml.safe_dump(document), {"replicas": "spread"})
     document["spec"]["slices"] = 2
-    with pytest.raises(ValueError, match="different node"):
+    with pytest.raises(ValueError, match="different topology domain"):
         apply_placement(yaml.safe_dump(document), {"replicas": "same-node"})
+    document["spec"]["placementPolicy"] = {"type": "ExclusiveSlice", "topology": "topology.kubernetes.io/zone"}
+    with pytest.raises(ValueError, match="different topology domain"):
+        apply_placement(yaml.safe_dump(document), {"replicas": "same-node"})
+    apply_placement(yaml.safe_dump(document), {"replicas": "spread"})
 
 
-def test_reviewed_manifest_keeps_its_slice_count():
+def test_manifest_keeps_its_declared_slice_count():
     document = disaggregated_set()
     document["spec"]["slices"] = 3
     manifest = yaml.safe_dump(document)
-    _, report = prepare_single_slice_disaggregated_set_manifest(manifest, exact=True)
-    assert report == {"slices": 3, "disaggregatedSets": 1, "adjusted": 0}
     rendered, report = prepare_single_slice_disaggregated_set_manifest(manifest)
-    assert report["slices"] == 1 and yaml.safe_load(rendered)["spec"]["slices"] == 1
+    assert report == {"slices": 3, "disaggregatedSets": 1, "adjusted": 0}
+    assert rendered == manifest
 
 
 def test_recommendation_and_planning_respect_pod_placement(monkeypatch):

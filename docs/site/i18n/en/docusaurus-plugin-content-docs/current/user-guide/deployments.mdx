@@ -5,6 +5,91 @@ description: Find deployments, check readiness, view logs and remove unused serv
 
 Open **Deployments** to check whether a model is ready, inspect a failure, or manage an existing deployment.
 
+## DisaggregatedSet review
+
+When a selected Guide supports DisaggregatedSet, configuration exposes the real API
+fields: `spec.slices`, `spec.placementPolicy.type`/`.topology`, and **EPP Topology Affinity**
+(`topology-affinity-scorer` or `topology-affinity-filter`).
+Prefill and decode replicas are per Slice. The resource summary expands all Slices
+and leader/worker Pods; TP is not treated as an accelerator resource count.
+
+In both Deploy and Evaluation, P/D configuration always shows **Slice Configuration**
+below the topology settings. Controls remain disabled until
+the source is recognized as DS. Loading, preparation errors and a Guide without DS
+are shown explicitly; **Recheck Slice support** repeats the official-source check, and
+the header shows the pinned Guide commit.
+Choosing P/D alone does not convert a Deployment-based Guide into a DisaggregatedSet.
+
+Slice count and placement start from the Guide defaults; EPP Topology Affinity defaults to Scorer:
+
+- **Max feasible** is estimated from current free resources for the selected
+  placement policy: packing for `None`, domains that each fit one Slice for
+  `ExclusiveSlice`, and such domains not used by another DisaggregatedSet for
+  `ExclusiveTopology`. Before **Generate YAML** the estimate uses the Guide default roles;
+  afterwards it uses the generated roles. It is not a reservation.
+- **Recommended** appears only with matching evidence: succeeded Evaluation
+  cases for the same model, Guide, cluster, accelerator and per-Slice P/D replicas and TP
+  that recorded an SLO-stable rate. Enter a **Target load** to get the fewest Slices whose
+  measured rate meets it within the current ceiling. When runs used different workloads or SLO
+  targets, choose one under **Evidence**; runs are never mixed across them.
+  Otherwise the panel shows
+  `No verified recommendation — Guide default: N`. Throughput alone never selects a count.
+- **Selected** multiply per-Slice requests by the selected Slice count, and the
+  accelerator total checked before generation includes all Slices.
+- **Placement** selects the placement type, picks the topology key from
+  discovered node labels (or another key), and shows each domain's nodes, free
+  accelerators and whether it fits a Slice. When the Guide requests accelerators
+  through DRA claims, which the estimate does not count, domains show free CPU and
+  memory instead and a note marks the ceilings as CPU, memory and Pod based only.
+  Custom labels are marked because Lens cannot
+  verify that they reflect physical topology; node labels are changed by cluster
+  administrators, not from this page. A discovered placement is offered as
+  **Suggested**.
+- **EPP Topology Affinity** offers **Scorer** and **Filter** only. Scorer adds a
+  same-Slice score; Filter keeps same-Slice candidates when available. Missing peer
+  topology or no matching candidate leaves all candidates eligible, so Filter is not
+  a strict same-Slice guarantee. Unset or legacy inherited settings become Scorer
+  when generating a configuration; an existing Filter selection is preserved.
+- **Evaluation evidence** lists recent measured runs, marks those with the same per-Slice
+  shape, and **Apply** copies a run's Slices, placement and P/D values.
+
+Deploying a DS configuration runs preflight checks in the existing deployment flow,
+without an additional review dialog. Passed checks proceed directly to deployment;
+failures and unknown constraints appear inline under **Deployment checks**.
+Its **Slice deployment preview**
+shows selected versus feasible Slices, the roles per Slice, total accelerator requests,
+placement, EPP routing and the modeled Slice-to-domain and Pod-to-node placement (the real
+scheduler may choose other nodes). Check workload YAML, Router
+values and checksums under **Deployment resources** when inspecting the preflight evidence. Failed constraints block
+execution, including a Slice count with no feasible placement; unknown constraints require explicit acknowledgment and are not reservations.
+Changing cluster or deployment inputs requires another review. The final plan freezes
+rendered inputs and Chart bytes; it does not install missing DS/LWS controllers or CRDs.
+Official Guide snapshots require vendored Kustomize dependencies.
+
+Local sources freeze referenced resources, patches, generator inputs and Router
+values with a content checksum, not a claim that dirty files match Git HEAD.
+Remote custom Kustomize sources render from an exact commit snapshot; external
+dependencies and escaping paths must be vendored before planning.
+For a stopped or failed independently deployed DS, the **restart-plan API** prepares
+a new digest without deleting old resources. Confirm the new plan to start a new
+run. Evaluation-owned deployments use the Evaluation workflow's retry action.
+
+Evaluation automatically records a bounded inference probe before benchmarking a reviewed
+DS deployment. In Evaluation details, open **Deployments** to inspect **Runtime verification**:
+Kubernetes readiness, Slice placement, P/D routing and KV transfer have independent verdicts
+and reasons. **Recorded evidence** exposes the captured Pod/Node and request evidence.
+The deployment verification API also supports an explicit smoke request and read-only metric
+snapshots. A metric snapshot is not a live rate. Slice count changes require a new reviewed configuration.
+For instrumented vLLM 0.26.0 NIXL pull workers, it correlates the response ID with
+receive completion and producer acknowledgements across all TP ranks, verifies
+Pod/engine stability and P/D revision identity, and excludes transfer-failure fallback.
+The report records actual P/D Pods, same-Slice/domain results and transferred block
+counts. Reports persist as checksummed deployment evidence and remain visible after
+reopening details. Unsupported versions/connectors or incomplete evidence remain unknown.
+Ready Pods, HTTP success, same-Slice labels and aggregate KV counters are not proof of
+request-specific transfer. Routing/KV results remain unknown without correlated evidence.
+These checks do not certify physical network bandwidth or safe online rollout.
+
 P/D deployments using Router 0.11 automatically adapt legacy plugin settings when
 created or retried. The original configuration is retained, and deployment
 diagnostics record the effective Router values. A legacy `disagg-headers-handler`
@@ -448,7 +533,7 @@ Lens creates model-server Pods with a **120-second** termination grace period an
 2. For a P/D deployment, set **Prefill replicas** and **Decode replicas**. For an aggregated deployment, set **Replicas**.
 3. Click **Scale deployment**.
 
-Manual scaling changes live Kubernetes model-server replicas only. Restarting the deployment restores its configured replica count. DisaggregatedSet deployments are created with the reviewed `spec.slices` (Guide defaults outside a reviewed plan are normalized to 1); manual scaling changes role replicas and never changes `spec.slices`. For a P/D deployment, scale down Decode before Prefill; Prefill scale-down can interrupt in-flight KV transfers, but Lens configures `kv_load_failure_policy=recompute` whenever a `--kv-transfer-config` is present.
+Manual scaling changes live Kubernetes model-server replicas only. Restarting the deployment restores its configured replica count. DisaggregatedSet deployments are created with the declared `spec.slices`; manual scaling changes role replicas and never changes `spec.slices`. For a P/D deployment, scale down Decode before Prefill; Prefill scale-down can interrupt in-flight KV transfers, but Lens configures `kv_load_failure_policy=recompute` whenever a `--kv-transfer-config` is present.
 
 ## Run a benchmark against a ready deployment
 

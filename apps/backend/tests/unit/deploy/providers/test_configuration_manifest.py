@@ -1333,15 +1333,15 @@ def _disaggregated_set(slices):
     }
 
 
-def test_single_slice_disaggregated_set_manifest_forces_slices_to_one():
+def test_single_slice_disaggregated_set_manifest_preserves_slices():
     manifest = yaml.safe_dump_all([_disaggregated_set(2)], sort_keys=False)
 
     rendered, report = configuration_manifest.prepare_single_slice_disaggregated_set_manifest(manifest)
 
     document = yaml.safe_load(rendered)
-    assert document["spec"]["slices"] == 1
+    assert document["spec"]["slices"] == 2
     assert report["disaggregatedSets"] == 1
-    assert report["adjusted"] == 1
+    assert report["adjusted"] == 0
 
 
 def test_single_slice_disaggregated_set_manifest_leaves_other_kinds_unchanged():
@@ -1361,12 +1361,12 @@ def test_single_slice_disaggregated_set_manifest_is_idempotent():
     second, second_report = configuration_manifest.prepare_single_slice_disaggregated_set_manifest(first)
 
     assert second == first
-    assert first_report["adjusted"] == 1
+    assert first_report["adjusted"] == 0
     assert second_report["adjusted"] == 0
 
 
 @pytest.mark.asyncio
-async def test_render_enforces_single_slice_disaggregated_set(monkeypatch, tmp_path):
+async def test_render_preserves_single_slice_disaggregated_set_contract(monkeypatch, tmp_path):
     manifest = yaml.safe_dump_all([_disaggregated_set(2)], sort_keys=False)
     source = tmp_path / "manifest.yaml"
     source.write_text(manifest, encoding="utf-8")
@@ -1385,9 +1385,11 @@ async def test_render_enforces_single_slice_disaggregated_set(monkeypatch, tmp_p
 
     artifact = await adapter.render(GuideDefinition("pd-disaggregation", "source", "hash", "stable"), {})
 
-    document = yaml.safe_load(Path(artifact.manifest_ref).read_text())
-    assert document["spec"]["slices"] == 1
-    assert artifact.deployment_contract["disaggregatedSet"]["slices"] == 1
+    documents = list(yaml.safe_load_all(Path(artifact.manifest_ref).read_text()))
+    assert any(item["kind"] == "ConfigMap" and "prism_kv_engine.py" in item["data"] for item in documents)
+    document = next(item for item in documents if item["kind"] == "DisaggregatedSet")
+    assert document["spec"]["slices"] == 2
+    assert artifact.deployment_contract["disaggregatedSet"]["slices"] == 2
 
 
 @pytest.mark.asyncio

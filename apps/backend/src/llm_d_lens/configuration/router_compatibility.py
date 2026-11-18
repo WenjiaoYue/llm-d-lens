@@ -76,6 +76,57 @@ def compose_prefix_routing(values: dict, donor: dict | None, enabled: bool) -> d
     return result
 
 
+def configure_slice_routing(values: dict, mode: str, chart_version: str) -> dict:
+    result = deepcopy(values)
+    if mode == "inherit":
+        return result
+    if mode not in {"prefer", "filter"}:
+        raise ValueError("EPP Topology Affinity supports inherit, prefer (Scorer), or filter (Filter)")
+    epp = result.get("router", {}).get("epp", {})
+    image = epp.get("image") or {}
+    version = str(image.get("tag") or chart_version)
+    if not re.fullmatch(r"v?1\.0\.\d+", version):
+        raise ValueError("Slice routing requires a validated Router 1.0 release")
+    key = epp.get("pluginsConfigFile")
+    custom = epp.get("pluginsCustomConfig") or {}
+    document = yaml.safe_load(custom.get(key, ""))
+    if not isinstance(document, dict) or not isinstance(document.get("plugins"), list):
+        raise ValueError("Slice routing requires a structured EPP plugin configuration")
+    profiles = [profile for profile in document.get("schedulingProfiles", []) if profile.get("name") == "prefill"]
+    if len(profiles) != 1 or not any(plugin.get("type") == "disagg-profile-handler" for plugin in document["plugins"]):
+        raise ValueError("Slice routing requires one prefill profile and a disaggregation profile handler")
+    extractor = {
+        "type": "topology-extractor",
+        "name": "lens-slice-topology",
+        "parameters": {"hostname": "disaggregatedset.x-k8s.io/slice"},
+    }
+    affinity = {
+        "type": "topology-affinity-filter" if mode == "filter" else "topology-affinity-scorer",
+        "name": "lens-slice-affinity",
+        "parameters": {"topologyProducerName": "lens-slice-topology"},
+    }
+    if mode == "filter":
+        affinity["parameters"]["minAffinity"] = "host"
+    for plugin in (extractor, affinity):
+        matching = [item for item in document["plugins"] if item.get("name", item.get("type")) == plugin["name"]]
+        if matching and matching != [plugin]:
+            raise ValueError(f"Conflicting Router plugin {plugin['name']}")
+        if not matching:
+            document["plugins"].append(plugin)
+    reference = {"pluginRef": "lens-slice-affinity"}
+    if mode == "prefer":
+        reference["weight"] = 1
+    profile_plugins = profiles[0].setdefault("plugins", [])
+    matching = [item for item in profile_plugins if item.get("pluginRef") == reference["pluginRef"]]
+    if matching and matching != [reference]:
+        raise ValueError("Conflicting Slice affinity plugin reference")
+    if not matching:
+        profile_plugins.append(reference)
+    custom[key] = yaml.safe_dump(document, sort_keys=False)
+    epp.setdefault("flags", {})["allow-experimental-plugins"] = True
+    return result
+
+
 def compatible_router_values(values: dict, chart_version: str) -> dict:
     """Return Router 0.11 values without modifying the original source snapshot."""
     result = deepcopy(values)

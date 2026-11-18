@@ -439,6 +439,13 @@ class RestrictedKubectlRunner:
         has_kubeconfig = any("=" in item and item.startswith("--kubeconfig") for item in command)
         if not command or command[0] != "kubectl" or has_kubeconfig:
             raise RuntimeConfigurationError("unsupported Kubernetes command")
+        if command[1:3] == ["create", "--filename"] and len(command) == 4:
+            self._validate_prepared_namespace_file(Path(command[3]))
+            return
+        if command[1:3] == ["get", "namespace"] and command[4:] == ["--ignore-not-found=true", "-o", "json"]:
+            if not self.allows_namespace(command[3]) or command[3] == self._namespace_prefix:
+                raise RuntimeConfigurationError("Kubernetes command namespace is outside the configured allowlist")
+            return
         namespace_operation = tuple(command[:3])
         is_namespace_command = (
             namespace_operation
@@ -612,6 +619,25 @@ class RestrictedKubectlRunner:
         is_workload_patch = len(command) > 2 and command[1] == "patch" and command[2].startswith("disaggregatedset/")
         if tuple(command[1:3]) not in allowed and not (is_deployment_scale or is_workload_wait or is_workload_patch):
             raise RuntimeConfigurationError("Kubernetes command operation is outside the configured allowlist")
+
+    def _validate_prepared_namespace_file(self, path: Path) -> None:
+        """Prepared plans create their reviewed, labelled Namespace from a single-document file."""
+        import yaml
+
+        try:
+            documents = [item for item in yaml.safe_load_all(path.read_text(encoding="utf-8")) if item is not None]
+        except (OSError, YAMLError) as error:
+            raise RuntimeConfigurationError("prepared namespace manifest is unreadable") from error
+        document = documents[0] if len(documents) == 1 and isinstance(documents[0], dict) else {}
+        name = (document.get("metadata") or {}).get("name")
+        if (
+            document.get("apiVersion") != "v1"
+            or document.get("kind") != "Namespace"
+            or not isinstance(name, str)
+            or not self.allows_namespace(name)
+            or name == self._namespace_prefix
+        ):
+            raise RuntimeConfigurationError("Kubernetes command namespace is outside the configured allowlist")
 
     def _record_evidence(self, command: list[str], status: int, output: str, *, timed_out: bool = False) -> None:
         is_namespace_command = tuple(command[:3]) in {

@@ -16,6 +16,7 @@ from typing import Any
 
 import yaml
 
+from llm_d_lens.configuration.disaggregated_set import validate_disaggregated_sets
 from llm_d_lens.configuration.manifest_facts import vllm_argument_value
 from llm_d_lens.core.hashing import stable_hash
 from llm_d_lens.deploy.providers.deployment_bundle import validate_deployment_bundle
@@ -343,52 +344,13 @@ def prepare_graceful_shutdown_manifest(manifest: str) -> tuple[str, dict[str, An
     return yaml.safe_dump_all(documents, sort_keys=False), report
 
 
-def prepare_single_slice_disaggregated_set_manifest(
-    manifest: str, *, exact: bool = False
-) -> tuple[str, dict[str, Any]]:
-    documents = list(yaml.safe_load_all(manifest))
-    disaggregated_sets = 0
-    adjusted = 0
-    counts: set[int] = set()
-
-    def visit(document: Any) -> None:
-        nonlocal disaggregated_sets, adjusted
-        if not isinstance(document, dict):
-            return
-        if document.get("kind") == "List":
-            for item in document.get("items") or []:
-                visit(item)
-            return
-        if document.get("kind") != "DisaggregatedSet":
-            return
-        disaggregated_sets += 1
-        spec = document.get("spec")
-        if not isinstance(spec, dict):
-            return
-        slices = spec.get("slices", 1)
-        if exact and isinstance(slices, int) and not isinstance(slices, bool) and slices >= 1:
-            # A reviewed manifest owns its slice count; only Guide defaults are normalized.
-            counts.add(slices)
-            return
-        if slices != 1:
-            spec["slices"] = 1
-            adjusted += 1
-        counts.add(1)
-
-    for document in documents:
-        visit(document)
-    report = {
-        "slices": max(counts, default=1),
-        "disaggregatedSets": disaggregated_sets,
-        "adjusted": adjusted,
-    }
-    if not adjusted:
-        return manifest, report
-    return yaml.safe_dump_all(documents, sort_keys=False), report
+def prepare_single_slice_disaggregated_set_manifest(manifest: str) -> tuple[str, dict[str, Any]]:
+    """Validate DS manifests without changing their declared topology."""
+    return manifest, validate_disaggregated_sets(list(yaml.safe_load_all(manifest)))
 
 
 def prepare_single_slice_disaggregated_set(
-    artifact: GuideDeploymentArtifact, output_root: Path, *, exact: bool = False
+    artifact: GuideDeploymentArtifact, output_root: Path
 ) -> GuideDeploymentArtifact:
     if not artifact.manifest_ref:
         return artifact
@@ -398,7 +360,7 @@ def prepare_single_slice_disaggregated_set(
     if not path.is_file():
         return artifact
     manifest = path.read_text(encoding="utf-8")
-    rendered, report = prepare_single_slice_disaggregated_set_manifest(manifest, exact=exact)
+    rendered, report = prepare_single_slice_disaggregated_set_manifest(manifest)
     if not report["disaggregatedSets"]:
         return artifact
     if report["adjusted"]:
@@ -649,8 +611,7 @@ class ConfigurationManifestAdapter:
                 ),
             )
         artifact = prepare_graceful_shutdown(artifact, self._output_root)
-        reviewed = ((overrides.get("officialGuide") or {}).get("source") or {}).get("guide") == "source-composition"
-        artifact = prepare_single_slice_disaggregated_set(artifact, self._output_root, exact=reviewed)
+        artifact = prepare_single_slice_disaggregated_set(artifact, self._output_root)
         artifact = prepare_shared_memory(artifact, self._output_root, exact=self._is_exact(overrides))
         if "_model_cache_dependencies" in overrides:
             from llm_d_lens.deploy.providers.storage_mount import validate_cached_model_arguments
@@ -764,6 +725,44 @@ class ConfigurationManifestAdapter:
             manifest_checksum=manifest_checksum,
         )
 
+    async def prepare_router(self, artifact: GuideDeploymentArtifact, context: dict) -> GuideDeploymentArtifact:
+        from llm_d_lens.deploy.data_plane import router_data_plane_effective_values
+        from llm_d_lens.deploy.providers.deployment_bundle import freeze_deployment_bundle
+
+        bundle = artifact.deployment_contract.get("deploymentBundle")
+        if bundle is None:
+            raise ValueError("Prepared deployment requires a saved Router deployment bundle")
+        runner = getattr(self._delegate, "_bundle_command_runner", None)
+        if runner is None:
+            raise ValueError("This provider does not support frozen Router plans")
+        base = bundle["helm"]["values"][-1]["content"]
+        profile = artifact.deployment_contract.get("routerProfile", "optimized-baseline")
+        if profile != "optimized-baseline":
+            transform = getattr(self._delegate, "_profiled_router_values_content", None)
+            if transform is None:
+                raise ValueError("This Router profile cannot be prepared immutably")
+            base = transform(base, profile)
+        frozen = await freeze_deployment_bundle(
+            bundle,
+            guide=artifact.guide_id,
+            source_commit=str(artifact.source_ref or ""),
+            namespace=context["namespace"],
+            command_runner=runner,
+            effective_values=router_data_plane_effective_values(base, context),
+        )
+        return replace(artifact, deployment_contract={**artifact.deployment_contract, "deploymentBundle": frozen})
+
+    async def validate_prepared_router(self, artifact: GuideDeploymentArtifact, namespace: str) -> None:
+        from llm_d_lens.deploy.providers.deployment_bundle import validate_frozen_bundle
+
+        await validate_frozen_bundle(
+            artifact.deployment_contract["deploymentBundle"],
+            guide=artifact.guide_id,
+            source_commit=str(artifact.source_ref or ""),
+            namespace=namespace,
+            command_runner=self._delegate._bundle_command_runner,
+        )
+
     async def deploy(self, artifact: GuideDeploymentArtifact, execution_context: dict[str, Any]) -> dict[str, Any]:
         if not {"readinessDeployments", "endpoint"} <= artifact.deployment_contract.keys():
             return await self._delegate.deploy(artifact, execution_context)
@@ -772,8 +771,14 @@ class ConfigurationManifestAdapter:
             # rather than an immutable Configuration manifest file.
             return await self._delegate.deploy(artifact, execution_context)
         namespace = self._namespace(execution_context)
-        status, stdout, stderr = await self._runner(["kubectl", "create", "namespace", namespace])
-        if status != 0 and "alreadyexists" not in (stdout + stderr).lower():
+        prepared_namespace = artifact.deployment_contract.get("preparedNamespace")
+        if prepared_namespace:
+            namespace_path = Path(artifact.manifest_ref).parent / "namespace.yaml"
+            namespace_path.write_text(yaml.safe_dump(prepared_namespace, sort_keys=False), encoding="utf-8")
+            status, stdout, stderr = await self._runner(["kubectl", "create", "--filename", str(namespace_path)])
+        else:
+            status, stdout, stderr = await self._runner(["kubectl", "create", "namespace", namespace])
+        if status != 0 and (prepared_namespace or "alreadyexists" not in (stdout + stderr).lower()):
             raise RuntimeError((stderr or stdout or "namespace creation failed").strip())
         manifest = Path(artifact.manifest_ref or "").read_text(encoding="utf-8")
         model_token = execution_context.get("model_token")
@@ -820,6 +825,15 @@ class ConfigurationManifestAdapter:
             # manifest, which would otherwise skip this and leave the Pod
             # referencing a PVC that doesn't exist in its own namespace.
             volume = await get_ready_volume(storage_volume_id, cluster_id=cluster_id or None)
+            if "preparedStorage" in artifact.deployment_contract:
+                from llm_d_lens.storage.service import _satellite_pv_manifest, _satellite_pvc_manifest
+
+                current = [
+                    _satellite_pv_manifest(volume, namespace=namespace),
+                    _satellite_pvc_manifest(volume, namespace=namespace),
+                ]
+                if current != artifact.deployment_contract["preparedStorage"]:
+                    raise ValueError("Storage resources changed after plan review")
             await ensure_mount_in_namespace(volume, namespace=namespace, cluster_id=cluster_id)
         if callable(install_router):
             await install_router(artifact, execution_context)
@@ -955,6 +969,7 @@ class ConfigurationManifestAdapter:
         return diagnostics
 
     async def stop(self, execution, artifact):
+        await self._check_prepared_namespace(execution, artifact)
         if not artifact.deployment_contract:
             return await self._delegate.stop(execution, artifact)
         if self._uses_delegate_lifecycle(artifact):
@@ -973,6 +988,7 @@ class ConfigurationManifestAdapter:
         return await self.stop(execution, artifact)
 
     async def cleanup(self, execution, artifact, *, force: bool = False):
+        await self._check_prepared_namespace(execution, artifact)
         if self._delegate is not None and (not artifact.deployment_contract or self._uses_delegate_lifecycle(artifact)):
             return await self._delegate.cleanup(execution, artifact, force=force)
         namespace = self._namespace(execution)
@@ -980,6 +996,25 @@ class ConfigurationManifestAdapter:
             ["kubectl", "delete", "namespace", namespace, "--ignore-not-found=true"]
         )
         return {"cleaned_up": status == 0, "output": stdout, "error": stderr or None}
+
+    async def _check_prepared_namespace(self, execution, artifact):
+        expected = artifact.deployment_contract.get("preparedNamespace")
+        if expected is None:
+            return
+        namespace = self._namespace(execution)
+        status, stdout, stderr = await self._runner(
+            ["kubectl", "get", "namespace", namespace, "--ignore-not-found=true", "-o", "json"]
+        )
+        if status:
+            raise ValueError("Cannot verify prepared namespace ownership; cleanup was not attempted")
+        if not stdout.strip():
+            return
+        actual = json.loads(stdout)
+        if (
+            actual.get("metadata", {}).get("labels", {}).get("lens.io/prepared-request")
+            != expected["metadata"]["labels"]["lens.io/prepared-request"]
+        ):
+            raise ValueError("Namespace is not owned by this prepared execution; cleanup was not attempted")
 
     @staticmethod
     def _is_exact(overrides: dict[str, Any]) -> bool:

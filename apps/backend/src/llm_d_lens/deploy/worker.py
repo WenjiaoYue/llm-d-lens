@@ -39,6 +39,12 @@ class DeploymentRunWorker:
         self._cancel_requested: set[str] = set()
         self._refresh_locks: dict[str, asyncio.Lock] = {}
 
+    async def prepare_case(self, case):
+        prepare = getattr(self._service, "prepare", None)
+        if not callable(prepare):
+            raise ValueError(self._lifecycle_error or "Deployment runtime cannot prepare immutable plans")
+        return await prepare(case.create_request)
+
     def request_cancel(self, run_id: str) -> None:
         run = self._store.get_run(run_id)
         if run is None or run.status not in {DeploymentRunStatus.QUEUED, DeploymentRunStatus.RUNNING}:
@@ -347,6 +353,8 @@ class DeploymentRunWorker:
         run, case, execution = self._case_execution(run_id, case_id)
         if case is None or case.status not in {DeploymentCaseStatus.STOPPED, DeploymentCaseStatus.FAILED}:
             raise ValueError("only stopped or failed deployment cases can be restarted")
+        if run.provenance.get("_prepared_plan_id"):
+            raise ValueError("Prepared deployments require a new reviewed plan before restart")
         cleaned = await self._service.clean(execution)
         self._store.save_execution(cleaned)
         run = self._store.get_run(run_id)

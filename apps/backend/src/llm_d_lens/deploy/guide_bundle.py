@@ -9,7 +9,11 @@ import httpx
 import yaml
 
 from llm_d_lens.configuration.guide_settings import _mapping, _merge
-from llm_d_lens.configuration.router_compatibility import compatible_router_values, compose_prefix_routing
+from llm_d_lens.configuration.router_compatibility import (
+    compatible_router_values,
+    compose_prefix_routing,
+    configure_slice_routing,
+)
 from llm_d_lens.versions import router_chart, router_chart_version
 
 from .guide_planning import profile_for_key
@@ -52,7 +56,14 @@ def _needs_render_service(values: dict) -> bool:
 
 
 async def build_guide_deployment_bundle(
-    guide: str, manifest: dict, model: str, accelerator: str, block_size=None, router_values="", prefix_routing=None
+    guide: str,
+    manifest: dict,
+    model: str,
+    accelerator: str,
+    block_size=None,
+    router_values="",
+    prefix_routing=None,
+    slice_routing="inherit",
 ) -> dict:
     if guide not in ROUTER_PATHS:
         raise ValueError("This Guide does not have a supported deployment bundle.")
@@ -115,6 +126,7 @@ async def build_guide_deployment_bundle(
             donor = _merge(_mapping(base_text), _mapping(donor_text))
         values = compose_prefix_routing(values, donor, prefix_routing)
     values = compatible_router_values(values, router_chart_version())
+    values = configure_slice_routing(values, slice_routing, router_chart_version())
     bundle = {
         "schemaVersion": "guide-deployment-bundle.v1",
         "guide": guide,
