@@ -39,7 +39,7 @@ def test_restart_preserves_retry_eligibility_until_new_attempt_is_created(monkey
         for cleanup_status in [DeploymentStatus.FAILED, DeploymentStatus.CLEANED, DeploymentStatus.CLEANED_UP]:
             case = SimpleNamespace(id="original", status=DeploymentCaseStatus.FAILED)
             retry = SimpleNamespace(id="retry", status=DeploymentCaseStatus.QUEUED)
-            run = SimpleNamespace(id="run", cases=[case])
+            run = SimpleNamespace(id="run", cases=[case], provenance={})
             store = SimpleNamespace(get_run=lambda _, run=run: run, save_run=Mock(), save_execution=Mock())
             service = SimpleNamespace(clean=AsyncMock(return_value=SimpleNamespace(status=cleanup_status)))
             worker = DeploymentRunWorker(store, service)

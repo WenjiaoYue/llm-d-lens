@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from llm_d_lens.agentic.public_benchmark_record.access import require_query_access
 from llm_d_lens.agentic.public_benchmark_record.case_retrieval import assert_case_access
-from llm_d_lens.auth.access import current_principal, owner_for_create
+from llm_d_lens.auth.access import current_principal, owner_for_create, visible_cluster_ids
 from llm_d_lens.auth.contracts import Principal
 from llm_d_lens.configuration.decision_engine import optimization_choices
 from llm_d_lens.configuration.plan_models import OptimizationChoice
@@ -61,7 +61,8 @@ async def preview_deployment_optimizations(body: OptimizationPreviewRequest) -> 
     description=(
         "Render pinned source proposals for an idle Manual or Agentic plan. Requires the current revision, "
         "candidate IDs, scoped model cache and composition inputs. compare=true accounts for every retained "
-        "candidate; Manual chooses maximum verified coverage, Agentic preserves its recommendation when valid. "
+        "candidate; Manual ranks by SLA status, then the P/D decision, then verified coverage; Agentic preserves its "
+        "recommendation when valid. "
         "Validate resources, memory and required/forbidden mechanisms, persist the new reviewed revision and "
         "invalidate previous approval and performance evidence. No deployment starts. Stale revisions or rejected "
         "compositions return 409 without replacing the previous plan; timeouts return 504."
@@ -82,7 +83,20 @@ async def compose_deployment_plan(run_id: str, body: SourcePlanRequest, request:
         raise HTTPException(504, "Source comparison timed out; the previous plan is unchanged.") from error
 
 
+def _run_cluster_id(run: AgenticDeploymentRun) -> str | None:
+    if run.request.requirements is not None:
+        return run.request.requirements.cluster_id
+    from llm_d_lens.cluster.sessions import get_session
+
+    session = get_session(run.request.cluster_session_id)
+    return session.server_id if session is not None else None
+
+
 def _require_plan_evidence_access(run: AgenticDeploymentRun, principal: Principal | None) -> None:
+    allowed = visible_cluster_ids(principal)
+    # Plans embed rendered manifests, so an unknown cluster is hidden from cluster-scoped callers.
+    if allowed is not None and _run_cluster_id(run) not in allowed:
+        raise ForbiddenError("cluster is not accessible")
     if any(item.source == "public-benchmark-rag" and item.status == "available" for item in run.planning_evidence):
         require_query_access(principal)
     for item in run.planning_evidence:
@@ -164,7 +178,9 @@ async def stream_agentic_deployment(
         "List Agentic Deployment plans (recommendations) created in this Lens instance, with their current status."
     ),
     description=(
-        "List Agentic Deployment plans (recommendations) created in this Lens instance, with their current status."
+        "List Agentic Deployment plans (recommendations) created in this Lens instance, with their current status. "
+        "Only plans whose cluster the caller can access, and whose planning evidence the caller can read, are "
+        "returned."
     ),
     operation_id="list_agentic_plans",
 )
@@ -188,6 +204,8 @@ async def list_agentic_deployments(http_request: Request) -> list[AgenticDeploym
     ),
     description=(
         "Get the full detail of one Agentic Deployment plan: candidates, evidence, scoring source (deterministic vs. "
+        "AI) and the configuration plan with its rendered manifests. Returns 403 when the caller cannot access the "
+        "plan's cluster or its planning evidence, and 404 when the plan does not exist."
     ),
     operation_id="get_agentic_plan",
 )
@@ -214,7 +232,8 @@ async def get_agentic_deployment(run_id: str, http_request: Request) -> AgenticD
         "return 409 and do not modify the original plan. render_resources=true renders source-pinned YAML and "
         "checks manifest consistency for the selected candidate, without cluster writes. Rendering can fetch "
         "official source files and read cluster inventory. With compare_combinations=true, Manual checks all retained "
-        "combinations and selects the greatest verified capability coverage, using the planning order only for ties. "
+        "combinations and ranks them by SLA status, then the P/D decision, then verified capability coverage, using "
+        "the planning order only for ties. "
         "Supported runtime flags are completed in Manual; explicit required/forbidden flags are checked before "
         "accepting the result. Missing composition adapters are reported as unsupported, not as conflicts. "
         "The response includes validation.coverage for Manual combination comparison. "

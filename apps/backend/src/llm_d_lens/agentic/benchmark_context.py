@@ -18,6 +18,7 @@ from llm_d_lens.agentic.benchmark_evidence import (
     HardwareDescriptor,
     ModelDescriptor,
     RuntimeFingerprint,
+    composition_markers,
 )
 from llm_d_lens.db.dao.agentic_benchmark_record import BenchmarkRecordDao, BenchmarkRecordDaoError
 from llm_d_lens.deploy.contracts import DeployableConfiguration
@@ -184,6 +185,9 @@ def configuration_snapshot(run: dict) -> tuple[DeployableConfiguration, Candidat
     content = configuration.content
     decode = content.get("decode") or content.get("serving") or {}
     prefill = content.get("prefill") or {}
+    topology = configuration.provider_ref
+    cpu_cache = (content.get("guideComposition") or {}).get("nativeCpuCacheGiB")
+    prefix_routing = content.get("prefixRouting")
     if configuration.provider_ref == "source-composition":
         import yaml
 
@@ -193,6 +197,7 @@ def configuration_snapshot(run: dict) -> tuple[DeployableConfiguration, Candidat
         if not isinstance(manifest, str) or not manifest.strip():
             raise ValueError("Source evidence requires the saved rendered manifest")
         roles = {}
+        cache_capacities = set()
         for workload in workload_roles(list(yaml.safe_load_all(manifest))):
             for container in workload["pod"].get("containers", []):
                 if container.get("name") != "modelserver":
@@ -203,27 +208,29 @@ def configuration_snapshot(run: dict) -> tuple[DeployableConfiguration, Candidat
                 tp = vllm_argument_value(container, {"--tensor-parallel-size"}, workload["name"])
                 roles[role] = {
                     "tensorParallelSize": int(tp) if tp is not None else 1,
-                    "replicaCount": workload["replicas"],
+                    # A DisaggregatedSet reports per-slice replicas; evidence uses the deployment-wide count.
+                    "replicaCount": int(workload["replicas"]) * int(workload.get("slices") or 1),
                 }
+                connector = json.loads(
+                    vllm_argument_value(container, {"--kv-transfer-config"}, workload["name"]) or "{}"
+                )
+                for child in connector.get("kv_connector_extra_config", {}).get("connectors", [connector]):
+                    if child.get("kv_connector") == "OffloadingConnector":
+                        cache_capacities.add(child["kv_connector_extra_config"]["cpu_bytes_to_use"] / 1024**3)
         decode, prefill = roles.get("decode", {}), roles.get("prefill", {})
+        # Match the provider recipes that planning candidates keep, while markers retain composition details.
+        topology = "pd-disaggregation" if prefill else "optimized-baseline"
+        cpu_cache = next(iter(cache_capacities)) if len(cache_capacities) == 1 else None
+        prefix_routing = "prefix-cache-affinity-filter" in manifest
     candidate = CandidateConfiguration.model_validate(
         {
-            "topology": configuration.provider_ref,
+            "topology": topology,
             "decode_tp": decode.get("tensorParallelSize"),
             "decode_replicas": decode.get("replicaCount"),
             "prefill_tp": prefill.get("tensorParallelSize"),
             "prefill_replicas": prefill.get("replicaCount"),
-            "optimizations": tuple(
-                filter(
-                    None,
-                    [
-                        content.get("guideVariant"),
-                        f"native-cpu-cache:{content['guideComposition']['nativeCpuCacheGiB']:g}GiB"
-                        if content.get("guideComposition")
-                        else None,
-                    ],
-                )
-            ),
+            "optimizations": tuple(filter(None, [content.get("guideVariant")]))
+            + composition_markers(cpu_cache, prefix_routing),
         },
         strict=True,
     )

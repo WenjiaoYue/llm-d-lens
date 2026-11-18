@@ -413,6 +413,25 @@ async def test_plan_returns_configuration_and_redacted_manifest(deployment_store
     assert (await router.get_execution_plan("execution-cleaned"))["manifest"] is None
 
 
+def test_plan_redaction_covers_list_items_embedded_manifests_and_parse_failures():
+    from llm_d_lens.deploy import executions
+
+    listed = "kind: List\nitems:\n- kind: Secret\n  data:\n    token: c2VjcmV0\n- kind: Service\n"
+    redacted = executions._redact_manifest_secrets(listed)
+    assert "c2VjcmV0" not in redacted and "token: <redacted>" in redacted
+    assert executions._redact_manifest_secrets("items: [broken") is None
+
+    manifest = "kind: Secret\nstringData:\n  HF_TOKEN: hf_secret\n"
+    combined = executions._redact_manifest_secrets(manifest + "---\n" + listed)
+    assert "hf_secret" not in combined and "c2VjcmV0" not in combined
+    assert combined.count("<redacted>") == 2
+    content = json.dumps({"officialGuide": {"renderedManifest": manifest}, "model": {"name": "m"}})
+    result = json.loads(executions._redact_artifact_content(content))
+    assert "hf_secret" not in result["officialGuide"]["renderedManifest"]
+    assert result["model"] == {"name": "m"}
+    assert executions._redact_artifact_content('{"model": "plain"}') == '{"model": "plain"}'
+
+
 @pytest.mark.asyncio
 async def test_patch_updates_only_supplied_fields(deployment_store):
     await router.patch_execution(

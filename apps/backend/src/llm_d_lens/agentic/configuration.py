@@ -79,7 +79,7 @@ def build_agentic_configuration(
                 "value": str(request.gpu_memory_utilization),
             },
             {
-                "target": "decode",
+                "target": "both" if candidate.provider_ref == "pd-disaggregation" else "decode",
                 "kind": "argument",
                 "name": "max-num-batched-tokens",
                 "value": str(request.max_num_batched_tokens),

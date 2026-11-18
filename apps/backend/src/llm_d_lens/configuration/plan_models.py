@@ -5,17 +5,51 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+# Workload keys read by the planners; spelling variants are normalized so load targets are never ignored.
+_WORKLOAD_KEYS = {
+    key.lower(): key
+    for key in (
+        "inputTokens",
+        "p95InputTokens",
+        "outputTokens",
+        "concurrency",
+        "requestRate",
+        "prefixReuse",
+        "prefillHeavy",
+    )
+}
+
 
 class DeploymentRequirements(BaseModel):
     model: str = Field(min_length=1)
     cluster_id: str | None = None
     objective: Literal["balanced", "latency", "throughput", "cost", "reliability"] = "balanced"
     hard_constraints: dict[str, Any] = Field(default_factory=dict)
-    workload: dict[str, Any] = Field(default_factory=dict)
+    workload: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Workload facts. Planner keys are inputTokens, p95InputTokens, outputTokens, concurrency, requestRate, "
+            "prefixReuse and prefillHeavy; snake_case or other case variants are normalized to these names."
+        ),
+    )
     performance_targets: dict[str, Any] = Field(default_factory=dict)
     required_features: list[str] = Field(default_factory=list)
     forbidden_features: list[str] = Field(default_factory=list)
     unknowns: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_workload_keys(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or not isinstance(data.get("workload"), dict):
+            return data
+        workload: dict[str, Any] = {}
+        for key, value in data["workload"].items():
+            canonical = _WORKLOAD_KEYS.get(key.replace("_", "").lower(), key) if isinstance(key, str) else key
+            if canonical in workload and workload[canonical] != value:
+                raise ValueError(f"Workload key {key} conflicts with {canonical}; provide one value.")
+            if canonical not in workload or canonical == key:
+                workload[canonical] = value
+        return {**data, "workload": workload}
 
     @model_validator(mode="after")
     def validate_requirements(self):

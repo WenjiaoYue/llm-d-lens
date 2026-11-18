@@ -37,8 +37,15 @@ export function InferenceDeploymentParameters({ draft, change, entity, initialTa
         }).catch(reason => { if (active) setError(reason.message); }).finally(() => { if (active) setBusy(false); });
         return () => { active = false; };
     }, [selection, reload, reviewed]);
+    // Re-render when the saved edit is discarded or replaced outside this editor.
+    const [written, setWritten] = useState(draft.finalConfiguration?.content);
+    if (draft.finalConfiguration?.content !== written) {
+        setWritten(draft.finalConfiguration?.content);
+        setReload(value => value + 1);
+    }
     const update = content => {
         const next = { ...snapshot, content }; setSnapshot(next);
+        setWritten(content);
         latest.current.change({ finalConfiguration: next });
     };
     let documents = [], fields = [], parseError = '';

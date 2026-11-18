@@ -340,8 +340,8 @@ can interpret explicitly stated qualitative workload traits from a goal when an
 AI provider is selected; the interpretation is displayed and editable. Without AI,
 use structured inputs. Numeric resource and performance limits are never inferred.
 
-Manual chooses the greatest source-verified capability coverage among supported
-combinations, not the first Guide that renders; on equal coverage a P/D combination wins.
+Manual ranks supported combinations by SLA status, then the P/D decision, then the greatest
+source-verified capability coverage, not the first Guide that renders; on equal coverage a P/D combination wins.
 Manual limits `--max-num-seqs` only when you declare request sizes; otherwise vLLM
 admits requests by free KV cache. It does not maximize resource use
 or claim a measured performance optimum. Unsupported combinations remain explicit.

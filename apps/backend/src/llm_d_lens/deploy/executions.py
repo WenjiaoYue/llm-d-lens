@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -707,7 +708,7 @@ def execution_deployment_plan(context: DeploymentExecutionContext) -> dict[str, 
                 "provider_ref": artifact.provider_ref,
                 "schema_version": artifact.schema_version,
                 "media_type": artifact.media_type,
-                "content": artifact.content,
+                "content": _redact_artifact_content(artifact.content),
             }
             for artifact in artifacts
         ],
@@ -715,25 +716,59 @@ def execution_deployment_plan(context: DeploymentExecutionContext) -> dict[str, 
     }
 
 
-def _redact_manifest_secrets(manifest: str) -> str:
+def _redact_manifest_secrets(manifest: str) -> str | None:
+    """Redact Secret values, including Secrets nested in ``List.items``; None when unparsable."""
     try:
         documents = list(yaml.safe_load_all(manifest))
     except yaml.YAMLError:
+        return None
+    redacted = False
+    for document in documents:
+        redacted = _redact_secret_values(document) or redacted
+    if not redacted:
         return manifest
-    secrets = [
-        document
-        for document in documents
-        if isinstance(document, dict)
-        and document.get("kind") == "Secret"
-        and (document.get("data") or document.get("stringData"))
-    ]
-    if not secrets:
-        return manifest
-    for secret in secrets:
-        for field in ("data", "stringData"):
-            if isinstance(secret.get(field), dict):
-                secret[field] = dict.fromkeys(secret[field], "<redacted>")
     return yaml.safe_dump_all([document for document in documents if document is not None], sort_keys=False)
+
+
+def _redact_secret_values(document: Any) -> bool:
+    if not isinstance(document, dict):
+        return False
+    redacted = False
+    if document.get("kind") == "Secret":
+        for field in ("data", "stringData"):
+            if isinstance(document.get(field), dict) and document[field]:
+                document[field] = dict.fromkeys(document[field], "<redacted>")
+                redacted = True
+    items = document.get("items")
+    if isinstance(items, list):
+        for item in items:
+            redacted = _redact_secret_values(item) or redacted
+    return redacted
+
+
+def _redact_artifact_content(content: str | None) -> str | None:
+    if not content or "Secret" not in content:
+        return content
+    try:
+        value = json.loads(content)
+    except json.JSONDecodeError:
+        return _redact_manifest_secrets(content) if _is_secret_text(content) else content
+    return json.dumps(_redact_embedded_manifests(value))
+
+
+def _redact_embedded_manifests(value: Any) -> Any:
+    if isinstance(value, dict):
+        _redact_secret_values(value)
+        return {key: _redact_embedded_manifests(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_embedded_manifests(item) for item in value]
+    if isinstance(value, str) and _is_secret_text(value):
+        return _redact_manifest_secrets(value) or "<redacted>"
+    return value
+
+
+def _is_secret_text(value: str) -> bool:
+    return re.search(r"\bkind['\"]?\s*:\s*['\"]?Secret\b", value) is not None
 
 
 def _execution_cluster_id(execution) -> str | None:

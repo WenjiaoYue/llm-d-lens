@@ -12,10 +12,11 @@ export function sliceTopologyKeys(labels) {
 
 export const isDisaggregatedDraft = draft => Boolean(draft?.runtimeConfiguration?.prefillReplicas);
 
-/** Mirrors the server rule: node-scoped slices conflict with Pod placement that separates or pins all Pods. */
+/** Mirrors the server rule: exclusive slices conflict with pinning all Pods to one node; node-scoped slices also conflict with separating Pods. */
 export function podPlacementConflict(podPlacement, slices, policy) {
-    if (!policy || policy.type === 'None' || policy.topology !== HOSTNAME) return '';
+    if (!policy || policy.type === 'None') return '';
+    if (podPlacement === 'same-node' && slices > 1) return `Pod placement 'same-node' puts every Pod on one node, but slice placement on ${policy.topology} puts each slice in a different domain. Use one slice, slice placement None, or another Pod placement.`;
+    if (policy.topology !== HOSTNAME) return '';
     if (['balanced', 'spread'].includes(podPlacement)) return `Pod placement '${podPlacement}' separates model-server Pods across nodes, but slice placement on ${HOSTNAME} keeps each slice's Prefill and Decode on one node. Choose a wider topology key or None.`;
-    if (podPlacement === 'same-node' && slices > 1) return `Pod placement 'same-node' puts every Pod on one node, but slice placement on ${HOSTNAME} puts each slice on a different node. Use one slice or a wider topology key.`;
     return '';
 }

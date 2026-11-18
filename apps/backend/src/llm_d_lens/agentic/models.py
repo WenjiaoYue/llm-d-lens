@@ -53,7 +53,8 @@ class AgenticDeploymentCreateRequest(StandardKubernetesServiceRequest):
     planning_mode: Literal["manual", "agentic"] = Field(
         default="agentic",
         description=(
-            "Manual maximizes source-verified optimization coverage without AI; "
+            "Manual ranks source-verified combinations by SLA status, then the P/D decision, then optimization "
+            "coverage, without AI; "
             "Agentic recommends among shared compatible combinations."
         ),
     )
@@ -106,7 +107,8 @@ class AgenticCandidateSelectionRequest(BaseModel):
         default=False,
         description=(
             "With render_resources in Manual mode, check retained combinations against pinned source and "
-            "maximize verified capability coverage, breaking ties by planning order. "
+            "rank them by SLA status, then the P/D decision, then verified capability coverage, breaking ties by "
+            "planning order. "
             "Report unsupported or rejected combinations; never deploy."
         ),
     )

@@ -21,7 +21,10 @@ export function applyEngineCapabilities(documents, overrides = {}) {
                 container.args = words.slice(2);
             }
             for (const [id, flag] of toggles) {
-                container.args = container.args.filter(arg => !new RegExp(`^--(?:no-)?enable-${flag}(?:=|$)`).test(arg));
+                const pattern = new RegExp(`^--(?:no-)?enable-${flag}(?:=|$)`);
+                // Also drop a separate boolean value such as `--enable-prefix-caching false`.
+                container.args = container.args.filter((arg, index, args) => !pattern.test(arg)
+                    && !(index > 0 && pattern.test(args[index - 1]) && !args[index - 1].includes('=') && /^(?:true|false)$/i.test(arg)));
                 container.args.push(`--${overrides[id] ? '' : 'no-'}enable-${flag}`);
             }
         }

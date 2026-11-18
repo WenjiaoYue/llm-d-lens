@@ -776,8 +776,10 @@ async def get_execution(execution_id: str, request: Request = None):
         "artifacts the deployment was created from (`configuration_artifacts`, each with its `kind`, "
         "`provider_ref` and inline `content`) and the rendered multi-document manifest that Lens applied "
         "(`manifest`), so the plan can be audited or re-applied with `kubectl apply -f`. `manifest` is null while "
-        "the execution is still pending or when the rendered file is no longer stored. Secret `data` and "
-        "`stringData` values are redacted. Returns 404 when the execution does not exist."
+        "the execution is still pending or when the rendered file is no longer stored or cannot be parsed. Secret "
+        "`data` and `stringData` values, including Secrets in `List.items` and manifests embedded in artifact "
+        "content, are replaced with `<redacted>`; restore real values or remove those Secret objects before "
+        "re-applying the manifest. Returns 404 when the execution does not exist."
     ),
     operation_id="get_deployment_execution_plan",
 )

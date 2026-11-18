@@ -124,6 +124,11 @@ function DeploymentPlanSection({ deployment }) {
                                     <Download className="h-3 w-3" />Download YAML
                                 </button>
                             </div>
+                            {manifest.includes('<redacted>') && (
+                                <p role="note" className="text-[11px] text-amber-300">
+                                    Secret values are shown as &lt;redacted&gt;. Restore the real values or remove those Secret objects before applying this file; otherwise existing credentials are overwritten with placeholders.
+                                </p>
+                            )}
                             <YamlPreview content={manifest} title="Rendered deployment YAML" defaultOpen={false} />
                         </>
                     ) : (

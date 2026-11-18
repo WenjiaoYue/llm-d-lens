@@ -29,9 +29,13 @@ export function InferenceSliceParameters({ draft, change, recommendation, disabl
     }, [draft.clusterId]);
     const policy = runtime.placementPolicy || { type: 'None' };
     const update = values => change({ runtimeConfiguration: { ...runtime, ...values } });
-    const number = (key, raw) => {
-        const value = Number(raw);
-        if (!Number.isSafeInteger(value) || value < 1 || (key === 'slices' && value > 64)) { setError(`${key} must be a whole number${key === 'slices' ? ' from 1 to 64' : ' of at least 1'}.`); return; }
+    const number = (key, input) => {
+        const value = Number(input.value);
+        if (!Number.isSafeInteger(value) || value < 1 || (key === 'slices' && value > 64)) {
+            setError(`${key} must be a whole number${key === 'slices' ? ' from 1 to 64' : ' of at least 1'}; kept ${runtime[key] ?? 'Auto'}.`);
+            input.value = runtime[key] ?? '';
+            return;
+        }
         setError(''); update({ [key]: value });
     };
     const devices = (runtime.slices || 1) * ((runtime.prefillReplicas || 0) * (runtime.prefillTp || 1) + (runtime.replicas || 1) * (runtime.tp || 1));
@@ -49,7 +53,7 @@ export function InferenceSliceParameters({ draft, change, recommendation, disabl
         </div>}
         <div className="grid gap-3 sm:grid-cols-2">
             {FIELDS.map(([key, label, hint]) => <label key={key} className="block text-sm">{label}
-                <Input key={`${key}:${runtime[key]}`} className="mt-1" type="number" min="1" max={key === 'slices' ? 64 : undefined} placeholder={key === 'slices' ? 'Auto (recommended on apply)' : undefined} disabled={disabled} defaultValue={runtime[key] ?? ''} onBlur={event => { if (Number(event.target.value) !== runtime[key]) number(key, event.target.value); }} />
+                <Input key={`${key}:${runtime[key]}`} className="mt-1" type="number" min="1" max={key === 'slices' ? 64 : undefined} placeholder={key === 'slices' ? 'Auto (recommended on apply)' : undefined} disabled={disabled} defaultValue={runtime[key] ?? ''} onBlur={event => { if (!(event.target.value === '' && runtime[key] === undefined) && Number(event.target.value) !== runtime[key]) number(key, event.target); }} />
                 {hint && <span className="mt-1 block text-xs text-theme-muted">{hint}</span>}
             </label>)}
             <label className="block text-sm">Slice placement policy

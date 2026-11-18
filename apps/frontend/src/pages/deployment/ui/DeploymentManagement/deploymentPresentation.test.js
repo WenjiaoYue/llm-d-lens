@@ -49,6 +49,12 @@ test('normal model startup stays in progress in the label and summary', () => {
     }
 });
 
+test('summary keeps the backend status for deployments whose pods were never polled', () => {
+    const summary = summarizeStatuses([{ execution_id: 'other-page', status: 'ready' }, { execution_id: 'visible', status: 'ready' }], { visible: [] });
+    assert.equal(summary.Ready, 1);
+    assert.equal(summary.Failed, 1);
+});
+
 test('genuine pod failures are not hidden during deployment startup', () => {
     for (const status_reason of ['ImagePullBackOff', 'OOMKilled', 'CrashLoopBackOff']) {
         const pods = [pod({ ready: false, status_reason, restarts: 3 })];

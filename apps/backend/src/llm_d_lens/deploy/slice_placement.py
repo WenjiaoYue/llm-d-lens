@@ -67,19 +67,22 @@ def _domains(nodes: list[dict], key: str) -> list[dict]:
 
 
 def pod_placement_conflict(pod_placement: str | None, slices: int, policy: dict[str, str]) -> str | None:
-    """Explain why a node-scoped slice policy cannot satisfy the selected Pod placement."""
-    if policy.get("type", "None") == "None" or policy.get("topology") != HOSTNAME:
+    """Explain why an exclusive slice policy cannot satisfy the selected Pod placement."""
+    if policy.get("type", "None") == "None":
+        return None
+    topology = policy.get("topology")
+    if pod_placement == "same-node" and slices > 1:
+        return (
+            f"Pod placement 'same-node' puts every Pod on one node, but slice placement on {topology} puts each "
+            "slice in a different domain. Use one slice, slice placement None, or another Pod placement."
+        )
+    if topology != HOSTNAME:
         return None
     if pod_placement in {"balanced", "spread"}:
         return (
             f"Pod placement '{pod_placement}' separates model-server Pods across nodes, but slice placement on "
             f"{HOSTNAME} requires each slice's Prefill and Decode on one node. Choose a wider topology key, "
             "None, or Pod placement prefer-same-node/same-node."
-        )
-    if pod_placement == "same-node" and slices > 1:
-        return (
-            f"Pod placement 'same-node' puts every Pod on one node, but slice placement on {HOSTNAME} puts each "
-            "slice on a different node. Use one slice, a wider topology key, or another Pod placement."
         )
     return None
 

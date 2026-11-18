@@ -234,7 +234,9 @@ export function isDeletionInProgressStatus(item) {
 export function summarizeStatuses(items, podsById = {}) {
     const summary = { total: items.length, Ready: 0, 'In progress': 0, Degraded: 0, Failed: 0, Cleaned: 0 };
     for (const item of items) {
-        const group = effectiveStatusGroup(item, podsById[item?.execution_id]);
+        // Only the visible page is polled; other rows keep their backend status.
+        const polled = Object.hasOwn(podsById, item?.execution_id ?? '');
+        const group = polled || item?.pending ? effectiveStatusGroup(item, podsById[item?.execution_id]) : statusGroup(item?.status);
         if (group in summary) {
             summary[group] += 1;
         } else {

@@ -54,6 +54,11 @@ test('engine switches change the rendered workload and preserve sidecar and othe
     assert.deepEqual(changed[0].spec.template.spec.containers[1], docs[0].spec.template.spec.containers[1]);
     assert.equal(docs[0].spec.template.spec.containers[0].args[0], '--enable-prefix-caching');
 });
+test('engine switches drop a separate boolean value of the replaced flag only', () => {
+    const docs = [{ kind: 'Deployment', spec: { template: { spec: { containers: [{ name: 'vllm', args: ['--enable-prefix-caching', 'false', '--trust-remote-code', 'true'] }] } } } }];
+    const changed = applyEngineCapabilities(docs, { prefix: true });
+    assert.deepEqual(changed[0].spec.template.spec.containers[0].args, ['--trust-remote-code', 'true', '--enable-prefix-caching']);
+});
 test('router deselection removes only its plugin and references, keeping shared producers', () => {
     const config = { plugins: [{ type: 'approx-prefix-cache-producer' }, { type: 'prefix-cache-affinity-filter', name: 'affinity' }, { type: 'token-load-scorer' }], schedulingProfiles: [{ name: 'default', plugins: [{ pluginRef: 'affinity' }, { pluginRef: 'token-load-scorer' }] }] };
     const source = yaml.dump({ router: { epp: { pluginsCustomConfig: { 'source.yaml': yaml.dump(config) } } } });

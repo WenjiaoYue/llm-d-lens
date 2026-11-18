@@ -75,15 +75,16 @@ def apply_placement(manifest: str, placement: dict[str, Any]) -> tuple[str, int]
             spec = document.get("spec") or {}
             policy = spec.get("placementPolicy") or {}
             slices = spec.get("slices") or 1
-            if policy.get("type", "None") != "None" and policy.get("topology") == "kubernetes.io/hostname":
-                if replicas in {"balanced", "spread"}:
+            if policy.get("type", "None") != "None":
+                if replicas == "same-node" and slices > 1:
+                    raise ValueError(
+                        "Requiring one node conflicts with slice placement that puts each slice in a different "
+                        "topology domain."
+                    )
+                if replicas in {"balanced", "spread"} and policy.get("topology") == "kubernetes.io/hostname":
                     raise ValueError(
                         "Pod placement that separates replicas conflicts with slice placement that keeps "
                         "each slice on one node; choose prefer-same-node or same-node."
-                    )
-                if replicas == "same-node" and slices > 1:
-                    raise ValueError(
-                        "Requiring one node conflicts with slice placement that puts each slice on a different node."
                     )
             templates = [
                 template
