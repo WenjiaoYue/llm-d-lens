@@ -11,6 +11,54 @@ original part-local context; use the links below for unambiguous navigation.
 | [AI candidate generation](#agentic-deployment-ai-candidate-generation-and-scoring-design) | Generator, scorer, tool allowlist and fallback contracts. |
 | [Planning evidence and RAG](#agentic-deploy-evidence) | Evidence authority, similarity and remaining work. |
 
+## DisaggregatedSet Implementation Boundary
+
+The legacy Deploy/Evaluation implementation now separates reusable Configuration
+from an owner-bound prepared deployment plan. `deploy.prepared_plans` freezes final
+workload YAML, a generated namespace identity, Router values and Chart bytes; its
+digest binds the original configuration/runtime request. Confirmation rechecks cluster
+inventory, atomically creates the Run with plan consumption, and execution materializes
+the stored inputs instead of rendering a new candidate. Helm hooks and automatic CRD
+installation are disabled for this path. Cleanup requires the prepared namespace marker.
+
+`configuration.disaggregated_set` preserves legal Slice counts and interprets role
+replicas per Slice. Demand expands leader/worker groups using Kubernetes resource
+requests, native init-sidecar peaks and overhead, not TP. `placement_preflight` models
+Node readiness, selectors, taints, required node affinity, resource fragmentation,
+RuntimeClass scheduling/overhead and exclusive Slice domains with bounded search.
+It does not reserve resources or simulate admission, quota, concurrent scheduling or
+rollout surge. Missing inventory/search exhaustion remains unknown rather than pass.
+
+Evaluation DS cases persist in `awaiting_review` until the owner confirms every exact
+plan digest. Before benchmarking, evidence follows DS/LWS/StatefulSet/Pod UID
+ownership, observed generations and actual Node labels. Bounded inference
+records before/after metrics and replacement/restart checks. Routing/KV transfer
+remains unknown without request-correlated evidence; aggregate counters are not proof.
+
+Storage-derived PV/PVC manifests are included in the digest and review; changes to
+their defining storage record are rejected before materialization and before mount
+creation. Existing PV name collisions fail preflight. Secret source references are
+shown without credential bytes; credential rotation is not frozen by this contract.
+
+Request-attributed evidence now observes vLLM 0.26.0 NIXL pull receive completion,
+failure/recompute callbacks and producer acknowledgements. Positive verdicts require
+complete TP-rank coverage, response/remote-request correlation and stable ownership,
+revision and engine identities. Unsupported connectors/versions remain unknown. Reports
+are persisted as deployment evidence artifacts; a bounded probe is not benchmark-wide proof.
+Task details reopen persisted review. Retry prepares new digests for new deployments,
+preserving reusable Ready executions. Automatic DS baselines match final rendered
+accelerator requests across all Slices, not CPU/memory/Pod parity. Local sources use
+copied dependency closures and content fingerprints; remote custom sources use pinned
+Git snapshots, with unvendored dependencies rejected. No live migration, real-cluster
+acceptance, engine migration or alpha online rollout guarantee is claimed. Slice Sweep
+remains an Evaluation configuration and result-comparison capability.
+
+Pinned contracts were checked against `kubernetes-sigs/lws` v1.0.0
+`api/disaggregatedset/v1/disaggregatedset_types.go` and `llm-d/llm-d-router` v1.0.0
+`pkg/epp/framework/plugins/{datalayer/extractor/topology,scheduling/scorer/topologyaffinity}`.
+The routing preference is a weighted soft scorer on the prefill profile. Slice labels
+are logical identity, not proof of fabric locality or revision-safe P/D pairing.
+
 <!-- design-part: architecture -->
 
 ## Agentic Deployment Architecture and Workflow

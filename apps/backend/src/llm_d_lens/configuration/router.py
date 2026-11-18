@@ -131,7 +131,10 @@ async def resolve(request: ResolveRequest) -> ResolveResponse:
     summary="Render a candidate into a deployable configuration.",
     description=(
         "Render a candidate configuration using the supplied render options and return the deployable configuration "
-        "and metadata. Use the save endpoint to publish the result. Configuration and value errors return 400; "
+        "and metadata. candidate_config accepts disaggregated_set intent. "
+        "Local guide_source may include revisionKind=content-snapshot "
+        "and snapshotChecksum; its commit is a content fingerprint, not Git HEAD. "
+        "Use the save endpoint to publish the result. Configuration and value errors return 400; "
         "unexpected failures return 500 with Unable to render configuration. Shared domain errors retain their "
         "status and code."
     ),
