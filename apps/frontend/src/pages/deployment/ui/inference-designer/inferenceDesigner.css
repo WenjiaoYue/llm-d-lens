@@ -97,9 +97,6 @@
 .inference-parameter-group { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; padding-top: 16px; color: var(--text-muted); }
 .inference-binding { display: grid; gap: 8px; font-size: 11px; line-height: 1.6; }
 .inference-binding a { color: var(--brand-accent); font-size: 10px; }
-.inference-expert { border-top: 1px solid var(--border-color); padding-top: 12px; font-size: 11px; }
-.inference-expert summary { cursor: pointer; padding-block: 8px; }
-.inference-override-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding-block: 10px; border-bottom: 1px solid var(--border-color); }
 .inference-flow-help { font-size: 10px; color: var(--text-muted); }
 .inference-stage-options { display: grid; gap: 6px; }
 .inference-stage-options button { display: flex; justify-content: space-between; white-space: normal; text-align: left; }

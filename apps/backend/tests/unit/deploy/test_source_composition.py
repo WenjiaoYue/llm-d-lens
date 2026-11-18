@@ -491,7 +491,9 @@ def test_source_checkout_is_extracted_once_per_commit(source_tree, monkeypatch):
         )
         assert first == second and (first / "guides/optimized-baseline/modelserver/overlay").is_dir()
         for _ in range(2):
-            await composition.render_unit(source_tree, catalog, {"path": "guides/optimized-baseline/modelserver/overlay"})
+            await composition.render_unit(
+                source_tree, catalog, {"path": "guides/optimized-baseline/modelserver/overlay"}
+            )
 
     asyncio.run(run())
     assert sum(argv[:2] == ["git", "-C"] for argv in archives) == 1

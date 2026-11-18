@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deploymentSelection, nodeParameterPaths, capabilityTogglePatch, selectionConflicts, resetDeploymentConfiguration } from './deploymentSelection.js';
+import { deploymentSelection, nodeParameterPaths, capabilityTogglePatch, selectionConflicts } from './deploymentSelection.js';
 import { optimizationSourceFacts } from '@repo/shared/inference/optimizations';
 import { inferenceScene } from './sceneGraph.js';
 import { createBlueprint } from './blueprint.js';
@@ -64,23 +64,6 @@ test('selection guards reuse serving conflicts and keep compatible add-ons selec
     assert.deepEqual(selectionConflicts(fixture, draft, { selectedGuides: ['pd-disaggregation', 'runtime-inventory'] }), []);
     assert.deepEqual(draft.capabilityOverrides, {});
     assert.deepEqual(selectionConflicts(fixture, draft, { capabilityOverrides: { prefix: true } }), []);
-});
-
-test('configuration reset clears selections and edits while retaining target identity', () => {
-    const draft = { clusterId: 'cluster', model: 'model', modelCacheEntryId: 'cached', storageVolumeId: 'storage',
-        profileId: 'profile', sourceCommit: 'pinned', sourceGuides: [{ id: 'guide' }], image: 'custom',
-        selectedGuides: ['pd-disaggregation'], capabilityOverrides: { cache: true }, guideChoices: { guide: ['child'] },
-        sourceVariables: { guide: { VARIANT: 'custom' } }, sourceUnits: [{ path: 'custom', edits: [1] }],
-        sourceNamespace: 'custom', sourceValidate: false, sourceRouter: { mode: 'gateway', version: 'custom', values: [1] } };
-    const reset = resetDeploymentConfiguration(draft);
-    for (const key of ['clusterId', 'model', 'modelCacheEntryId', 'storageVolumeId', 'profileId', 'sourceCommit', 'sourceGuides']) assert.deepEqual(reset[key], draft[key]);
-    for (const key of ['selectedGuides', 'sourceUnits']) assert.deepEqual(reset[key], []);
-    for (const key of ['capabilityOverrides', 'guideChoices', 'sourceVariables']) assert.deepEqual(reset[key], {});
-    assert.deepEqual(reset.sourceRouter, { mode: 'standalone', release: 'llm-d', version: '', values: [] });
-    assert.equal(reset.image, '');
-    assert.equal(reset.sourceNamespace, 'custom');
-    assert.equal(reset.sourceValidate, true);
-    assert.deepEqual(resetDeploymentConfiguration(reset), reset);
 });
 
 

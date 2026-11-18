@@ -1,7 +1,7 @@
 """Independent HTTP API for Agentic Deploy orchestration."""
 
-import logging
 import json
+import logging
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -14,6 +14,7 @@ from llm_d_lens.configuration.decision_engine import optimization_choices
 from llm_d_lens.configuration.plan_models import OptimizationChoice
 from llm_d_lens.core.exceptions import ForbiddenError, UnauthenticatedError
 
+from .configuration import planning_resource_request
 from .models import (
     AgenticApprovalRequest,
     AgenticCandidateRefinementRequest,
@@ -22,10 +23,10 @@ from .models import (
     AgenticDeploymentRun,
     OptimizationPreviewRequest,
 )
+from .optimization import MeasuredOptimizer, OptimizationRequest
 from .service import service
-from .streaming import planning_stream_response
-from .configuration import planning_resource_request
 from .source_plan import SourcePlanRequest, render_source_plan
+from .streaming import planning_stream_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agentic-deployments", tags=["agentic-deployments"])
@@ -51,8 +52,10 @@ router = APIRouter(prefix="/api/agentic-deployments", tags=["agentic-deployments
 async def preview_deployment_optimizations(body: OptimizationPreviewRequest) -> list[OptimizationChoice]:
     return optimization_choices(body.requirements, body.available_accelerators)
 
+
 @router.post(
-    "/{run_id}/composition", response_model=AgenticDeploymentRun,
+    "/{run_id}/composition",
+    response_model=AgenticDeploymentRun,
     operation_id="render_deployment_composition",
     summary="Render and compare source-backed deployment plans",
     description=(
@@ -232,16 +235,29 @@ async def select_agentic_candidate(
         run = service.get(run_id)
         if run is not None:
             _require_plan_evidence_access(run, current_principal(http_request))
-        edit_requested = bool(request.model_dump(exclude_none=True, include={
-            "replicas", "tensor_parallel_size", "max_model_len", "gpu_memory_utilization",
-            "max_num_seqs", "max_num_batched_tokens", "native_cpu_cache_gib",
-        }))
+        edit_requested = bool(
+            request.model_dump(
+                exclude_none=True,
+                include={
+                    "replicas",
+                    "tensor_parallel_size",
+                    "max_model_len",
+                    "gpu_memory_utilization",
+                    "max_num_seqs",
+                    "max_num_batched_tokens",
+                    "native_cpu_cache_gib",
+                },
+            )
+        )
         if request.compare_combinations and not request.render_resources:
             raise ValueError("Combination comparison requires render_resources=true.")
         if edit_requested or request.render_resources:
             current = service.get(run_id)
-            if (current is not None and current.configuration_plan is not None
-                    and current.configuration_plan.source_bundle is not None):
+            if (
+                current is not None
+                and current.configuration_plan is not None
+                and current.configuration_plan.source_bundle is not None
+            ):
                 raise ValueError("Edit and render source parameters through the composition endpoint.")
         if request.render_resources:
             from llm_d_lens.deploy.guide_planning import plan_resources
@@ -258,9 +274,11 @@ async def select_agentic_candidate(
                 raise ValueError("Regenerate this legacy plan before reviewing resources.")
             expected_checksum = run.configuration_plan.configuration["checksum"] if run.configuration_plan else None
             volume = await get_ready_volume(
-                run.request.storage_volume_id, cluster_id=run.request.requirements.cluster_id,
+                run.request.storage_volume_id,
+                cluster_id=run.request.requirements.cluster_id,
             )
             if request.compare_combinations:
+
                 async def render_trial(trial):
                     body = planning_resource_request(trial)
                     body["modelPvcClaimName"] = volume.pvc_name
@@ -269,15 +287,20 @@ async def select_agentic_candidate(
                     if result.status_code in {400, 404, 409, 422}:
                         raise ValueError(payload.get("error", "Source/resource compatibility check failed."))
                     if result.status_code >= 400:
-                        raise HTTPException(status_code=result.status_code, detail=payload.get("error", "Resource generation failed."))
+                        raise HTTPException(
+                            status_code=result.status_code, detail=payload.get("error", "Resource generation failed.")
+                        )
                     return payload
+
                 return await service.compare_manual_resources(run_id, request.candidate_id, render_trial)
             body = planning_resource_request(run)
             body["modelPvcClaimName"] = volume.pvc_name
             result = await plan_resources(http_request, body)
             payload = json.loads(result.body)
             if result.status_code >= 400:
-                raise HTTPException(status_code=result.status_code, detail=payload.get("error", "Resource generation failed."))
+                raise HTTPException(
+                    status_code=result.status_code, detail=payload.get("error", "Resource generation failed.")
+                )
             if (
                 run.status != "awaiting_approval"
                 or run.selected_candidate.id != request.candidate_id
@@ -361,27 +384,43 @@ async def stream_refine_agentic_deployment(
     operation_id="approve_agentic_plan",
 )
 async def approve_agentic_deployment(
-    run_id: str, request: Request = None, approval: AgenticApprovalRequest | None = None,
+    run_id: str,
+    request: Request = None,
+    approval: AgenticApprovalRequest | None = None,
 ) -> AgenticDeploymentRun:
     try:
         run = service.get(run_id)
         if run is not None:
             _require_plan_evidence_access(run, current_principal(request))
-        if run is not None and run.request.requirements is not None and (
-            run.configuration_plan is None or run.configuration_plan.validation.get("status") != "resources_checked"
+        if (
+            run is not None
+            and run.request.requirements is not None
+            and (
+                run.configuration_plan is None or run.configuration_plan.validation.get("status") != "resources_checked"
+            )
         ):
             raise ValueError("Generate and review the current configuration resources before approval.")
-        if run is not None and run.request.requirements is not None and (
-            approval is None or approval.configuration_checksum != run.configuration_plan.configuration["checksum"]
+        if (
+            run is not None
+            and run.request.requirements is not None
+            and (
+                approval is None or approval.configuration_checksum != run.configuration_plan.configuration["checksum"]
+            )
         ):
-            raise ValueError("The configuration changed or was not reviewed. Confirm the current checksum before deployment.")
+            raise ValueError(
+                "The configuration changed or was not reviewed. Confirm the current checksum before deployment."
+            )
         if run is not None and run.configuration_plan is not None and run.configuration_plan.source_bundle is not None:
             _optimization_run(run_id, request)
-            if approval is None or approval.endpoint not in {item["value"] for item in run.configuration_plan.endpoints}:
+            if approval is None or approval.endpoint not in {
+                item["value"] for item in run.configuration_plan.endpoints
+            }:
                 raise ValueError("Choose the reviewed inference Service before deployment.")
             return await service.approve(
-                run_id, owner_user_id=owner_for_create(current_principal(request)),
-                http_request=request, source_endpoint=approval.endpoint,
+                run_id,
+                owner_user_id=owner_for_create(current_principal(request)),
+                http_request=request,
+                source_endpoint=approval.endpoint,
             )
         return await service.approve(run_id, owner_user_id=owner_for_create(current_principal(request)))
     except KeyError as error:
@@ -389,8 +428,6 @@ async def approve_agentic_deployment(
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
 
-
-from .optimization import MeasuredOptimizer, OptimizationRequest
 
 optimizer = MeasuredOptimizer(service)
 
@@ -407,35 +444,62 @@ def _optimization_run(run_id, http_request):
     return run
 
 
-@router.post("/{run_id}/optimize", response_model=AgenticDeploymentRun, status_code=202,
-    operation_id="optimize_agentic_plan", summary="Measure candidates within an explicit resource budget",
-    description="Deploy, benchmark and clean up selected validated candidates sequentially using one workload. Source-backed plans require a reviewed composition and an endpoints mapping of candidate IDs to generated Service values; trials use the exact rendered resources, not a regenerated provider recipe. Redeploy the comparison winner for confirmation_runs independent repetitions (default 1). The max_benchmark_runs budget (default 5) must cover all candidate repetitions plus confirmation. Record comparison and confirmation evidence separately. Set best_candidate_id only after confirmation satisfies SLOs and the error limit and cleanup succeeds; incomplete or failed confirmation leaves it unset. This does not prove a global optimum.")
+@router.post(
+    "/{run_id}/optimize",
+    response_model=AgenticDeploymentRun,
+    status_code=202,
+    operation_id="optimize_agentic_plan",
+    summary="Measure candidates within an explicit resource budget",
+    description=(
+        "Deploy, benchmark and clean up selected validated candidates sequentially using one workload. "
+        "Source-backed plans require a reviewed composition and an endpoints mapping of candidate IDs to generated "
+        "Service values; trials use the exact rendered resources, not a regenerated provider recipe. "
+        "Redeploy the comparison winner for confirmation_runs independent repetitions (default 1). "
+        "The max_benchmark_runs budget (default 5) must cover all candidate repetitions plus confirmation. "
+        "Record comparison and confirmation evidence separately. Set best_candidate_id only after confirmation "
+        "satisfies SLOs and the error limit and cleanup succeeds; incomplete or failed confirmation leaves it unset. "
+        "This does not prove a global optimum."
+    ),
+)
 async def optimize_agentic_plan(run_id: str, request: OptimizationRequest, http_request: Request):
     run = _optimization_run(run_id, http_request)
     from llm_d_lens.auth.context import require_route_permission
+
     await require_route_permission(Request(dict(http_request.scope, path="/api/v1/evaluate/runs", method="POST")))
     try:
         from llm_d_lens.cluster.sessions import require_active_session
-        return optimizer.start(run, request, http_request, owner_for_create(current_principal(http_request)), cluster_id=require_active_session(run.request.cluster_session_id).server_id)
+
+        return optimizer.start(
+            run,
+            request,
+            http_request,
+            owner_for_create(current_principal(http_request)),
+            cluster_id=require_active_session(run.request.cluster_session_id).server_id,
+        )
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
 
 
-@router.post("/{run_id}/optimize/cancel", response_model=AgenticDeploymentRun,
-    operation_id="cancel_agentic_optimization", summary="Stop measured optimization and clean up its test resources",
-    description="Cancel an active measured candidate search and clean up only the deployments created by that search.")
+@router.post(
+    "/{run_id}/optimize/cancel",
+    response_model=AgenticDeploymentRun,
+    operation_id="cancel_agentic_optimization",
+    summary="Stop measured optimization and clean up its test resources",
+    description="Cancel an active measured candidate search and clean up only the deployments created by that search.",
+)
 async def cancel_agentic_optimization(run_id: str, http_request: Request, cluster_session_id: str | None = None):
     run = service.get(run_id)
     if run is None:
         raise HTTPException(404, "Agentic plan not found")
-    if cluster_session_id and (run.optimization or {}).get('status') in {'interrupted', 'cleanup_failed'}:
-        from llm_d_lens.cluster.sessions import require_active_session
+    if cluster_session_id and (run.optimization or {}).get("status") in {"interrupted", "cleanup_failed"}:
         from llm_d_lens.auth.access import require_cluster_access
+        from llm_d_lens.cluster.sessions import require_active_session
+
         session = require_active_session(cluster_session_id)
-        if session.server_id != run.optimization.get('cluster_id'):
+        if session.server_id != run.optimization.get("cluster_id"):
             raise HTTPException(409, "Cleanup session must refer to the original test cluster")
         require_cluster_access(current_principal(http_request), session.server_id)
-        run.request = run.request.model_copy(update={'cluster_session_id': cluster_session_id})
+        run.request = run.request.model_copy(update={"cluster_session_id": cluster_session_id})
     else:
         _optimization_run(run_id, http_request)
     return await optimizer.cancel(run_id)

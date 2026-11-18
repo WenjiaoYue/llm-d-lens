@@ -91,7 +91,7 @@ def build_agentic_configuration(
         ],
     }
     if candidate.native_cpu_cache_gib is not None and candidate.provider_ref != "tiered-prefix-cache":
-        content['guideComposition'] = {'nativeCpuCacheGiB': candidate.native_cpu_cache_gib}
+        content["guideComposition"] = {"nativeCpuCacheGiB": candidate.native_cpu_cache_gib}
     elif candidate.native_cpu_cache_gib is not None:
         content["guideSettings"] = {"cacheCpuGiB": candidate.native_cpu_cache_gib}
     # Agentic plans must carry the same credential policy as the selected
@@ -171,21 +171,29 @@ def planning_resource_request(run) -> dict:
         "optimizationPolicy": {
             "mode": source.planning_mode,
             "prefixReuse": (
-                "unknown" if plan.requirements.workload.get("prefixReuse") is None
-                else "yes" if plan.requirements.workload["prefixReuse"] else "no"
+                "unknown"
+                if plan.requirements.workload.get("prefixReuse") is None
+                else "yes"
+                if plan.requirements.workload["prefixReuse"]
+                else "no"
             ),
             "excluded": [
-                flag for capability, flag in (("prefix_cache", "prefix"), ("chunked_prefill", "chunked"))
+                flag
+                for capability, flag in (("prefix_cache", "prefix"), ("chunked_prefill", "chunked"))
                 if capability in plan.requirements.forbidden_features
             ],
             "required": [
-                flag for capability, flag in (("prefix_cache", "prefix"), ("chunked_prefill", "chunked"))
+                flag
+                for capability, flag in (("prefix_cache", "prefix"), ("chunked_prefill", "chunked"))
                 if capability in plan.requirements.required_features
-                or (capability == "prefix_cache" and (
-                    selected.native_cpu_cache_gib
-                    or selected.prefix_routing
-                    or selected.provider_ref in {"precise-prefix-cache-routing", "tiered-prefix-cache"}
-                ))
+                or (
+                    capability == "prefix_cache"
+                    and (
+                        selected.native_cpu_cache_gib
+                        or selected.prefix_routing
+                        or selected.provider_ref in {"precise-prefix-cache-routing", "tiered-prefix-cache"}
+                    )
+                )
             ],
         },
     }

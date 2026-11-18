@@ -44,9 +44,7 @@ async def test_named_device_class_check_resolves_kind_and_cluster_scope(cluster_
     from llm_d_lens.infrastructure.kubernetes.commands import execute_sdk_command
 
     responses = {
-        "/apis": {
-            "groups": [{"name": "resource.k8s.io", "preferredVersion": {"groupVersion": "resource.k8s.io/v1"}}]
-        },
+        "/apis": {"groups": [{"name": "resource.k8s.io", "preferredVersion": {"groupVersion": "resource.k8s.io/v1"}}]},
         "/apis/resource.k8s.io/v1": {
             "resources": [
                 {"name": "deviceclasses", "singularName": "deviceclass", "kind": "DeviceClass", "namespaced": False}

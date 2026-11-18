@@ -399,15 +399,25 @@ def test_manual_never_prefers_more_features_that_fail_slo():
         replicas=1,
     )
     # SLA misses are ranked last but kept, so the plan can report them instead of failing.
-    assert [item.id for item in rank_manual_candidates([more, less], DeploymentRequirements(model="test"))] == ["less", "more"]
+    assert [item.id for item in rank_manual_candidates([more, less], DeploymentRequirements(model="test"))] == [
+        "less",
+        "more",
+    ]
 
 
 def test_manual_objective_orders_topology_after_coverage():
     def topology(name, tp, replicas):
         return SimpleNamespace(
-            id=name, provider_ref="optimized-baseline", prefix_routing=True, native_cpu_cache_gib=None,
-            deployable=True, slo_status="unknown", required_gpus=tp * replicas,
-            tensor_parallel_size=tp, replicas=replicas, max_concurrent_requests=4,
+            id=name,
+            provider_ref="optimized-baseline",
+            prefix_routing=True,
+            native_cpu_cache_gib=None,
+            deployable=True,
+            slo_status="unknown",
+            required_gpus=tp * replicas,
+            tensor_parallel_size=tp,
+            replicas=replicas,
+            max_concurrent_requests=4,
         )
 
     wide, many, small = topology("wide", 4, 1), topology("many", 1, 4), topology("small", 1, 1)
@@ -426,12 +436,27 @@ def test_manual_objective_orders_topology_after_coverage():
 def test_manual_capability_coverage_outranks_the_load_target():
     facts = PlanningFacts(8, 32, 8, max_num_seqs=4, workload_profile=WorkloadProfile(concurrency=8))
     sized = SimpleNamespace(
-        id="sized", provider_ref="optimized-baseline", prefix_routing=False, native_cpu_cache_gib=None,
-        deployable=True, slo_status="unknown", required_gpus=2, tensor_parallel_size=1, replicas=2,
+        id="sized",
+        provider_ref="optimized-baseline",
+        prefix_routing=False,
+        native_cpu_cache_gib=None,
+        deployable=True,
+        slo_status="unknown",
+        required_gpus=2,
+        tensor_parallel_size=1,
+        replicas=2,
         max_concurrent_requests=4,
     )
-    covered = SimpleNamespace(**{**vars(sized), "id": "covered", "prefix_routing": True, "native_cpu_cache_gib": 1,
-                                 "required_gpus": 1, "replicas": 1})
+    covered = SimpleNamespace(
+        **{
+            **vars(sized),
+            "id": "covered",
+            "prefix_routing": True,
+            "native_cpu_cache_gib": 1,
+            "required_gpus": 1,
+            "replicas": 1,
+        }
+    )
     requirements = DeploymentRequirements(model="test", workload={"concurrency": 8})
     assert rank_manual_candidates([sized, covered], requirements, facts)[0].id == "covered"
 

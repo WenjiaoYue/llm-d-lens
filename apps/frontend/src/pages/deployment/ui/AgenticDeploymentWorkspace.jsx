@@ -42,13 +42,13 @@ export function PlanningTimeline({ events, live = false }) {
                 <ChevronDown size={14} className={cn('shrink-0 text-theme-muted transition', current === index && 'rotate-180')} aria-hidden="true" />
             </button>
         </li>)}</ol>
-        {step && <div className="rounded-xl border border-theme-border bg-theme-bg/40 p-4 text-sm" aria-label={`${step.label} details`}>
+        {step && <div className="rounded-xl border border-theme-border p-4 text-sm" aria-label={`${step.label} details`}>
             <p className="font-semibold">{step.label}</p>
             <p className="mt-1 text-xs leading-relaxed text-theme-muted">{step.detail}</p>
             {step.events.length ? <ol className="mt-3 max-h-64 divide-y divide-theme-border overflow-auto rounded-lg border border-theme-border text-xs">{step.events.map((event, index) => <li key={index} className="space-y-1 px-3 py-2">
                 <span className="flex items-center gap-2"><Badge size="xxs" tone={event.status === 'complete' ? 'success' : event.status === 'failed' ? 'danger' : 'neutral'}>{event.phase.replaceAll('_', ' ')}</Badge><span className="ml-auto tabular-nums text-theme-muted">{started && event.at ? `+${Math.round((event.at - started) / 1000)}s` : ''}</span></span>
                 {String(event.message || '').length > 160
-                    ? <details className="group"><summary className="cursor-pointer list-none break-words leading-relaxed"><span className="group-open:hidden">{event.message.slice(0, 150).replace(/\s+\S*$/, '')}… <span className="text-theme-muted underline">More</span></span><span className="hidden whitespace-pre-wrap group-open:inline">{event.message}</span></summary></details>
+                    ? <details className="group/message"><summary className="cursor-pointer list-none break-words leading-relaxed"><span className="group-open/message:hidden">{event.message.slice(0, 150).replace(/\s+\S*$/, '')}… <span className="text-theme-muted underline">More</span></span><span className="hidden whitespace-pre-wrap group-open/message:inline">{event.message}</span></summary></details>
                     : <p className="break-words leading-relaxed">{event.message}</p>}
             </li>)}</ol> : <p className="mt-3 text-xs text-theme-muted">{step.state === 'pending' ? 'Not started yet.' : 'No separate events were reported for this step.'}</p>}
         </div>}
@@ -229,7 +229,7 @@ export function DeploymentWorkflow({ draft, mode = 'agentic', embedded = false, 
     const [endpoint, setEndpoint] = useState('');
     const [sourceProfiles, setSourceProfiles] = useState([]), [profileId, setProfileId] = useState('');
     const [workspaceView, setWorkspaceView] = useState('review');
-    const [primaryPanel, setPrimaryPanel] = useState('flow'), [flowToggle, setFlowToggle] = useState(null);
+    const [primaryPanel, setPrimaryPanel] = useState('optimizations'), [flowToggle, setFlowToggle] = useState(null);
     const [changingRequirements, setChangingRequirements] = useState(false);
     const [trialBusy, setTrialBusy] = useState(false);
     const [deploymentRun, setDeploymentRun] = useState(null), [logsDeployment, setLogsDeployment] = useState(null);
@@ -472,7 +472,7 @@ export function DeploymentWorkflow({ draft, mode = 'agentic', embedded = false, 
                 ? (() => {
                     const pip = !run.deployment_run_id, flowSmall = pip && primaryPanel === 'optimizations';
                     const table = compact => <OptimizationTable compact={compact} plan={plan} candidate={run.selected_candidate} mode={mode} disabled={locked || editing}
-                        onToggle={sourceReview ? toggleRow : toggleOptimization} onOpen={id => setFocus(catalogCapability(id))} onExpand={() => setPrimaryPanel('optimizations')} />;
+                        onToggle={sourceReview ? toggleRow : toggleOptimization} onOpen={id => { setPrimaryPanel('flow'); setFocus(catalogCapability(id)); }} onExpand={() => setPrimaryPanel('optimizations')} />;
                     return <div className="relative">
                         <div className={flowSmall ? 'relative mb-3 h-44 w-72 overflow-hidden rounded-xl border border-theme-border bg-theme-card shadow-lg ring-1 ring-[color-mix(in_srgb,var(--brand-accent)_25%,transparent)] lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mb-0' : undefined}>
                             <div inert={flowSmall} style={flowSmall ? { width: '400%', transform: 'scale(0.25)', transformOrigin: 'top left' } : undefined}>

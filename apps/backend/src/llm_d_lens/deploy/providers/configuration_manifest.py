@@ -589,6 +589,7 @@ class ConfigurationManifestAdapter:
         composition = overrides.get("guideComposition")
         if composition and not self._is_exact(overrides):
             import yaml
+
             from llm_d_lens.configuration.guide_composition import compose_native_cpu_cache
             from llm_d_lens.deploy.guide_planning import GuideError, select_manifest_paths
 
@@ -599,8 +600,16 @@ class ConfigurationManifestAdapter:
             if root is None:
                 raise ValueError("This provider cannot resolve a source-bound composition")
             root = Path(root)
-            accelerator = overrides.get("hardware_profile") or getattr(self._delegate, "_accelerator", None) or getattr(policy, "accelerator", None)
-            paths = [str(path.relative_to(root)) for path in (root / "guides/tiered-prefix-cache").rglob("*") if path.is_file()]
+            accelerator = (
+                overrides.get("hardware_profile")
+                or getattr(self._delegate, "_accelerator", None)
+                or getattr(policy, "accelerator", None)
+            )
+            paths = [
+                str(path.relative_to(root))
+                for path in (root / "guides/tiered-prefix-cache").rglob("*")
+                if path.is_file()
+            ]
             try:
                 selected = select_manifest_paths(paths, "tiered-prefix-cache", accelerator, "vllm", "native/cpu")
             except GuideError:
@@ -610,7 +619,12 @@ class ConfigurationManifestAdapter:
                 raise ValueError("Unable to render the native CPU cache source for composition")
             reference = Path(artifact.manifest_ref or "")
             path = reference / "manifest.yaml" if reference.is_dir() else reference
-            documents = compose_native_cpu_cache(list(yaml.safe_load_all(path.read_text())), list(yaml.safe_load_all(donor)), guide=definition.guide_id, capacity_gib=composition["nativeCpuCacheGiB"])
+            documents = compose_native_cpu_cache(
+                list(yaml.safe_load_all(path.read_text())),
+                list(yaml.safe_load_all(donor)),
+                guide=definition.guide_id,
+                capacity_gib=composition["nativeCpuCacheGiB"],
+            )
             rendered = yaml.safe_dump_all(documents, sort_keys=False)
             checksum = text_checksum(rendered)
             if reference.is_dir():
@@ -620,8 +634,20 @@ class ConfigurationManifestAdapter:
                 directory.mkdir(parents=True, exist_ok=True)
                 path = directory / "manifest.yaml"
                 path.write_text(rendered)
-                register_artifacts(directory, owner_type="deployment-manifest", owner_id=checksum.removeprefix("sha256:"), retention_class="configuration")
-            artifact = replace(artifact, manifest_ref=str(reference if reference.is_dir() else path), manifest_checksum=checksum, artifact_hash=stable_hash({"provider": artifact.artifact_hash, "composition": composition, "manifest": checksum}))
+                register_artifacts(
+                    directory,
+                    owner_type="deployment-manifest",
+                    owner_id=checksum.removeprefix("sha256:"),
+                    retention_class="configuration",
+                )
+            artifact = replace(
+                artifact,
+                manifest_ref=str(reference if reference.is_dir() else path),
+                manifest_checksum=checksum,
+                artifact_hash=stable_hash(
+                    {"provider": artifact.artifact_hash, "composition": composition, "manifest": checksum}
+                ),
+            )
         artifact = prepare_graceful_shutdown(artifact, self._output_root)
         reviewed = ((overrides.get("officialGuide") or {}).get("source") or {}).get("guide") == "source-composition"
         artifact = prepare_single_slice_disaggregated_set(artifact, self._output_root, exact=reviewed)
@@ -947,9 +973,7 @@ class ConfigurationManifestAdapter:
         return await self.stop(execution, artifact)
 
     async def cleanup(self, execution, artifact, *, force: bool = False):
-        if self._delegate is not None and (
-            not artifact.deployment_contract or self._uses_delegate_lifecycle(artifact)
-        ):
+        if self._delegate is not None and (not artifact.deployment_contract or self._uses_delegate_lifecycle(artifact)):
             return await self._delegate.cleanup(execution, artifact, force=force)
         namespace = self._namespace(execution)
         status, stdout, stderr = await self._runner(

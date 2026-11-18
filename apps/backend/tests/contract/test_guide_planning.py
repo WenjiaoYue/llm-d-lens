@@ -367,7 +367,7 @@ def test_plan_route_emits_validated_bundle_and_preserves_response(monkeypatch, t
     manifest_path = tmp_path / "model.yaml"
     source = deployment()
     if completion:
-        source['spec']['template']['spec']['containers'][0]['args'].append('--no-enable-prefix-caching')
+        source["spec"]["template"]["spec"]["containers"][0]["args"].append("--no-enable-prefix-caching")
     manifest_path.write_text(yaml.safe_dump(source))
     router_root = tmp_path / "guides/optimized-baseline/router"
     router_root.mkdir(parents=True)
@@ -421,11 +421,11 @@ def test_plan_route_emits_validated_bundle_and_preserves_response(monkeypatch, t
     assert result["validation"]["errors"] == []
     assert result["plannedDeployment"]["format"] == "yaml"
     if completion:
-        assert result['optimizationDecisions'][0]['status'] == 'enabled'
-        assert '--enable-prefix-caching' in result['plannedDeployment']['content']
-        assert '--no-enable-prefix-caching' not in result['plannedDeployment']['content']
+        assert result["optimizationDecisions"][0]["status"] == "enabled"
+        assert "--enable-prefix-caching" in result["plannedDeployment"]["content"]
+        assert "--no-enable-prefix-caching" not in result["plannedDeployment"]["content"]
     else:
-        assert result['optimizationDecisions'] == []
+        assert result["optimizationDecisions"] == []
     assert "total;dur=" in response.headers["server-timing"]
     validate_deployment_bundle(result["deploymentBundle"], "optimized-baseline", result["source"]["commit"])
     if kubernetes_mode == "disabled" and not completion:

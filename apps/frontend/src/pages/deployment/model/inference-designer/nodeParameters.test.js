@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import yaml from 'js-yaml';
 import { nodeSourceFields, nodeRouterFields } from './nodeParameters.js';
 import { routerParameterDocument, changeRouterParameter } from './routerParameters.js';
-import { deploymentGuideEntries } from './guideAdapters.js';
 
 test('node engine fields preserve flag syntax and omit model and unrelated controls', () => {
     const docs = [{kind:'Deployment', spec:{template:{spec:{containers:[{name:'engine',args:['--model=org/model','--tensor-parallel-size=2','--max-num-seqs','64','--speculative-config={"num_speculative_tokens":3}','--enable-prefix-caching'],env:[{name:'HF_TOKEN',value:'private'}]}]}}}}];
@@ -27,10 +26,17 @@ test('router scope follows plugin ownership rather than the source filename', ()
     assert.equal(changed.leaves.find(f=>f.path.at(-1)==='cacheWeight').value,2);
     assert.equal(changed.leaves.find(f=>f.path.at(-1)==='ttftWeight').value,3);
 });
-test('Guide picker excludes categories and aliases while preserving executable recipe IDs', () => {
-    const recipe=id=>({id,title:'Source title',disposition:{kind:'recipe'},steps:{deploy:{default:[]}}});
-    const catalog={guides:[recipe('optimized-baseline'),{...recipe('category'),disposition:{kind:'category'}},{...recipe('alias'),disposition:{kind:'alias'}},{id:'runtime-inventory',disposition:{kind:'recipe'}}],assets:[{guide:'runtime-inventory',kind:'chart'}]};
-    assert.deepEqual(deploymentGuideEntries(catalog).map(g=>g.id),['optimized-baseline','runtime-inventory']);
+test('source plugin edits preserve all other plugins, profiles and embedded YAML', () => {
+    const plugins = { plugins: [{ type: 'first', parameters: { count: 5, enabled: true } }, { type: 'second', parameters: { count: 9 } }], schedulingProfiles: [{ name: 'default', plugins: [{ pluginRef: 'first', weight: 1 }] }] };
+    const text = yaml.dump({ router: { epp: { pluginsConfigFile: 'plugins.yaml', pluginsCustomConfig: { 'plugins.yaml': yaml.dump(plugins) } } } });
+    const leaf = routerParameterDocument(text).leaves.find(item => item.key.endsWith('plugins.0.parameters.count'));
+    const edited = changeRouterParameter(text, leaf, '12');
+    const parsed = yaml.load(yaml.load(edited).router.epp.pluginsCustomConfig['plugins.yaml']);
+    assert.equal(parsed.plugins[0].parameters.count, 12);
+    assert.deepEqual(parsed.plugins[1], plugins.plugins[1]);
+    assert.deepEqual(parsed.schedulingProfiles, plugins.schedulingProfiles);
+    assert.throws(() => changeRouterParameter(text, leaf, ''), /finite/);
+    assert.throws(() => routerParameterDocument('router: { __proto__: { x: 1 } }'), /Unsafe/);
 });
 
 

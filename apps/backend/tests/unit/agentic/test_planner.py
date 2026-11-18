@@ -642,10 +642,13 @@ def test_planner_selects_the_smallest_feasible_standard_vllm_topology():
     assert decision.candidate_id == "optimized-baseline-tp1-r1"
 
 
-@pytest.mark.parametrize("result", [
-    '{"prefixReuse": true, "prefillHeavy": null}',
-    '{"prefixReuse": null, "prefillHeavy": false}',
-])
+@pytest.mark.parametrize(
+    "result",
+    [
+        '{"prefixReuse": true, "prefillHeavy": null}',
+        '{"prefixReuse": null, "prefillHeavy": false}',
+    ],
+)
 def test_goal_interpretation_preserves_explicit_traits_and_unknowns(monkeypatch, result):
     class Client:
         async def complete(self, **kwargs):
@@ -658,12 +661,15 @@ def test_goal_interpretation_preserves_explicit_traits_and_unknowns(monkeypatch,
     assert asyncio.run(planner.interpret_workload("The user goal")) == json.loads(result)
 
 
-@pytest.mark.parametrize("result", [
-    '{"prefixReuse": "yes", "prefillHeavy": false}',
-    '{"prefixReuse": 1, "prefillHeavy": false}',
-    '{"prefixReuse": true, "prefillHeavy": null, "maxAccelerators": 100}',
-    'not JSON',
-])
+@pytest.mark.parametrize(
+    "result",
+    [
+        '{"prefixReuse": "yes", "prefillHeavy": false}',
+        '{"prefixReuse": 1, "prefillHeavy": false}',
+        '{"prefixReuse": true, "prefillHeavy": null, "maxAccelerators": 100}',
+        "not JSON",
+    ],
+)
 def test_goal_interpretation_rejects_unvalidated_facts(monkeypatch, result):
     class Client:
         async def complete(self, **_kwargs):
@@ -1009,9 +1015,7 @@ def test_concurrency_target_sizes_serving_replicas():
     planner = DeterministicPlanner()
     common = {"model_weight_gib": 8, "vram_per_gpu_gib": 32, "free_gpu_count": 8, "max_num_seqs": 8}
     target = 8 * 2 + 1
-    facts = PlanningFacts(
-        **common, objective="throughput", workload_profile=WorkloadProfile(concurrency=target)
-    )
+    facts = PlanningFacts(**common, objective="throughput", workload_profile=WorkloadProfile(concurrency=target))
     candidates = planner.candidates(facts)
     assert any(item.id == "optimized-baseline-tp1-r3" for item in candidates)
 
@@ -2489,8 +2493,11 @@ def test_from_provider_id_returns_none_when_the_provider_no_longer_exists(monkey
 
 def test_ttft_prediction_cannot_establish_an_unmeasured_end_to_end_slo():
     facts = PlanningFacts(
-        model_weight_gib=8, vram_per_gpu_gib=32, free_gpu_count=4,
-        ttft_slo_ms=100, end_to_end_latency_slo_ms=2000,
+        model_weight_gib=8,
+        vram_per_gpu_gib=32,
+        free_gpu_count=4,
+        ttft_slo_ms=100,
+        end_to_end_latency_slo_ms=2000,
         aic_predictions=(AICCandidatePrediction(mode="agg", tensor_parallel_size=1, replicas=1, ttft_ms=20),),
     )
     planner = DeterministicPlanner()

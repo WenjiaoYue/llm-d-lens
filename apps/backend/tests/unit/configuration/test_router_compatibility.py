@@ -39,17 +39,27 @@ def _values():
 
 
 def _affinity_source():
-    return {"router": {"epp": {
-        "pluginsConfigFile": "affinity.yaml",
-        "pluginsCustomConfig": {"affinity.yaml": yaml.safe_dump({
-            "plugins": [
-                {"type": "approx-prefix-cache-producer"},
-                {"type": "inflight-load-producer"},
-                {"type": "prefix-cache-affinity-filter", "parameters": {"peakPrefillThroughput": 100}},
-            ],
-            "schedulingProfiles": [{"name": "default", "plugins": [{"pluginRef": "prefix-cache-affinity-filter"}]}],
-        })},
-    }}}
+    return {
+        "router": {
+            "epp": {
+                "pluginsConfigFile": "affinity.yaml",
+                "pluginsCustomConfig": {
+                    "affinity.yaml": yaml.safe_dump(
+                        {
+                            "plugins": [
+                                {"type": "approx-prefix-cache-producer"},
+                                {"type": "inflight-load-producer"},
+                                {"type": "prefix-cache-affinity-filter", "parameters": {"peakPrefillThroughput": 100}},
+                            ],
+                            "schedulingProfiles": [
+                                {"name": "default", "plugins": [{"pluginRef": "prefix-cache-affinity-filter"}]}
+                            ],
+                        }
+                    )
+                },
+            }
+        }
+    }
 
 
 def test_affinity_composes_with_pd_without_replacing_transport_or_decode():
@@ -60,9 +70,12 @@ def test_affinity_composes_with_pd_without_replacing_transport_or_decode():
     config = yaml.safe_load(result["router"]["epp"]["pluginsCustomConfig"]["pd.yaml"])
     assert original == before
     assert donor == source_before
-    assert config["plugins"][:4] == yaml.safe_load(original["router"]["epp"]["pluginsCustomConfig"]["pd.yaml"])["plugins"]
+    assert (
+        config["plugins"][:4] == yaml.safe_load(original["router"]["epp"]["pluginsCustomConfig"]["pd.yaml"])["plugins"]
+    )
     assert config["schedulingProfiles"][0]["plugins"] == [
-        {"pluginRef": "prefill-filter"}, {"pluginRef": "prefix-cache-affinity-filter"},
+        {"pluginRef": "prefill-filter"},
+        {"pluginRef": "prefix-cache-affinity-filter"},
     ]
     assert compose_prefix_routing(result, donor, True) == result
     disabled = compose_prefix_routing(result, None, False)

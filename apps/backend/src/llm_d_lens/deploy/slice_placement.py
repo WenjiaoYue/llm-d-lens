@@ -215,17 +215,25 @@ def apply_layout(parsed: list[dict], layout: dict[str, Any], *, split: int = 1) 
                 )
                 if layout["placementPolicy"]["type"] != "None" and EXCLUSIVE_TOPOLOGY_ANNOTATION in annotations:
                     raise GuideError("Slice placement cannot be combined with the LWS exclusive-topology annotation.")
-                if (isinstance(template, dict) and layout.get("eligibleDomains")
-                    and layout["placementPolicy"].get("topology")):
-                    required = template.setdefault("spec", {}).setdefault("affinity", {}).setdefault(
-                        "nodeAffinity", {}
-                    ).setdefault("requiredDuringSchedulingIgnoredDuringExecution", {"nodeSelectorTerms": [{}]})
+                if (
+                    isinstance(template, dict)
+                    and layout.get("eligibleDomains")
+                    and layout["placementPolicy"].get("topology")
+                ):
+                    required = (
+                        template.setdefault("spec", {})
+                        .setdefault("affinity", {})
+                        .setdefault("nodeAffinity", {})
+                        .setdefault("requiredDuringSchedulingIgnoredDuringExecution", {"nodeSelectorTerms": [{}]})
+                    )
                     for term in required["nodeSelectorTerms"]:
-                        term.setdefault("matchExpressions", []).append({
-                            "key": layout["placementPolicy"]["topology"],
-                            "operator": "In",
-                            "values": list(layout["eligibleDomains"]),
-                        })
+                        term.setdefault("matchExpressions", []).append(
+                            {
+                                "key": layout["placementPolicy"]["topology"],
+                                "operator": "In",
+                                "values": list(layout["eligibleDomains"]),
+                            }
+                        )
             annotations = (role.get("metadata") or {}).get("annotations") or {}
             if layout["placementPolicy"]["type"] != "None" and EXCLUSIVE_TOPOLOGY_ANNOTATION in annotations:
                 raise GuideError("Slice placement cannot be combined with the LWS exclusive-topology annotation.")

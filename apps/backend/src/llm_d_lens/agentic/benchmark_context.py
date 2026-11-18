@@ -201,7 +201,10 @@ def configuration_snapshot(run: dict) -> tuple[DeployableConfiguration, Candidat
                 if role in roles:
                     raise ValueError("Source evidence requires one model workload per role")
                 tp = vllm_argument_value(container, {"--tensor-parallel-size"}, workload["name"])
-                roles[role] = {"tensorParallelSize": int(tp) if tp is not None else 1, "replicaCount": workload["replicas"]}
+                roles[role] = {
+                    "tensorParallelSize": int(tp) if tp is not None else 1,
+                    "replicaCount": workload["replicas"],
+                }
         decode, prefill = roles.get("decode", {}), roles.get("prefill", {})
     candidate = CandidateConfiguration.model_validate(
         {
@@ -210,8 +213,17 @@ def configuration_snapshot(run: dict) -> tuple[DeployableConfiguration, Candidat
             "decode_replicas": decode.get("replicaCount"),
             "prefill_tp": prefill.get("tensorParallelSize"),
             "prefill_replicas": prefill.get("replicaCount"),
-            "optimizations": tuple(filter(None, [content.get("guideVariant"),
-                f"native-cpu-cache:{content['guideComposition']['nativeCpuCacheGiB']:g}GiB" if content.get('guideComposition') else None])),
+            "optimizations": tuple(
+                filter(
+                    None,
+                    [
+                        content.get("guideVariant"),
+                        f"native-cpu-cache:{content['guideComposition']['nativeCpuCacheGiB']:g}GiB"
+                        if content.get("guideComposition")
+                        else None,
+                    ],
+                )
+            ),
         },
         strict=True,
     )

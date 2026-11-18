@@ -388,7 +388,9 @@ def _validate_storage(
     if not storage_declared:
         return
     if source not in {"shared-path", "auto-cache", "cached-readonly"}:
-        raise ValueError("configuration storage requires runtime.modelSource shared-path, auto-cache or cached-readonly")
+        raise ValueError(
+            "configuration storage requires runtime.modelSource shared-path, auto-cache or cached-readonly"
+        )
     mounts = container.get("volumeMounts") or []
     pod = pod or (((deployment.get("spec") or {}).get("template") or {}).get("spec") or {})
     volumes = pod.get("volumes") or []

@@ -5,10 +5,13 @@ import { DEFAULT_REQUIREMENTS, OPTIMIZATION_CONTROLS } from '../api/agenticDeplo
 import { optimizationChoiceState } from '../model/deploymentPlan';
 import { OPTIMIZATION_OBJECTIVES } from '../model/inference-designer/optimizationPolicy';
 
+// Offload depends on the generated topology (not with P/D), so it is only decided and shown after generation.
+const PRE_PLAN_HIDDEN = new Set(['external_kv_cache']);
+
 /** Checked optimizations are attempted; unchecked ones become forbidden features. */
 export function OptimizationChecklist({ choices = [], forbidden = [], onChange, disabled = false }) {
     const byId = new Map(choices.map(item => [item.capability_id, item]));
-    return <ul className="space-y-3" aria-label="Optimizations">{OPTIMIZATION_CONTROLS.map(([id, label]) => {
+    return <ul className="space-y-3" aria-label="Optimizations">{OPTIMIZATION_CONTROLS.filter(([id]) => !PRE_PLAN_HIDDEN.has(id)).map(([id, label]) => {
         const checked = !forbidden.includes(id);
         const choice = byId.get(id);
         const state = optimizationChoiceState(choice?.checked === checked ? choice : null, checked);

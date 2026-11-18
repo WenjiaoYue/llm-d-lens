@@ -86,37 +86,3 @@ export function applyRouterCapabilities(content, overrides = {}, defaults = []) 
     }
     return yaml.dump(values, { noRefs: true, lineWidth: -1 });
 }
-
-/** Reject unsupported switches instead of emitting a bundle that ignores user intent. */
-export function assertRenderedCapabilities(documents, overrides = {}) {
-    const containers = [], configs = [];
-    const visit = value => {
-        if (!value || typeof value !== 'object') return;
-        if (Array.isArray(value.containers)) containers.push(...value.containers);
-        if (value.kind === 'ConfigMap') for (const content of Object.values(value.data || {})) {
-            try { const config = yaml.load(content, { schema: yaml.JSON_SCHEMA }); if (config?.kind === 'EndpointPickerConfig') configs.push(config); } catch { /* Other ConfigMap formats do not define EPP policies. */ }
-        }
-        for (const child of Object.values(value)) visit(child);
-    };
-    visit(documents);
-    for (const [id, flag] of [['prefix', 'prefix-caching'], ['chunked', 'chunked-prefill']]) {
-        if (!Object.hasOwn(overrides, id)) continue;
-        const engines = containers.filter(container => /vllm/i.test([container.name, container.image, ...(container.command || []), ...(container.args || [])].join(' ')) && !/sidecar|router|proxy/.test(container.name || ''));
-        const expected = `--${overrides[id] ? '' : 'no-'}enable-${flag}`;
-        if (!engines.length || engines.some(container => !container.args?.includes(expected))) throw new Error(`${id}: this runtime has no supported independent switch. Select a compatible direct-argument vLLM source before generation.`);
-    }
-    for (const [id, type] of [['affinity', 'prefix-cache-affinity-filter'], ['load-routing', 'token-load-scorer']]) {
-        if (!Object.hasOwn(overrides, id)) continue;
-        const present = configs.some(config => config.plugins?.some(plugin => plugin.type === type));
-        if (present !== overrides[id]) throw new Error(`${id}: the rendered EPP configuration does not match the selected optimization. Choose a compatible routing source.`);
-    }
-    const owners = new Set();
-    for (const doc of documents) {
-        if (!['ScaledObject', 'HorizontalPodAutoscaler'].includes(doc.kind)) continue;
-        const target = doc.spec?.scaleTargetRef;
-        if (!target?.name) continue;
-        const key = `${doc.metadata?.namespace || ''}/${target.kind || 'Deployment'}/${target.name}`;
-        if (owners.has(key)) throw new Error(`Multiple autoscaling controllers target ${key}. Choose one strategy for that workload.`);
-        owners.add(key);
-    }
-}

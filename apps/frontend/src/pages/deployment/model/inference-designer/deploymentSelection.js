@@ -1,4 +1,3 @@
-import { createBlueprint } from './blueprint.js';
 import { sourceRoutingCapabilities } from './capabilityRendering.js';
 import { expandCapabilityIntent } from './capabilityIntent.js';
 import { nodeResourceKinds } from './nodeParameters.js';
@@ -84,13 +83,4 @@ export function selectionConflicts(catalog, draft, patch = {}) {
         mode: next.sourceRouter?.mode, accelerator: next.accelerator,
         units: next.sourceUnits, routerValues: next.sourceRouter?.values, finalConfiguration: next.finalConfiguration,
     }).errors.filter(message => /^(Competing serving topologies:|Conflicting router releases:|Mutually exclusive source variants:)/.test(message));
-}
-
-/** Reset configuration while retaining the selected target and its pinned source inventory. */
-export function resetDeploymentConfiguration(draft) {
-    return { ...createBlueprint(), ...Object.fromEntries(
-        ['clusterId', 'profileId', 'model', 'modelCacheEntryId', 'storageVolumeId', 'sourceCommit', 'sourceGuides', 'sourceNamespace', 'deploymentIntent']
-            .filter(key => Object.hasOwn(draft, key)).map(key => [key, draft[key]])),
-        sourceMode: true, selectedGuides: [], capabilityOverrides: {}, guideChoices: {},
-    };
 }

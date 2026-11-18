@@ -91,19 +91,25 @@ def test_automatic_slice_limits_first_pod_to_domains_with_capacity():
     assert layout["eligibleDomains"] == ["large"]
     parsed = [disaggregated_set(tp=2)]
     template = parsed[0]["spec"]["roles"][0]["spec"]["leaderWorkerTemplate"]["workerTemplate"]
-    template["spec"]["affinity"] = {"nodeAffinity": {"requiredDuringSchedulingIgnoredDuringExecution": {
-        "nodeSelectorTerms": [
-            {"matchExpressions": [{"key": "pool", "operator": "In", "values": ["serving"]}]},
-            {"matchFields": [{"key": "metadata.name", "operator": "In", "values": ["large"]}]},
-        ],
-    }}}
+    template["spec"]["affinity"] = {
+        "nodeAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                    {"matchExpressions": [{"key": "pool", "operator": "In", "values": ["serving"]}]},
+                    {"matchFields": [{"key": "metadata.name", "operator": "In", "values": ["large"]}]},
+                ],
+            }
+        }
+    }
     slice_placement.apply_layout(parsed, layout)
     expected = {"key": slice_placement.HOSTNAME, "operator": "In", "values": ["large"]}
     for role in parsed[0]["spec"]["roles"]:
         spec = role["spec"]["leaderWorkerTemplate"]["workerTemplate"]["spec"]
         terms = spec["affinity"]["nodeAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"]["nodeSelectorTerms"]
         assert all(expected in term["matchExpressions"] for term in terms)
-    terms = template["spec"]["affinity"]["nodeAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"]["nodeSelectorTerms"]
+    terms = template["spec"]["affinity"]["nodeAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"][
+        "nodeSelectorTerms"
+    ]
     assert terms[0]["matchExpressions"][0]["key"] == "pool"
     assert terms[1]["matchFields"][0]["values"] == ["large"]
 

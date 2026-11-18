@@ -4,23 +4,15 @@ import yaml from 'js-yaml';
 import { expandCapabilityIntent, supportedVariantValues } from './capabilityIntent.js';
 import { officialGuideIndex } from './officialGuides.js';
 import { applyEngineCapabilities, applyRouterCapabilities } from './capabilityRendering.js';
-import { capabilitySources } from './capabilitySources.js';
-import { compositionOptions } from './compositionPolicy.js';
 
 const guide = (id, variables = {}) => ({ id, title: id, variables, disposition: { kind: 'recipe' }, steps: { deploy: { main: [] } } });
 const catalog = { guides: [guide('optimized-baseline'), guide('tiered-prefix-cache', { CONNECTOR: { default: 'native', values: ['native', 'lmcache-connector'] }, VARIANT: { default: 'cpu', values: ['cpu', 'fs'] } }), guide('predicted-latency-routing')], assets: [] };
-test('automatic callers use the same catalog without offering unsupported or deprecated switches', () => {
+test('automatic callers reject recipe-only and adapter-less switches', () => {
     const source = { guides: [
         guide('fast-model-actuation'), guide('turn-priority-fairness'), guide('hyperconverged-cephfs'),
         { ...guide('workload-autoscaling/wva'), instructions: '# WVA\nDeprecated. Use KEDA.' },
         { ...guide('rl'), disposition: { kind: 'external' } },
     ], assets: [] };
-    const options = compositionOptions(source);
-    assert.equal(options.find(item => item.id === 'actuation').guide, 'fast-model-actuation');
-    assert.ok(options.some(item => item.id === 'turn-priority'));
-    for (const id of ['shared-cache', 'context-parallel', 'guide:rl', 'guide:workload-autoscaling/wva']) {
-        assert.ok(!options.some(item => item.id === id), id);
-    }
     assert.throws(() => expandCapabilityIntent(source, [], { capabilities: { 'context-parallel': true } }), /selected recipe/);
     assert.ok(expandCapabilityIntent(source, [], { capabilities: { 'shared-cache': true } }).errors.some(error => error.includes('no complete YAML adapter')));
 });
@@ -69,20 +61,6 @@ test('router deselection removes only its plugin and references, keeping shared 
     assert.deepEqual(result.plugins.map(plugin => plugin.type), ['approx-prefix-cache-producer', 'token-load-scorer']);
     assert.deepEqual(result.schedulingProfiles[0].plugins, [{ pluginRef: 'token-load-scorer' }]);
     assert.throws(() => applyRouterCapabilities(source, { affinity: false, 'load-routing': false }), /no scheduling policy/);
-});
-test('capability links pin the actual file and explanation line to the selected revision', () => {
-    const source = { commit: 'a'.repeat(40), guides: [{ ...guide('optimized-baseline'), instructions: '# Baseline\n\n## Prefix cache affinity\nDetails' }], assets: [{ path: 'guides/optimized-baseline/router/values.yaml', file: 'guides/optimized-baseline/router/values.yaml', guide: 'optimized-baseline', content: 'router:\n  prefix-cache-affinity-filter: {}' }] };
-    const links = capabilitySources({ id: 'affinity', guide: 'optimized-baseline', kind: 'capability' }, source, { sourceRouter: { values: [{ path: source.assets[0].path }] } });
-    assert.ok(links.some(link => link.href.endsWith('README.md#L3')));
-    assert.ok(links.some(link => link.href.endsWith('values.yaml#L2')));
-    assert.ok(links.every(link => link.href.includes(source.commit)));
-});
-
-test('render validation rejects silently ignored engine switches and competing scaling controllers', async () => {
-    const { assertRenderedCapabilities } = await import('./capabilityRendering.js');
-    assert.throws(() => assertRenderedCapabilities([], { prefix: true }), /no supported independent switch/);
-    const target = { name: 'worker', kind: 'Deployment' };
-    assert.throws(() => assertRenderedCapabilities([{ kind: 'ScaledObject', metadata: { namespace: 'models' }, spec: { scaleTargetRef: target } }, { kind: 'HorizontalPodAutoscaler', metadata: { namespace: 'models' }, spec: { scaleTargetRef: target } }]), /Multiple autoscaling controllers/);
 });
 
 test('literal shell launch retains quoted connector JSON and rejects shell expressions', () => {

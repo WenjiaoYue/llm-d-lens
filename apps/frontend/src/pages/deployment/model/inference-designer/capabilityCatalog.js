@@ -1,10 +1,6 @@
-import { OPTIMIZATIONS } from '@repo/shared/inference/optimizations';
-
 /** Reviewed source snapshot; deployment provenance is resolved separately by the planner. */
-export const REFERENCE_SOURCE = { repository: 'llm-d/llm-d', commit: 'a9cf07a77a3016db21ae87134e5745b3a2d45ba6' };
+const REFERENCE_SOURCE = { repository: 'llm-d/llm-d', commit: 'a9cf07a77a3016db21ae87134e5745b3a2d45ba6' };
 const source = path => `https://github.com/${REFERENCE_SOURCE.repository}/blob/${REFERENCE_SOURCE.commit}/${path}`;
-export const referenceGuide = guide => source(`guides/${guide}/README.md`);
-export const CAPABILITIES = OPTIMIZATIONS.map(item => ({ ...item, source: item.guide ? referenceGuide(item.guide) : undefined }));
 const field = (key, label, group, type, output, hint, extra = {}) => ({ key, label, group, type, output, hint, ...extra });
 export const PARAMETER_FIELDS = [
     field('replicas', 'Serving / Decode replicas', 'workers', 'integer', 'workload.spec.replicas', 'Desired instances of the serving or Decode role.', { min: 1 }),

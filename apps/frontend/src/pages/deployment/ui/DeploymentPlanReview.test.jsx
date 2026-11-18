@@ -130,7 +130,8 @@ test('creation asks for business needs and lists default-on optimizations', asyn
     assert.doesNotMatch(html, /P95 E2E|Shared prompts|Long inputs with short answers/);
     assert.match(html, /resource limit constrains the topology/);
     assert.match(html, /Optimizations <span[^>]*>\/ all on/);
-    assert.equal((html.match(/type="checkbox"[^>]*checked=""/g) || []).length, 5);
+    assert.equal((html.match(/type="checkbox"[^>]*checked=""/g) || []).length, 4);
+    assert.doesNotMatch(html, /KV cache offload/);
     assert.doesNotMatch(html, /placeholder="Unknown"/);
     assert.doesNotMatch(html, /Deployment method|Optimize for|General chat|1024|256/);
 });

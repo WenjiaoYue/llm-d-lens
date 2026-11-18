@@ -1,8 +1,7 @@
 """Shared intent and decision-plan contracts for Manual and Agentic deployment."""
 
-from typing import Any, Literal
-
 import math
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -41,9 +40,7 @@ class DeploymentRequirements(BaseModel):
                 raise ValueError(f"{key} must be true, false or null.")
         for key in ("inputTokens", "p95InputTokens", "outputTokens", "concurrency", "requestRate"):
             value = self.workload.get(key)
-            if value is not None and (
-                isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0
-            ):
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0):
                 raise ValueError(f"{key} must be a positive number or null.")
         for key, value in self.performance_targets.items():
             if key not in {"ttftMs", "tpotMs", "e2eMs"}:
@@ -58,8 +55,15 @@ class OptimizationDecision(BaseModel):
     catalog_id: str | None = Field(default=None, description="Identity in the source-backed optimization catalog.")
     label: str
     status: Literal[
-        "enabled", "dependency", "excluded", "unknown", "conflict", "user_disabled",
-        "unsupported", "alternative", "resource_limited",
+        "enabled",
+        "dependency",
+        "excluded",
+        "unknown",
+        "conflict",
+        "user_disabled",
+        "unsupported",
+        "alternative",
+        "resource_limited",
     ]
     reason: str
     parameters: dict[str, Any] = Field(default_factory=dict)

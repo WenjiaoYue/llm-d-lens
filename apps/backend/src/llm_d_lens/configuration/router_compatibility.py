@@ -53,8 +53,11 @@ def compose_prefix_routing(values: dict, donor: dict | None, enabled: bool) -> d
                 raise ValueError("Prefix routing requires an ordered source scheduling profile.")
             if not any(p.get("pluginRef") == reference for p in plugins):
                 position = next(
-                    (i for i, p in enumerate(plugins)
-                     if "scorer" in p.get("pluginRef", "") or "picker" in p.get("pluginRef", "")),
+                    (
+                        i
+                        for i, p in enumerate(plugins)
+                        if "scorer" in p.get("pluginRef", "") or "picker" in p.get("pluginRef", "")
+                    ),
                     len(plugins),
                 )
                 plugins.insert(position, {"pluginRef": reference})

@@ -113,17 +113,6 @@ export function inferenceScene(draft, clusterName = '') {
     for (const edge of edges) edge.inPlan = edge.enabled !== false && (activeStages.has(edge.from) && activeStages.has(edge.to) || capabilities.some(cap => cap.enabled && cap.edge === edge.id));
     return { tiers: TIERS, nodes: nodes.map(node => ({ ...node, kind: 'module' })), edges, capabilities: capabilities.map(node => ({ ...node, kind: 'capability' })) };
 }
-/** Selection reveals only related placement edges, never a wall of infrastructure lines. */
-export function sceneRelations(graph, selected) {
-    const item = [...graph.nodes, ...graph.capabilities].find(node => node.id === selected);
-    const related = new Set(item ? [item.id] : []);
-    if (item?.owner) related.add(item.owner);
-    if (item?.edge) { const edge = graph.edges.find(edge => edge.id === item.edge); if (edge) { related.add(edge.from); related.add(edge.to); } }
-    const visible = graph.edges.filter(edge => edge.kind !== 'placement' || related.has(edge.from) || related.has(edge.to));
-    for (const edge of visible.filter(edge => edge.kind === 'placement')) { related.add(edge.from); related.add(edge.to); }
-    return { visibleEdges: visible, highlighted: related };
-}
-
 /** Project source-owned capabilities onto the request path, not extra request hops. */
 export function optimizationFlowPlan(graph, blocked = {}, canConfigure = () => true) {
     const split = graph.nodes.some(node => node.id === 'prefill-worker');
@@ -170,34 +159,6 @@ export function optimizationFlowPlan(graph, blocked = {}, canConfigure = () => t
     }
     return { nodes, edges: edges.filter((edge, index) => edges.findIndex(item => item.from === edge.from && item.to === edge.to) === index),
         optimization: true, serving: split ? 'Separate prefill / decode servers' : 'Prefill + decode share one server' };
-}
-
-/** Group the existing catalog for progressive disclosure; never drop catalog entries. */
-export function servingStageGroups(graph, blocked = {}, canConfigure = () => true) {
-    const split = graph.nodes.some(node => node.id === 'prefill-worker');
-    const groups = [
-        { id: 'routing', label: 'Endpoint selection', action: 'Select serving endpoints', members: ['routing', 'epp', 'index-service'], primary: true },
-        ...(split ? [
-            { id: 'prefill', label: 'Prefill', action: 'Process input tokens', members: ['prefill', 'prefill-worker'], primary: true },
-            { id: 'decode', label: 'Decode', action: 'Generate output tokens', members: ['decode', 'decode-worker'], primary: true },
-        ] : [{ id: 'serving-worker', label: 'Prefill + Decode', action: 'Process input and generate tokens', members: ['serving-worker', 'prefill', 'decode'], primary: true }]),
-        { id: 'request', label: 'Request processing', action: 'API and input preparation', members: ['request', 'prepare'] },
-        { id: 'response', label: 'Response', action: 'Output and tracing', members: ['response'] },
-        { id: 'pods', label: 'Service & platform', action: 'Workloads and infrastructure', members: ['pods', 'workers', 'service', 'cluster'] },
-    ].map(group => ({ ...group, capabilities: [] }));
-    const projected = optimizationFlowPlan(graph, blocked, canConfigure);
-    for (const cap of graph.capabilities) {
-        const sharedKV = ['cache-plane', 'cpu-cache'].includes(cap.stage);
-        const owners = sharedKV || ['transfer', 'parallel'].includes(cap.id)
-            ? groups.filter(group => ['prefill', 'decode', 'serving-worker'].includes(group.id))
-            : groups.filter(group => group.members.includes(cap.stage) || group.members.includes(cap.owner));
-        // New source-defined capabilities remain accessible even without a known stage.
-        const targets = owners.length ? owners : [groups.find(group => group.id === 'pods')];
-        const entry = { ...cap, ...projected.nodes.find(node => node.id === cap.id), stages: targets.map(group => group.id) };
-        for (const group of targets) group.capabilities.push(entry);
-    }
-    for (const group of groups) group.capabilities.sort((a, b) => Number(b.enabled) - Number(a.enabled));
-    return groups;
 }
 
 /** Wrap before laying out SVG text, so labels and cards use the same dimensions. */

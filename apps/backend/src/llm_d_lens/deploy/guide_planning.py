@@ -14,8 +14,8 @@ import yaml
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from llm_d_lens.configuration.optimization_policy import resolve_optimization_policy
 from llm_d_lens.configuration.manifest_facts import _invocation_tokens, workload_roles
+from llm_d_lens.configuration.optimization_policy import resolve_optimization_policy
 from llm_d_lens.core.exceptions import DomainError
 from llm_d_lens.hardware.registry import all_profiles
 from llm_d_lens.hardware.resolver import resolve_by_accelerator_key, resolve_by_device_class, resolve_by_resource
@@ -968,7 +968,8 @@ async def source_response(operation):
 
 
 @router.get(
-    "/source-catalog", operation_id="get_deployment_source_catalog",
+    "/source-catalog",
+    operation_id="get_deployment_source_catalog",
     summary="Inspect the selected cluster's pinned Guide sources",
     description="Return Guide recipes, source units, parameters and the full optimization catalog for clusterId. "
     "Requires cluster access and a clean downloaded source revision. Does not run Guide scripts or deploy resources.",
@@ -984,7 +985,8 @@ async def source_catalog(request: Request, cluster_id: str = Query(alias="cluste
 
 
 @router.post(
-    "/source-preview", operation_id="preview_deployment_source",
+    "/source-preview",
+    operation_id="preview_deployment_source",
     summary="Render one pinned source component for parameter editing",
     description="Provide clusterId, commit and unit to render a selected resource, Kustomize component or chart. "
     "Return rendered documents and observed optimization flags without deploying. Reject a changed revision "
@@ -1007,14 +1009,16 @@ async def source_preview(request: Request, body: dict):
 
 
 @router.post(
-    "/compose", operation_id="compose_deployment_sources",
+    "/compose",
+    operation_id="compose_deployment_sources",
     summary="Compose selected Guide sources and edited parameters",
     description="Render 1-60 pinned source units and router values for an authorized cluster and ready model cache. "
     "Validate parameters, resource conflicts and current device limits; optionally run an admission dry-run. "
     "DRA sizing supports generated ExactCount ResourceClaimTemplates and one matching cluster hardware profile; "
     "external claims and ambiguous allocations are rejected. Device demand includes replicas and autoscaler ceilings. "
     "Automatic hard P/D slice placement restricts role Pods to capacity-fitting topology domains, reported in "
-    "sliceLayout.recommended.eligibleDomains; this does not reserve devices. Explicit placement policies are preserved. "
+    "sliceLayout.recommended.eligibleDomains; this does not reserve devices. "
+    "Explicit placement policies are preserved. "
     "Managed source deployment permits only Router ClusterRoles creating TokenReviews/SubjectAccessReviews and "
     "bindings to the deployment's EPP ServiceAccount; arbitrary cluster-scoped provisioning remains unsupported. "
     "Return deployment YAML, provenance and effective optimization evidence. Never deploy or mutate existing "
@@ -1159,7 +1163,9 @@ async def plan_resources(request: Request, body: dict):
             if body.get("modelServer") != "vllm" or (body.get("source") or {}).get("mode", "official") != "official":
                 raise GuideError("Guide composition requires a pinned official vLLM source.")
             donor_request = {
-                **body, "guide": "tiered-prefix-cache", "guideVariant": "native/cpu",
+                **body,
+                "guide": "tiered-prefix-cache",
+                "guideVariant": "native/cpu",
                 "source": {"mode": "official"},
             }
             try:
@@ -1171,11 +1177,28 @@ async def plan_resources(request: Request, body: dict):
             if donor["source"]["commit"] != manifest["source"]["commit"]:
                 raise GuideError("Composed Guides must come from the same source revision.")
             try:
-                planned["documents"] = compose_native_cpu_cache(planned["documents"], list(yaml.safe_load_all(donor["rendered"])), guide=guide, capacity_gib=composition["nativeCpuCacheGiB"])
+                planned["documents"] = compose_native_cpu_cache(
+                    planned["documents"],
+                    list(yaml.safe_load_all(donor["rendered"])),
+                    guide=guide,
+                    capacity_gib=composition["nativeCpuCacheGiB"],
+                )
             except (ValueError, TypeError) as error:
                 raise GuideError(str(error)) from error
             optimization_decisions = [item for item in optimization_decisions if item["id"] != "tiered-prefix-cache"]
-            optimization_decisions.append({"id": "tiered-prefix-cache", "label": "Native CPU KV cache", "status": "composed", "reason": f"Composed from the same source revision; {composition['nativeCpuCacheGiB']} GiB of additional host memory requested per model replica. Performance awaits measurement; NIXL P/D uses ordered transport and per-role local cache connectors, checked in the runtime image before startup."})
+            optimization_decisions.append(
+                {
+                    "id": "tiered-prefix-cache",
+                    "label": "Native CPU KV cache",
+                    "status": "composed",
+                    "reason": (
+                        f"Composed from the same source revision; {composition['nativeCpuCacheGiB']} GiB of "
+                        "additional host memory requested per model replica. Performance awaits measurement; "
+                        "NIXL P/D uses ordered transport and per-role local cache connectors, checked in the "
+                        "runtime image before startup."
+                    ),
+                }
+            )
         if accelerator != resolved:
             planned["validation"]["warnings"].append(
                 f'Guide accelerator variant corrected from "{accelerator}" to "{resolved}" '

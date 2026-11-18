@@ -10,8 +10,8 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from llm_d_lens.agentic.facts import PlanningEvidence, ResolvedPlanningFacts
 from llm_d_lens.agentic.configuration import planning_resource_request
+from llm_d_lens.agentic.facts import PlanningEvidence, ResolvedPlanningFacts
 from llm_d_lens.agentic.generator import CandidateProposal
 from llm_d_lens.agentic.historical_candidate_seeds import HistoricalCandidateSeed
 from llm_d_lens.agentic.models import (
@@ -243,13 +243,21 @@ def test_agentic_planning_requires_an_ai_provider(monkeypatch):
         asyncio.run(service.create(_request(planning_mode="agentic")))
 
 
-@pytest.mark.parametrize(("requirements", "available", "intended", "reason"), [
-    ({}, None, True, "On by default with at least two accelerators"),
-    ({"objective": "throughput"}, 1, False, "at least two accelerators"),
-    ({"workload": {"inputTokens": 8192, "outputTokens": 256}}, 4, True, "AIC compares P/D"),
-    ({"workload": {"aicPrefillDecode": False, "aicPrefillDecodeReason": "AIC predicts less."}}, 4, False, "AIC predicts"),
-    ({"workload": {"prefillHeavy": True}, "forbidden_features": ["pd_disaggregation"]}, 4, False, "Turned off"),
-])
+@pytest.mark.parametrize(
+    ("requirements", "available", "intended", "reason"),
+    [
+        ({}, None, True, "On by default with at least two accelerators"),
+        ({"objective": "throughput"}, 1, False, "at least two accelerators"),
+        ({"workload": {"inputTokens": 8192, "outputTokens": 256}}, 4, True, "AIC compares P/D"),
+        (
+            {"workload": {"aicPrefillDecode": False, "aicPrefillDecodeReason": "AIC predicts less."}},
+            4,
+            False,
+            "AIC predicts",
+        ),
+        ({"workload": {"prefillHeavy": True}, "forbidden_features": ["pd_disaggregation"]}, 4, False, "Turned off"),
+    ],
+)
 def test_optimization_preview_reports_checked_state_and_pd_auto(requirements, available, intended, reason):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -259,13 +267,21 @@ def test_optimization_preview_reports_checked_state_and_pd_auto(requirements, av
     app = FastAPI()
     app.include_router(router.router)
     with TestClient(app) as client:
-        response = client.post("/api/agentic-deployments/optimizations/preview", json={
-            "requirements": {"model": "Qwen/Qwen3-8B", **requirements}, "available_accelerators": available,
-        })
+        response = client.post(
+            "/api/agentic-deployments/optimizations/preview",
+            json={
+                "requirements": {"model": "Qwen/Qwen3-8B", **requirements},
+                "available_accelerators": available,
+            },
+        )
     assert response.status_code == 200
     choices = {item["capability_id"]: item for item in response.json()}
     assert list(choices) == [
-        "prefix_routing", "prefix_cache", "chunked_prefill", "external_kv_cache", "pd_disaggregation",
+        "prefix_routing",
+        "prefix_cache",
+        "chunked_prefill",
+        "external_kv_cache",
+        "pd_disaggregation",
     ]
     pd = choices["pd_disaggregation"]
     assert pd["auto"] and pd["intended"] is intended and reason in pd["reason"]
@@ -290,7 +306,8 @@ def _shared_request(mode="manual", **requirements):
     return _request(
         planning_mode=mode,
         requirements={
-            "model": "Qwen/Qwen3-8B", "cluster_id": "cluster-a",
+            "model": "Qwen/Qwen3-8B",
+            "cluster_id": "cluster-a",
             "hard_constraints": {"maxAccelerators": 2},
             **requirements,
         },
@@ -313,14 +330,19 @@ class _FirstCandidateProvider:
         from llm_d_lens.agentic.planner import PlannerDecision
 
         return PlannerDecision(
-            action="select_candidate", candidate_id=candidates[0].id, confidence=0.5, rationale="First candidate.",
+            action="select_candidate",
+            candidate_id=candidates[0].id,
+            confidence=0.5,
+            rationale="First candidate.",
         ), candidates
 
 
 def test_manual_uses_live_candidates_without_calling_ai_and_preserves_unknowns(monkeypatch):
     service = _shared_service(monkeypatch)
+
     def unexpected_ai(*_args):
         pytest.fail("Manual must not initialize an external AI planner")
+
     monkeypatch.setattr(OpenAICompatiblePlanner, "from_provider_id", unexpected_ai)
     run = asyncio.run(service.create(_shared_request(forbidden_features=["pd_disaggregation"])))
     # With P/D turned off, prefix-aware routing on combined serving remains checked.
@@ -358,21 +380,34 @@ def test_manual_selects_applicable_mechanism_and_enforces_required_budget(monkey
     assert run.selected_candidate.provider_ref == "pd-disaggregation"
     assert set(run.configuration_plan.selected_capabilities) == {"pd_disaggregation", "prefix_routing"}
     with pytest.raises(ValueError, match="no deployable"):
-        asyncio.run(service.create(_shared_request(
-            hard_constraints={"maxAccelerators": 1}, workload={"prefillHeavy": True},
-            required_features=["pd_disaggregation"],
-        )))
-    forbidden = asyncio.run(service.create(_shared_request(
-        workload={"prefillHeavy": True}, forbidden_features=["pd_disaggregation"],
-    )))
+        asyncio.run(
+            service.create(
+                _shared_request(
+                    hard_constraints={"maxAccelerators": 1},
+                    workload={"prefillHeavy": True},
+                    required_features=["pd_disaggregation"],
+                )
+            )
+        )
+    forbidden = asyncio.run(
+        service.create(
+            _shared_request(
+                workload={"prefillHeavy": True},
+                forbidden_features=["pd_disaggregation"],
+            )
+        )
+    )
     assert all(item.provider_ref != "pd-disaggregation" for item in forbidden.candidates)
 
 
-@pytest.mark.parametrize("objective,provider", [
-    ("throughput", "pd-disaggregation"),
-    ("latency", "pd-disaggregation"),
-    ("cost", "pd-disaggregation"),
-])
+@pytest.mark.parametrize(
+    "objective,provider",
+    [
+        ("throughput", "pd-disaggregation"),
+        ("latency", "pd-disaggregation"),
+        ("cost", "pd-disaggregation"),
+    ],
+)
 def test_manual_compares_combinations_with_explicit_objective_and_bounded_cache(monkeypatch, objective, provider):
     service = _shared_service(monkeypatch)
 
@@ -395,7 +430,10 @@ def test_manual_compares_combinations_with_explicit_objective_and_bounded_cache(
             assert candidate.performance_estimate is None
             assert candidate.slo_status == "unknown"
     assert run.configuration_plan.resource_estimate["cpu_cache_gib"] <= 8
-    assert next(item for item in run.configuration_plan.decisions if item.capability_id == "external_kv_cache").status == "unknown"
+    assert (
+        next(item for item in run.configuration_plan.decisions if item.capability_id == "external_kv_cache").status
+        == "unknown"
+    )
     assert f"the {objective} preference chooses the topology" in run.decision.rationale
     assert run.request.max_num_seqs == request.max_num_seqs
     body = planning_resource_request(run)
@@ -404,9 +442,14 @@ def test_manual_compares_combinations_with_explicit_objective_and_bounded_cache(
 
 def test_manual_does_not_confuse_workload_benefit_with_compatibility(monkeypatch):
     service = _shared_service(monkeypatch)
-    run = asyncio.run(service.create(_shared_request(
-        workload={"prefillHeavy": False}, forbidden_features=["external_kv_cache"],
-    )))
+    run = asyncio.run(
+        service.create(
+            _shared_request(
+                workload={"prefillHeavy": False},
+                forbidden_features=["external_kv_cache"],
+            )
+        )
+    )
     decisions = {item.capability_id: item for item in run.configuration_plan.decisions}
     assert decisions["pd_disaggregation"].status == "excluded"
     assert "not prefill-heavy" in decisions["pd_disaggregation"].reason
@@ -419,9 +462,13 @@ def test_manual_does_not_confuse_workload_benefit_with_compatibility(monkeypatch
 
 def test_pd_and_prefix_routing_are_independent_composable_capabilities(monkeypatch):
     service = _shared_service(monkeypatch)
-    run = asyncio.run(service.create(_shared_request(
-        workload={"prefillHeavy": True, "prefixReuse": True},
-    )))
+    run = asyncio.run(
+        service.create(
+            _shared_request(
+                workload={"prefillHeavy": True, "prefixReuse": True},
+            )
+        )
+    )
     decisions = {item.capability_id: item for item in run.configuration_plan.decisions}
     assert decisions["prefix_routing"].status == decisions["pd_disaggregation"].status == "enabled"
     assert planning_resource_request(run)["prefixRouting"] is True
@@ -439,9 +486,13 @@ def test_manual_keeps_capability_families_even_with_a_small_candidate_display_li
 
 def test_explicit_request_lengths_can_establish_workload_shape_without_a_preset(monkeypatch):
     service = _shared_service(monkeypatch)
-    run = asyncio.run(service.create(_shared_request(
-        workload={"inputTokens": 8192, "outputTokens": 256},
-    )))
+    run = asyncio.run(
+        service.create(
+            _shared_request(
+                workload={"inputTokens": 8192, "outputTokens": 256},
+            )
+        )
+    )
     assert run.selected_candidate.provider_ref == "pd-disaggregation"
     assert run.request.requirements.workload.get("prefillHeavy") is None
 
@@ -469,12 +520,17 @@ def test_agentic_goal_fills_unknown_traits_but_preserves_explicit_requirements(m
     monkeypatch.setattr(provider, "recommend", recommend)
     monkeypatch.setattr(service, "_generate_candidates", generate_locally)
     request = _shared_request(mode="agentic", workload={"prefixReuse": False})
-    request = request.model_copy(update={
-        "ai_provider_id": "test-provider", "planner_prompt": "Repeated long documents with short answers",
-    })
+    request = request.model_copy(
+        update={
+            "ai_provider_id": "test-provider",
+            "planner_prompt": "Repeated long documents with short answers",
+        }
+    )
     run = asyncio.run(service.create(request))
     assert run.request.requirements.workload == {
-        "prefixReuse": False, "prefillHeavy": True, "interpretationSource": "ai_goal",
+        "prefixReuse": False,
+        "prefillHeavy": True,
+        "interpretationSource": "ai_goal",
     }
     assert run.request.requirements.hard_constraints == {"maxAccelerators": 2}
     assert all(item.provider_ref != "precise-prefix-cache-routing" for item in run.candidates)
@@ -482,9 +538,14 @@ def test_agentic_goal_fills_unknown_traits_but_preserves_explicit_requirements(m
 
 def test_disabled_engine_cache_excludes_dependent_optimizations(monkeypatch):
     service = _shared_service(monkeypatch)
-    run = asyncio.run(service.create(_shared_request(
-        workload={"prefixReuse": True}, forbidden_features=["prefix_cache"],
-    )))
+    run = asyncio.run(
+        service.create(
+            _shared_request(
+                workload={"prefixReuse": True},
+                forbidden_features=["prefix_cache"],
+            )
+        )
+    )
     assert all(not item.prefix_routing and not item.native_cpu_cache_gib for item in run.candidates)
     assert all(item.provider_ref != "precise-prefix-cache-routing" for item in run.candidates)
     assert planning_resource_request(run)["optimizationPolicy"]["excluded"] == ["prefix"]
@@ -500,10 +561,15 @@ def test_agentic_uses_the_same_composition_space_without_claiming_baseline_measu
 
     monkeypatch.setattr("llm_d_lens.agentic.service.resolve_planning_facts", resolve)
     monkeypatch.setattr(OpenAICompatiblePlanner, "from_provider_id", lambda _id: _FirstCandidateProvider())
-    run = asyncio.run(service.create(_shared_request(
-        mode="agentic", workload={"prefillHeavy": True, "prefixReuse": True},
-        required_features=["pd_disaggregation", "external_kv_cache"],
-    )))
+    run = asyncio.run(
+        service.create(
+            _shared_request(
+                mode="agentic",
+                workload={"prefillHeavy": True, "prefixReuse": True},
+                required_features=["pd_disaggregation", "external_kv_cache"],
+            )
+        )
+    )
     assert run.selected_candidate.native_cpu_cache_gib == 8
     assert all(item.native_cpu_cache_gib and item.provider_ref == "pd-disaggregation" for item in run.candidates)
 
@@ -517,10 +583,14 @@ def test_manual_required_cache_can_compose_with_pd_without_maximizing_parameters
         return resolved
 
     monkeypatch.setattr("llm_d_lens.agentic.service.resolve_planning_facts", resolve)
-    run = asyncio.run(service.create(_shared_request(
-        workload={"prefillHeavy": True, "prefixReuse": True},
-        required_features=["pd_disaggregation", "external_kv_cache"],
-    )))
+    run = asyncio.run(
+        service.create(
+            _shared_request(
+                workload={"prefillHeavy": True, "prefixReuse": True},
+                required_features=["pd_disaggregation", "external_kv_cache"],
+            )
+        )
+    )
     assert run.selected_candidate.provider_ref == "pd-disaggregation"
     assert run.selected_candidate.replicas == 1
     assert run.selected_candidate.tensor_parallel_size == 1
@@ -530,6 +600,7 @@ def test_manual_required_cache_can_compose_with_pd_without_maximizing_parameters
 
 def test_manual_throughput_without_shape_combines_pd_routing_and_cache_with_live_resources(monkeypatch):
     from llm_d_lens.agentic.models import AgenticCandidateSelectionRequest
+
     service = _shared_service(monkeypatch)
 
     async def resolve(*_args, **_kwargs):
@@ -547,17 +618,29 @@ def test_manual_throughput_without_shape_combines_pd_routing_and_cache_with_live
     assert request["prefixRouting"] is True
     assert request["guideComposition"] == {"nativeCpuCacheGiB": 8}
     assert request["optimizationPolicy"]["required"] == ["prefix"]
-    revised = asyncio.run(service.revise_candidate(run.id, AgenticCandidateSelectionRequest(
-        candidate_id=run.selected_candidate.id, native_cpu_cache_gib=4,
-    )))
+    revised = asyncio.run(
+        service.revise_candidate(
+            run.id,
+            AgenticCandidateSelectionRequest(
+                candidate_id=run.selected_candidate.id,
+                native_cpu_cache_gib=4,
+            ),
+        )
+    )
     assert revised.selected_candidate.native_cpu_cache_gib == 4
     assert revised.selected_candidate.prefix_routing is True
     assert revised.selected_candidate.prefill_replicas == 1
     assert run.selected_candidate.native_cpu_cache_gib == 8
     with pytest.raises(ValueError, match="host memory"):
-        asyncio.run(service.revise_candidate(run.id, AgenticCandidateSelectionRequest(
-            candidate_id=run.selected_candidate.id, native_cpu_cache_gib=17,
-        )))
+        asyncio.run(
+            service.revise_candidate(
+                run.id,
+                AgenticCandidateSelectionRequest(
+                    candidate_id=run.selected_candidate.id,
+                    native_cpu_cache_gib=17,
+                ),
+            )
+        )
 
 
 def test_pd_auto_is_on_by_default_and_follows_aic_and_accelerator_limit(monkeypatch):
@@ -569,19 +652,39 @@ def test_pd_auto_is_on_by_default_and_follows_aic_and_accelerator_limit(monkeypa
     assert "AIC could not evaluate" in shaped.request.requirements.workload["aicPrefillDecodeReason"]
 
     async def aic_facts(*_args, **_kwargs):
-        return _resolved_facts(aic_predictions=(
-            AICCandidatePrediction(mode="agg", tensor_parallel_size=1, replicas=2, ttft_ms=80, tpot_ms=10,
-                                   throughput_tokens_per_sec=900),
-            AICCandidatePrediction(mode="disagg", tensor_parallel_size=1, replicas=1, prefill_replicas=1,
-                                   prefill_tensor_parallel_size=1, ttft_ms=300, tpot_ms=8,
-                                   throughput_tokens_per_sec=1200),
-        ))
+        return _resolved_facts(
+            aic_predictions=(
+                AICCandidatePrediction(
+                    mode="agg",
+                    tensor_parallel_size=1,
+                    replicas=2,
+                    ttft_ms=80,
+                    tpot_ms=10,
+                    throughput_tokens_per_sec=900,
+                ),
+                AICCandidatePrediction(
+                    mode="disagg",
+                    tensor_parallel_size=1,
+                    replicas=1,
+                    prefill_replicas=1,
+                    prefill_tensor_parallel_size=1,
+                    ttft_ms=300,
+                    tpot_ms=8,
+                    throughput_tokens_per_sec=1200,
+                ),
+            )
+        )
 
     monkeypatch.setattr("llm_d_lens.agentic.service.resolve_planning_facts", aic_facts)
     # P/D has more throughput but misses the TTFT SLA, so AIC keeps combined serving.
-    run = asyncio.run(service.create(_shared_request(
-        workload={"inputTokens": 1024, "outputTokens": 256}, performance_targets={"ttftMs": 200},
-    )))
+    run = asyncio.run(
+        service.create(
+            _shared_request(
+                workload={"inputTokens": 1024, "outputTokens": 256},
+                performance_targets={"ttftMs": 200},
+            )
+        )
+    )
     assert run.request.requirements.workload["aicPrefillDecode"] is False
     assert not run.selected_candidate.prefill_replicas
     pd = next(item for item in run.configuration_plan.optimization_choices if item.capability_id == "pd_disaggregation")
@@ -592,13 +695,16 @@ def test_pd_auto_is_on_by_default_and_follows_aic_and_accelerator_limit(monkeypa
     limited = asyncio.run(service.create(_shared_request(hard_constraints={"maxAccelerators": 1})))
     assert not limited.selected_candidate.prefill_replicas
     assert limited.selected_candidate.prefix_routing
-    reason = next(item for item in limited.configuration_plan.decisions if item.capability_id == "pd_disaggregation").reason
+    reason = next(
+        item for item in limited.configuration_plan.decisions if item.capability_id == "pd_disaggregation"
+    ).reason
     assert "at least two accelerators" in reason
 
 
 def test_manual_cache_rounds_down_and_never_uses_client_host_memory(monkeypatch):
     from llm_d_lens.configuration.decision_engine import manual_combinations
     from llm_d_lens.configuration.plan_models import DeploymentRequirements
+
     facts = PlanningFacts(model_weight_gib=8, vram_per_gpu_gib=32, free_gpu_count=4, cpu_buffer_gib=20)
     candidates = DeterministicPlanner().candidates(facts)
     candidates.append(candidates[0].model_copy(update={"id": "three-replicas", "replicas": 3, "required_gpus": 3}))
@@ -622,12 +728,19 @@ def test_manual_cache_rounds_down_and_never_uses_client_host_memory(monkeypatch)
 
 def test_user_revision_preserves_original_and_invalidates_resource_evidence(monkeypatch):
     from llm_d_lens.agentic.models import AgenticCandidateSelectionRequest
+
     service = _shared_service(monkeypatch)
     original = asyncio.run(service.create(_shared_request(forbidden_features=["pd_disaggregation"])))
     before = original.model_dump(mode="json")
-    revised = asyncio.run(service.revise_candidate(original.id, AgenticCandidateSelectionRequest(
-        candidate_id=original.selected_candidate.id, replicas=2,
-    )))
+    revised = asyncio.run(
+        service.revise_candidate(
+            original.id,
+            AgenticCandidateSelectionRequest(
+                candidate_id=original.selected_candidate.id,
+                replicas=2,
+            ),
+        )
+    )
     assert original.model_dump(mode="json") == before
     assert revised.parent_run_id == original.id
     assert revised.revision == 2
@@ -636,9 +749,15 @@ def test_user_revision_preserves_original_and_invalidates_resource_evidence(monk
     assert revised.optimization is None
     assert revised.configuration_plan.validation["status"] == "planning_checked"
     with pytest.raises(ValueError, match="hard limit"):
-        asyncio.run(service.revise_candidate(original.id, AgenticCandidateSelectionRequest(
-            candidate_id=original.selected_candidate.id, replicas=3,
-        )))
+        asyncio.run(
+            service.revise_candidate(
+                original.id,
+                AgenticCandidateSelectionRequest(
+                    candidate_id=original.selected_candidate.id,
+                    replicas=3,
+                ),
+            )
+        )
     assert original.model_dump(mode="json") == before
 
 
@@ -652,10 +771,17 @@ def test_shared_requirements_cannot_be_bypassed_by_old_refinement(monkeypatch):
 def test_compatibility_intent_endpoint_does_not_invent_executable_candidates():
     from llm_d_lens.configuration.decision_engine import build_plan
     from llm_d_lens.configuration.plan_models import DeploymentRequirements, PlanRequest
+
     for mode in ("manual", "agentic"):
-        result = build_plan(PlanRequest(mode=mode, requirements=DeploymentRequirements(
-            model="test/model", workload={"inputTokens": 8192, "prefixReuse": True},
-        )))
+        result = build_plan(
+            PlanRequest(
+                mode=mode,
+                requirements=DeploymentRequirements(
+                    model="test/model",
+                    workload={"inputTokens": 8192, "prefixReuse": True},
+                ),
+            )
+        )
         assert result.candidates == []
         assert result.selected_capabilities == []
         assert "topology" not in result.configuration
@@ -664,6 +790,7 @@ def test_compatibility_intent_endpoint_does_not_invent_executable_candidates():
 
 def test_shared_requirements_reject_conflicts_and_nonfinite_or_unenforced_limits():
     from llm_d_lens.configuration.plan_models import DeploymentRequirements
+
     for values in (
         {"hard_constraints": {"maxAccelerators": 1.5}},
         {"hard_constraints": {"maxAccelerators": float("inf")}},
@@ -678,20 +805,30 @@ def test_shared_requirements_reject_conflicts_and_nonfinite_or_unenforced_limits
 
 
 def _rendered_result(run):
-    import yaml
     from copy import deepcopy
+
+    import yaml
+
     from llm_d_lens.configuration.router_compatibility import compose_prefix_routing
     from llm_d_lens.deploy.providers.deployment_bundle import text_checksum
+
     content = run.configuration_plan.configuration["content"]
     container = {
-        "name": "modelserver", "image": content["runtime"]["image"],
+        "name": "modelserver",
+        "image": content["runtime"]["image"],
         "command": ["vllm", "serve"],
         "args": [
-            run.request.model, "--tensor-parallel-size", "1",
-            "--max-model-len", str(run.request.max_model_len),
-            "--max-num-seqs", str(run.request.max_num_seqs),
-            "--gpu-memory-utilization", str(run.request.gpu_memory_utilization),
-            "--max-num-batched-tokens", str(run.request.max_num_batched_tokens),
+            run.request.model,
+            "--tensor-parallel-size",
+            "1",
+            "--max-model-len",
+            str(run.request.max_model_len),
+            "--max-num-seqs",
+            str(run.request.max_num_seqs),
+            "--gpu-memory-utilization",
+            str(run.request.gpu_memory_utilization),
+            "--max-num-batched-tokens",
+            str(run.request.max_num_batched_tokens),
         ],
         "volumeMounts": [{"name": "model-cache", "mountPath": "/model-cache"}],
     }
@@ -699,20 +836,37 @@ def _rendered_result(run):
     for role in ("prefill", "decode") if run.selected_candidate.prefill_replicas else ("decode",):
         server = deepcopy(container)
         server["args"][server["args"].index("--tensor-parallel-size") + 1] = str(content[role]["tensorParallelSize"])
-        documents.append({
-            "apiVersion": "apps/v1", "kind": "Deployment",
-            "metadata": {"name": role, "namespace": "__PRISM_NAMESPACE__"},
-            "spec": {"replicas": content[role]["replicaCount"], "template": {
-                "metadata": {"labels": {"llm-d.ai/role": role}}, "spec": {
-                    "containers": [server],
-                    "volumes": [{"name": "model-cache", "persistentVolumeClaim": {"claimName": "registered-cache"}}],
+        documents.append(
+            {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {"name": role, "namespace": "__PRISM_NAMESPACE__"},
+                "spec": {
+                    "replicas": content[role]["replicaCount"],
+                    "template": {
+                        "metadata": {"labels": {"llm-d.ai/role": role}},
+                        "spec": {
+                            "containers": [server],
+                            "volumes": [
+                                {"name": "model-cache", "persistentVolumeClaim": {"claimName": "registered-cache"}}
+                            ],
+                        },
+                    },
                 },
-            }},
-        })
+            }
+        )
     manifest = yaml.safe_dump_all(documents)
     result = {
-        "source": {"guide": run.selected_candidate.provider_ref, "commit": "a" * 40, "modelServer": "vllm", "accelerator": "nvidia"},
-        "deployment": {"readinessDeployments": ["model"], "endpoint": {"protocol": "http", "serviceName": "model", "port": 8000}},
+        "source": {
+            "guide": run.selected_candidate.provider_ref,
+            "commit": "a" * 40,
+            "modelServer": "vllm",
+            "accelerator": "nvidia",
+        },
+        "deployment": {
+            "readinessDeployments": ["model"],
+            "endpoint": {"protocol": "http", "serviceName": "model", "port": 8000},
+        },
         "plannedDeployment": {"content": manifest},
         "validation": {"errors": [], "warnings": ["Readiness requires deployment."]},
     }
@@ -724,29 +878,52 @@ def _rendered_result(run):
                 {"type": "prefix-cache-affinity-filter"},
                 {"type": "token-load-scorer"},
             ],
-            "schedulingProfiles": [{"name": "default", "plugins": [
-                {"pluginRef": "prefix-cache-affinity-filter"}, {"pluginRef": "token-load-scorer"},
-            ]}],
+            "schedulingProfiles": [
+                {
+                    "name": "default",
+                    "plugins": [
+                        {"pluginRef": "prefix-cache-affinity-filter"},
+                        {"pluginRef": "token-load-scorer"},
+                    ],
+                }
+            ],
         }
-        values = {"router": {"epp": {"pluginsConfigFile": "plugins.yaml", "pluginsCustomConfig": {"plugins.yaml": yaml.safe_dump(plugins)}}}}
+        values = {
+            "router": {
+                "epp": {
+                    "pluginsConfigFile": "plugins.yaml",
+                    "pluginsCustomConfig": {"plugins.yaml": yaml.safe_dump(plugins)},
+                }
+            }
+        }
         effective = compose_prefix_routing(values, values, run.selected_candidate.prefix_routing)
         assets = [
-            ("router-base.yaml", "{}"), ("router-guide.yaml", yaml.safe_dump(values)),
-            ("router-prefix-source.yaml", yaml.safe_dump(values)), ("router-effective.yaml", yaml.safe_dump(effective)),
+            ("router-base.yaml", "{}"),
+            ("router-guide.yaml", yaml.safe_dump(values)),
+            ("router-prefix-source.yaml", yaml.safe_dump(values)),
+            ("router-effective.yaml", yaml.safe_dump(effective)),
         ]
         result["deploymentBundle"] = {
-            "schemaVersion": "guide-deployment-bundle.v1", "guide": run.selected_candidate.provider_ref,
-            "sourceCommit": "a" * 40, "helm": {
-                "chart": "router", "version": "v0.11.0", "releaseName": "serving",
+            "schemaVersion": "guide-deployment-bundle.v1",
+            "guide": run.selected_candidate.provider_ref,
+            "sourceCommit": "a" * 40,
+            "helm": {
+                "chart": "router",
+                "version": "v0.11.0",
+                "releaseName": "serving",
                 "values": [{"name": name, "content": text, "checksum": text_checksum(text)} for name, text in assets],
-            }, "resources": [],
+            },
+            "resources": [],
         }
-        result["optimizationDecisions"] = [{"id": "prefix", "effective_enabled": True, "reason": "Source-established prefix caching."}]
+        result["optimizationDecisions"] = [
+            {"id": "prefix", "effective_enabled": True, "reason": "Source-established prefix caching."}
+        ]
     return result
 
 
 def test_reviewed_manifest_is_the_configuration_sent_to_deploy(monkeypatch):
     from llm_d_lens.infrastructure.artifacts.manifests import configuration_checksum
+
     service = _shared_service(monkeypatch)
     run = asyncio.run(service.create(_shared_request()))
     body = planning_resource_request(run)
@@ -760,9 +937,11 @@ def test_reviewed_manifest_is_the_configuration_sent_to_deploy(monkeypatch):
     reviewed = run.configuration_plan.configuration
     assert reviewed["checksum"] == configuration_checksum(reviewed["content"])
     captured = []
+
     async def start(request, **_kwargs):
         captured.append(request.configurations[0])
         return SimpleNamespace(id="deployment-1")
+
     monkeypatch.setattr("llm_d_lens.agentic.service.deployment_run_manager.start_run", start)
     approved = asyncio.run(service.approve(run.id))
     assert captured[0].content["officialGuide"]["renderedManifest"] == manifest
@@ -773,14 +952,19 @@ def test_reviewed_manifest_is_the_configuration_sent_to_deploy(monkeypatch):
 
 def test_manual_source_comparison_reports_rejected_recipes_and_checks_the_winner(monkeypatch):
     service = _shared_service(monkeypatch)
-    original = asyncio.run(service.create(_shared_request(workload={"prefixReuse": True}, forbidden_features=["pd_disaggregation"])))
+    original = asyncio.run(
+        service.create(_shared_request(workload={"prefixReuse": True}, forbidden_features=["pd_disaggregation"]))
+    )
     assert original.selected_candidate.prefix_routing is True
     before = original.model_dump(mode="json")
     checked = []
 
     async def render(trial):
         checked.append(trial.selected_candidate.id)
-        if trial.selected_candidate.provider_ref == "precise-prefix-cache-routing" or trial.selected_candidate.prefix_routing:
+        if (
+            trial.selected_candidate.provider_ref == "precise-prefix-cache-routing"
+            or trial.selected_candidate.prefix_routing
+        ):
             raise ValueError("Pinned runtime does not support this routing recipe.")
         return _rendered_result(trial)
 
@@ -817,19 +1001,27 @@ def test_manual_ranks_actual_rendered_capabilities_instead_of_first_passing_guid
     service = _shared_service(monkeypatch)
     # Exercise render-based ranking with a recipe that Manual normally does not retain.
     monkeypatch.setattr("llm_d_lens.configuration.decision_engine.MANUAL_EXCLUDED_PROVIDERS", set())
-    original = asyncio.run(service.create(_shared_request(workload={"prefixReuse": True}, forbidden_features=["pd_disaggregation"])))
+    original = asyncio.run(
+        service.create(_shared_request(workload={"prefixReuse": True}, forbidden_features=["pd_disaggregation"]))
+    )
     original.candidates = [candidate for candidate in original.candidates if candidate.prefix_routing is not True]
-    precise = next(candidate for candidate in original.candidates if candidate.provider_ref == "precise-prefix-cache-routing")
+    precise = next(
+        candidate for candidate in original.candidates if candidate.provider_ref == "precise-prefix-cache-routing"
+    )
     service.select_candidate(original.id, precise.id)
 
     async def render(trial):
         result = _rendered_result(trial)
         if trial.selected_candidate.provider_ref == "precise-prefix-cache-routing":
             import yaml
+
             document = yaml.safe_load(result["plannedDeployment"]["content"])
-            document["spec"]["template"]["spec"]["containers"][0]["args"].extend([
-                "--kv-events-config", json.dumps({"topic": f"kv@events@{trial.request.model}"}),
-            ])
+            document["spec"]["template"]["spec"]["containers"][0]["args"].extend(
+                [
+                    "--kv-events-config",
+                    json.dumps({"topic": f"kv@events@{trial.request.model}"}),
+                ]
+            )
             result["plannedDeployment"]["content"] = yaml.safe_dump(document)
         if trial.selected_candidate.prefix_routing is False:
             result["optimizationDecisions"] = [
@@ -895,18 +1087,25 @@ def test_manifest_validation_failure_does_not_replace_the_reviewed_configuration
     run = asyncio.run(service.create(_shared_request()))
     before = run.configuration_plan.model_dump()
     with pytest.raises(ValueError, match="no modelserver"):
-        service.accept_rendered_plan(run, {
-            "source": {"guide": run.selected_candidate.provider_ref},
-            "deployment": {}, "plannedDeployment": {"content": "kind: Service\nmetadata: {name: service}"},
-            "validation": {"errors": []},
-        })
+        service.accept_rendered_plan(
+            run,
+            {
+                "source": {"guide": run.selected_candidate.provider_ref},
+                "deployment": {},
+                "plannedDeployment": {"content": "kind: Service\nmetadata: {name: service}"},
+                "validation": {"errors": []},
+            },
+        )
     assert run.configuration_plan.model_dump() == before
 
 
 def test_shared_http_approval_requires_the_current_review_checksum(monkeypatch):
     import importlib
+
     from fastapi import HTTPException
+
     from llm_d_lens.agentic.models import AgenticApprovalRequest
+
     router = importlib.import_module("llm_d_lens.agentic.router")
     service = _shared_service(monkeypatch)
     monkeypatch.setattr(router, "service", service)
@@ -916,9 +1115,12 @@ def test_shared_http_approval_requires_the_current_review_checksum(monkeypatch):
     assert pending.value.status_code == 409
     run.configuration_plan.validation["status"] = "resources_checked"
     with pytest.raises(HTTPException) as stale:
-        asyncio.run(router.approve_agentic_deployment(
-            run.id, approval=AgenticApprovalRequest(configuration_checksum="stale"),
-        ))
+        asyncio.run(
+            router.approve_agentic_deployment(
+                run.id,
+                approval=AgenticApprovalRequest(configuration_checksum="stale"),
+            )
+        )
     assert stale.value.status_code == 409
     assert run.deployment_run_id is None
 
@@ -929,10 +1131,12 @@ def test_approval_excludes_concurrent_mutations_and_releases_the_lock(monkeypatc
 
     async def scenario():
         entered, release = asyncio.Event(), asyncio.Event()
+
         async def approve(*_args, **_kwargs):
             entered.set()
             await release.wait()
             return run
+
         monkeypatch.setattr(service, "_approve", approve)
         task = asyncio.create_task(service.approve(run.id))
         await entered.wait()
@@ -943,6 +1147,7 @@ def test_approval_excludes_concurrent_mutations_and_releases_the_lock(monkeypatc
         release.set()
         await task
         assert service.select_candidate(run.id, run.selected_candidate.id).id == run.id
+
     asyncio.run(scenario())
 
 
@@ -2923,18 +3128,30 @@ def test_approve_rejects_a_candidate_when_preflight_capacity_validation_fails(mo
 
 def test_explicit_provider_is_a_hard_constraint_without_fallback(monkeypatch):
     service = _shared_service(monkeypatch)
-    run = asyncio.run(service.create(_shared_request(
-        workload={"prefillHeavy": True},
-        hard_constraints={"maxAccelerators": 2, "providerRef": "optimized-baseline"},
-    )))
+    run = asyncio.run(
+        service.create(
+            _shared_request(
+                workload={"prefillHeavy": True},
+                hard_constraints={"maxAccelerators": 2, "providerRef": "optimized-baseline"},
+            )
+        )
+    )
     assert run.selected_candidate.provider_ref == "optimized-baseline"
     assert all(candidate.provider_ref == "optimized-baseline" for candidate in run.candidates)
-    assert any("explicitly selected" in reason for candidate in run.rejected_candidates for reason in candidate.rejection_reasons)
+    assert any(
+        "explicitly selected" in reason
+        for candidate in run.rejected_candidates
+        for reason in candidate.rejection_reasons
+    )
     with pytest.raises(ValueError, match="no deployable"):
-        asyncio.run(service.create(_shared_request(
-            hard_constraints={"maxAccelerators": 1, "providerRef": "pd-disaggregation"},
-            workload={"prefillHeavy": True},
-        )))
+        asyncio.run(
+            service.create(
+                _shared_request(
+                    hard_constraints={"maxAccelerators": 1, "providerRef": "pd-disaggregation"},
+                    workload={"prefillHeavy": True},
+                )
+            )
+        )
     with pytest.raises(ValueError, match="Unsupported planning provider"):
         asyncio.run(service.create(_shared_request(hard_constraints={"providerRef": "unregistered-provider"})))
 

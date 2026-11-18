@@ -912,13 +912,19 @@ def build_deployment_service_from_environment(
                 settings.readiness_timeout_seconds,
             )
             for provider in providers
-        ] + [SourceCompositionAdapter(
-            RestrictedKubectlRunner(
-                settings.kubectl_path, settings.namespace_prefix,
-                max(settings.command_timeout_seconds, settings.readiness_timeout_seconds), settings.kubeconfig,
-            ),
-            settings.namespace_prefix, settings.readiness_timeout_seconds,
-        )]
+        ]
+        + [
+            SourceCompositionAdapter(
+                RestrictedKubectlRunner(
+                    settings.kubectl_path,
+                    settings.namespace_prefix,
+                    max(settings.command_timeout_seconds, settings.readiness_timeout_seconds),
+                    settings.kubeconfig,
+                ),
+                settings.namespace_prefix,
+                settings.readiness_timeout_seconds,
+            )
+        ]
     )
     return GuideAdapterDeploymentService(catalog, build_namespace_factory(settings.namespace_prefix)), catalog
 

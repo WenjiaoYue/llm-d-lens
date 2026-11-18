@@ -14,16 +14,25 @@ from .plan_models import (
 )
 
 CAPABILITY_ALIASES = {
-    "prefix_cache": "prefix", "chunked_prefill": "chunked",
-    "pd_disaggregation": "transfer", "prefix_routing": "affinity",
-    "external_kv_cache": "cache", "autoscaling": "scaling", "speculative_decoding": "speculation",
+    "prefix_cache": "prefix",
+    "chunked_prefill": "chunked",
+    "pd_disaggregation": "transfer",
+    "prefix_routing": "affinity",
+    "external_kv_cache": "cache",
+    "autoscaling": "scaling",
+    "speculative_decoding": "speculation",
 }
 
 
 CAPABILITIES = (
     ("prefix_cache", "Prefix reuse cache", "prefix_reuse", "Requires a known repeated-prefix workload."),
     ("chunked_prefill", "Chunked prefill", "long_context", "Useful for long inputs; runtime support must be present."),
-    ("pd_disaggregation", "Prefill / Decode separation", "prefill_heavy", "Requires compatible transport and separate role resources."),
+    (
+        "pd_disaggregation",
+        "Prefill / Decode separation",
+        "prefill_heavy",
+        "Requires compatible transport and separate role resources.",
+    ),
     ("external_kv_cache", "External KV cache", "long_context", "Consumes additional CPU/network capacity."),
     ("autoscaling", "Automatic scaling", "request_rate", "Requires a request-rate signal to size scaling bounds."),
 )
@@ -81,7 +90,11 @@ def _decisions(requirements: DeploymentRequirements, mode: str) -> tuple[list[st
             selected.append(capability_id)
         elif known:
             status = "excluded" if mode == "agentic" else "enabled"
-            reason = "Agentic keeps it as an alternative until its expected benefit is compared." if mode == "agentic" else "Automatically enabled because the prerequisite signal is present."
+            reason = (
+                "Agentic keeps it as an alternative until its expected benefit is compared."
+                if mode == "agentic"
+                else "Automatically enabled because the prerequisite signal is present."
+            )
             if status == "enabled":
                 selected.append(capability_id)
         else:
@@ -96,10 +109,17 @@ def build_plan(request: PlanRequest) -> ConfigurationPlan:
     # This compatibility endpoint has no live facts or rendered resources.
     # Intent alone must never attest that a mechanism has been enabled.
     decisions = [
-        item.model_copy(update={
-            "status": "unknown",
-            "reason": "Requested or applicable by workload; live provider, dependency and resource validation is required.",
-        }) if item.status == "enabled" else item
+        item.model_copy(
+            update={
+                "status": "unknown",
+                "reason": (
+                    "Requested or applicable by workload; live provider, dependency and resource validation "
+                    "is required."
+                ),
+            }
+        )
+        if item.status == "enabled"
+        else item
         for item in decisions
     ]
     budget = request.requirements.hard_constraints.get("maxAccelerators")
@@ -120,10 +140,14 @@ def build_plan(request: PlanRequest) -> ConfigurationPlan:
         "performance_targets": request.requirements.performance_targets,
     }
     return ConfigurationPlan(
-        plan_id=_plan_id(request), mode=request.mode, requirements=request.requirements,
-        selected_capabilities=[], decisions=decisions,
+        plan_id=_plan_id(request),
+        mode=request.mode,
+        requirements=request.requirements,
+        selected_capabilities=[],
+        decisions=decisions,
         resource_estimate={"max_accelerators": budget, "status": "unknown"},
-        candidates=[], evidence_level="recommendation",
+        candidates=[],
+        evidence_level="recommendation",
         validation={"status": "pending", "checks": ["capability prerequisites", "conflicts", "resource budget"]},
         configuration=configuration,
     )
@@ -176,15 +200,23 @@ def _meets_sla(item, requirements) -> bool:
 def aic_topology_estimate(predictions, candidate):
     """The AIC prediction for exactly this serving topology, if AIC produced one."""
     mode = "disagg" if candidate.prefill_replicas else "agg"
-    return next((
-        item for item in predictions
-        if item.mode == mode and item.replicas == candidate.replicas
-        and item.tensor_parallel_size == candidate.tensor_parallel_size
-        and (mode == "agg" or (
-            item.prefill_replicas == candidate.prefill_replicas
-            and item.prefill_tensor_parallel_size == candidate.prefill_tensor_parallel_size
-        ))
-    ), None)
+    return next(
+        (
+            item
+            for item in predictions
+            if item.mode == mode
+            and item.replicas == candidate.replicas
+            and item.tensor_parallel_size == candidate.tensor_parallel_size
+            and (
+                mode == "agg"
+                or (
+                    item.prefill_replicas == candidate.prefill_replicas
+                    and item.prefill_tensor_parallel_size == candidate.prefill_tensor_parallel_size
+                )
+            )
+        ),
+        None,
+    )
 
 
 def aic_sla_status(prediction, requirements) -> str:
@@ -216,8 +248,10 @@ def aic_pd_preference(predictions, requirements) -> tuple[bool | None, str]:
 
     def describe(item):
         sla = "" if not has_sla else ", meets the SLA" if _meets_sla(item, requirements) else ", misses the SLA"
-        return (f"{item.throughput_tokens_per_sec or 0:.0f} tok/s, TTFT {item.ttft_ms or 0:.0f} ms, "
-                f"TPOT {item.tpot_ms or 0:.1f} ms{sla}")
+        return (
+            f"{item.throughput_tokens_per_sec or 0:.0f} tok/s, TTFT {item.ttft_ms or 0:.0f} ms, "
+            f"TPOT {item.tpot_ms or 0:.1f} ms{sla}"
+        )
 
     use_pd = rank(pd) > rank(agg)
     return use_pd, f"AIC predicts P/D {describe(pd)} vs combined serving {describe(agg)}."
@@ -230,13 +264,12 @@ def pd_auto_choice(requirements, available_accelerators: int | None = None) -> t
     if "pd_disaggregation" in requirements.required_features:
         return True, "Required by the request."
     limits = [
-        value for value in (available_accelerators, requirements.hard_constraints.get("maxAccelerators"))
+        value
+        for value in (available_accelerators, requirements.hard_constraints.get("maxAccelerators"))
         if value is not None
     ]
     if limits and min(limits) < 2:
-        return False, (
-            f"Needs at least two accelerators for separate prefill and decode roles; {min(limits)} usable."
-        )
+        return False, (f"Needs at least two accelerators for separate prefill and decode roles; {min(limits)} usable.")
     workload = requirements.workload
     if isinstance(workload.get(AIC_PD_KEY), bool):
         return workload[AIC_PD_KEY], str(workload.get(AIC_PD_REASON_KEY) or "Decided by AIC.")
@@ -268,10 +301,17 @@ def optimization_choices(requirements, available_accelerators: int | None = None
             intended, reason = False, "Requires the engine prefix cache, which is turned off."
         else:
             intended, reason = True, "Enabled when the selected topology, hardware and pinned source support it."
-        choices.append(OptimizationChoice(
-            capability_id=capability, catalog_id=CAPABILITY_ALIASES[capability], label=label,
-            checked=checked, auto=capability == "pd_disaggregation", intended=intended, reason=reason,
-        ))
+        choices.append(
+            OptimizationChoice(
+                capability_id=capability,
+                catalog_id=CAPABILITY_ALIASES[capability],
+                label=label,
+                checked=checked,
+                auto=capability == "pd_disaggregation",
+                intended=intended,
+                reason=reason,
+            )
+        )
     return choices
 
 
@@ -296,13 +336,21 @@ def manual_combinations(candidates, facts, requirements):
     for candidate in candidates:
         if candidate.provider_ref in {"optimized-baseline", "pd-disaggregation"}:
             for routing in (False, True):
-                topologies.append(candidate.model_copy(update={
-                    "id": f"{candidate.id}-{'prefix' if routing else 'load'}",
-                    "prefix_routing": routing,
-                    "historical_benchmarks": [], "performance_estimate": None,
-                    "performance_estimate_source": None, "score": None, "score_source": None,
-                    "slo_status": "unknown", "slo_confidence": 0,
-                }))
+                topologies.append(
+                    candidate.model_copy(
+                        update={
+                            "id": f"{candidate.id}-{'prefix' if routing else 'load'}",
+                            "prefix_routing": routing,
+                            "historical_benchmarks": [],
+                            "performance_estimate": None,
+                            "performance_estimate_source": None,
+                            "score": None,
+                            "score_source": None,
+                            "slo_status": "unknown",
+                            "slo_confidence": 0,
+                        }
+                    )
+                )
         else:
             topologies.append(candidate)
     output = list(topologies)
@@ -310,31 +358,48 @@ def manual_combinations(candidates, facts, requirements):
         replicas = candidate.replicas + (candidate.prefill_replicas or 0)
         capacity = floor(min(8.0, facts.cpu_buffer_gib * 0.25 / replicas) * 1000) / 1000
         if candidate.provider_ref == "tiered-prefix-cache":
-            output[index] = candidate.model_copy(update={
-                "native_cpu_cache_gib": capacity if capacity >= 1 else None,
-                "deployable": candidate.deployable and capacity >= 1,
-                "rejection_reasons": [
-                    *candidate.rejection_reasons,
-                    *([] if capacity >= 1 else ["No discovered host-memory budget for CPU cache."]),
-                ],
-                "historical_benchmarks": [], "performance_estimate": None,
-                "performance_estimate_source": None, "score": None, "score_source": None,
-                "slo_status": "unknown", "slo_confidence": 0,
-            })
-        if (not candidate.deployable or candidate.native_cpu_cache_gib
-                or candidate.provider_ref not in {"optimized-baseline", "precise-prefix-cache-routing", "pd-disaggregation"}):
+            output[index] = candidate.model_copy(
+                update={
+                    "native_cpu_cache_gib": capacity if capacity >= 1 else None,
+                    "deployable": candidate.deployable and capacity >= 1,
+                    "rejection_reasons": [
+                        *candidate.rejection_reasons,
+                        *([] if capacity >= 1 else ["No discovered host-memory budget for CPU cache."]),
+                    ],
+                    "historical_benchmarks": [],
+                    "performance_estimate": None,
+                    "performance_estimate_source": None,
+                    "score": None,
+                    "score_source": None,
+                    "slo_status": "unknown",
+                    "slo_confidence": 0,
+                }
+            )
+        if (
+            not candidate.deployable
+            or candidate.native_cpu_cache_gib
+            or candidate.provider_ref not in {"optimized-baseline", "precise-prefix-cache-routing", "pd-disaggregation"}
+        ):
             continue
         # Reserve at least 75% of observed free host memory for serving and other
         # workloads. Source rendering still checks per-node placement and limits.
         if capacity < 1:
             continue
-        output.append(candidate.model_copy(update={
-            "id": f"{candidate.id}-cpu-cache",
-            "native_cpu_cache_gib": capacity,
-            "historical_benchmarks": [], "performance_estimate": None,
-            "performance_estimate_source": None, "score": None, "score_source": None,
-            "slo_status": "unknown", "slo_confidence": 0,
-        }))
+        output.append(
+            candidate.model_copy(
+                update={
+                    "id": f"{candidate.id}-cpu-cache",
+                    "native_cpu_cache_gib": capacity,
+                    "historical_benchmarks": [],
+                    "performance_estimate": None,
+                    "performance_estimate_source": None,
+                    "score": None,
+                    "score_source": None,
+                    "slo_status": "unknown",
+                    "slo_confidence": 0,
+                }
+            )
+        )
     return output
 
 
@@ -344,9 +409,7 @@ def rank_manual_candidates(candidates, requirements, facts=None):
 
     sized = requirements.workload.get("concurrency") is not None
     pd_wanted = pd_auto_choice(requirements)[0]
-    desired = {
-        item.capability_id for item in optimization_choices(requirements) if item.intended
-    }
+    desired = {item.capability_id for item in optimization_choices(requirements) if item.intended}
 
     def key(candidate):
         mechanisms = candidate_mechanisms(candidate)
@@ -359,8 +422,10 @@ def rank_manual_candidates(candidates, requirements, facts=None):
             preference = (int(candidate.replicas < 2), candidate.required_gpus)
         elif requirements.objective == "throughput":
             preference = (
-                int("pd_disaggregation" not in mechanisms), int("prefix_routing" not in mechanisms),
-                *((candidate.required_gpus,) if sized else ()), -candidate.replicas,
+                int("pd_disaggregation" not in mechanisms),
+                int("prefix_routing" not in mechanisms),
+                *((candidate.required_gpus,) if sized else ()),
+                -candidate.replicas,
             )
         else:
             preference = (candidate.required_gpus,)
@@ -369,13 +434,14 @@ def rank_manual_candidates(candidates, requirements, facts=None):
             int(("pd_disaggregation" in mechanisms) != pd_wanted),
             -len(mechanisms & desired),
             unmet_load(facts, candidate) if facts is not None else 0,
-            *preference, candidate.required_gpus, candidate.tensor_parallel_size, candidate.id,
+            *preference,
+            candidate.required_gpus,
+            candidate.tensor_parallel_size,
+            candidate.id,
         )
+
     return sorted(
-        (
-            item for item in candidates
-            if item.deployable and item.provider_ref not in MANUAL_EXCLUDED_PROVIDERS
-        ),
+        (item for item in candidates if item.deployable and item.provider_ref not in MANUAL_EXCLUDED_PROVIDERS),
         key=key,
     )
 
@@ -401,9 +467,14 @@ def candidate_requirement_errors(requirements, candidate) -> list[str]:
             errors.append(f"{capability} is forbidden by the user.")
     for capability in requirements.required_features:
         identifier = CAPABILITY_ALIASES.get(capability, capability)
-        if identifier not in catalog_ids or (identifier in {"transfer", "cache", "affinity"} and identifier not in mechanism_ids):
+        if identifier not in catalog_ids or (
+            identifier in {"transfer", "cache", "affinity"} and identifier not in mechanism_ids
+        ):
             errors.append(f"{capability} is required but is not established by this provider configuration.")
-    if {"prefix_cache", "prefix"} & set(requirements.forbidden_features) and mechanisms & {"prefix_routing", "external_kv_cache"}:
+    if {"prefix_cache", "prefix"} & set(requirements.forbidden_features) and mechanisms & {
+        "prefix_routing",
+        "external_kv_cache",
+    }:
         errors.append("Cache routing and KV offloading require engine prefix caching, which is disabled.")
     return errors
 
@@ -428,26 +499,37 @@ def resolved_plan(run, configuration: dict) -> ConfigurationPlan:
     manual = run.request.planning_mode == "manual"
     for capability, label in labels:
         rejected = [
-            reason for item in run.rejected_candidates if capability in candidate_mechanisms(item)
+            reason
+            for item in run.rejected_candidates
+            if capability in candidate_mechanisms(item)
             for reason in item.rejection_reasons
         ]
         if capability in requirements.forbidden_features:
             status, reason = "user_disabled", "Excluded by the user's hard capability constraint."
         elif capability in mechanisms:
             if capability == "external_kv_cache" and selected.native_cpu_cache_gib:
-                status, reason = "unknown", (
-                    "Planned within the discovered host-memory budget. The pinned source connector, runtime image "
-                    "and per-node resource compatibility must pass rendering before this mechanism is enabled."
+                status, reason = (
+                    "unknown",
+                    (
+                        "Planned within the discovered host-memory budget. The pinned source connector, runtime image "
+                        "and per-node resource compatibility must pass rendering before this mechanism is enabled."
+                    ),
                 )
             else:
-                status, reason = "enabled", "Included in the selected provider configuration; runtime readiness is still pending."
+                status, reason = (
+                    "enabled",
+                    "Included in the selected provider configuration; runtime readiness is still pending.",
+                )
         elif manual and capability == "pd_disaggregation" and not pd_wanted:
             status, reason = "excluded", f"Auto: {pd_reason}"
         elif any(capability in candidate_mechanisms(item) for item in run.candidates):
             if manual:
-                status, reason = "unsupported", (
-                    "Applicable, but Lens has no source-validated adapter to add this capability to the "
-                    "selected architecture. This is an implementation limit, not a proven conflict."
+                status, reason = (
+                    "unsupported",
+                    (
+                        "Applicable, but Lens has no source-validated adapter to add this capability to the "
+                        "selected architecture. This is an implementation limit, not a proven conflict."
+                    ),
                 )
             else:
                 status, reason = "alternative", "Available in an alternative; not selected for this recommendation."
@@ -455,15 +537,22 @@ def resolved_plan(run, configuration: dict) -> ConfigurationPlan:
             if rejected:
                 status, reason = "resource_limited", "; ".join(dict.fromkeys(rejected))
             else:
-                status, reason = "unsupported", (
-                    "No compatible source adapter or discovered resource budget established this mechanism. "
-                    "Review resources or select a supported runtime."
+                status, reason = (
+                    "unsupported",
+                    (
+                        "No compatible source adapter or discovered resource budget established this mechanism. "
+                        "Review resources or select a supported runtime."
+                    ),
                 )
         else:
-            status, reason = ("unknown" if capability in RUNTIME_MECHANISMS else "unsupported"), (
-                "Pinned source runtime flags must be inspected during resource generation."
-                if capability in {"prefix_cache", "chunked_prefill"}
-                else "No source-verified planner adapter establishes software support, dependencies and resource sizing."
+            status, reason = (
+                ("unknown" if capability in RUNTIME_MECHANISMS else "unsupported"),
+                (
+                    "Pinned source runtime flags must be inspected during resource generation."
+                    if capability in {"prefix_cache", "chunked_prefill"}
+                    else "No source-verified planner adapter establishes software support, dependencies and "
+                    "resource sizing."
+                ),
             )
         parameters = {}
         if capability == "external_kv_cache" and selected.native_cpu_cache_gib:
@@ -473,9 +562,15 @@ def resolved_plan(run, configuration: dict) -> ConfigurationPlan:
                 " Workload benefit is unmeasured; optional traffic information can refine tuning, "
                 "but is not a compatibility prerequisite."
             )
-        decisions.append(OptimizationDecision(
-            capability_id=capability, label=label, status=status, reason=reason, parameters=parameters,
-        ))
+        decisions.append(
+            OptimizationDecision(
+                capability_id=capability,
+                label=label,
+                status=status,
+                reason=reason,
+                parameters=parameters,
+            )
+        )
     return ConfigurationPlan(
         plan_id=f"{run.id}:{run.revision}",
         mode=run.request.planning_mode,
@@ -484,9 +579,11 @@ def resolved_plan(run, configuration: dict) -> ConfigurationPlan:
         decisions=decisions,
         optimization_choices=optimization_choices(requirements, available),
         resource_estimate={
-            "accelerators": selected.required_gpus, "status": "estimated",
+            "accelerators": selected.required_gpus,
+            "status": "estimated",
             "available_accelerators": available,
-            "cpu_cache_gib": (selected.native_cpu_cache_gib or 0) * (selected.replicas + (selected.prefill_replicas or 0)),
+            "cpu_cache_gib": (selected.native_cpu_cache_gib or 0)
+            * (selected.replicas + (selected.prefill_replicas or 0)),
         },
         candidates=[item.model_dump(mode="json") for item in run.candidates],
         validation={

@@ -1,13 +1,5 @@
-import { optimizationCatalog } from '@repo/shared/inference/optimizations';
 import { deploymentSelection } from './deploymentSelection.js';
 import yaml from 'js-yaml';
-
-/** The source revision, not a page-specific preset, owns the optimization inventory. */
-export function compositionOptions(catalog) {
-    return optimizationCatalog(catalog).items.filter(item => !['parameter', 'recipe'].includes(item.selection)
-        && item.present && !['external-operation', 'requires-adapter'].includes(item.generation) && item.maturity !== 'deprecated')
-        .map(({ id, label, guide, detail }) => ({ id, label, guide, detail }));
-}
 
 /** Make revision-owned defaults explicit; unresolved source expressions stay unresolved. */
 export function compositionDefaults(catalog) {

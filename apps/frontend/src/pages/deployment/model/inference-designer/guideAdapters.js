@@ -41,11 +41,3 @@ export function adaptMarkdownGuide(guide) {
     if (!blocks.length) return guide;
     return { ...guide, variables: { ...guide.variables, ...variables }, steps: { ...guide.steps, deploy: { markdown: blocks.map(run => ({ run })) } } };
 }
-
-/** Picker entries require a deployment definition, not merely a README directory. */
-export function deploymentGuideEntries(catalog) {
-    return (catalog?.guides || []).filter(guide => guide.disposition?.kind === 'recipe' && (
-        Object.keys(guide.steps?.deploy || {}).length > 0 ||
-        (catalog.assets || []).some(asset => asset.guide === guide.id && asset.kind === 'chart')
-    ));
-}

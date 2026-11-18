@@ -4050,7 +4050,9 @@ async def create_run(request: EvaluateRunRequest, http_request: Request = None) 
         _run_api_keys[run["id"]] = request.api_key
     _hydrate_benchmark_context(run)
     if "specification_file" not in request.model_fields_set:
-        run["specification_file"] = os.environ.get("LLM_D_BENCH_SPECIFICATION_FILE") or _guide_benchmark_specification(run.get("guide"))
+        run["specification_file"] = os.environ.get("LLM_D_BENCH_SPECIFICATION_FILE") or _guide_benchmark_specification(
+            run.get("guide")
+        )
     run["benchmark"]["specification_file"] = run["specification_file"]
     _save(run)
     _tasks[run["id"]] = asyncio.create_task(_execute(run["id"]))

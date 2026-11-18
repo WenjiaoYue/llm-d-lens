@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createBlueprint } from './blueprint.js';
-import { inferenceScene, sceneRelations, optimizationFlowPlan, servingStageGroups, servingFlowDiagram } from './sceneGraph.js';
+import { inferenceScene, optimizationFlowPlan, servingFlowDiagram } from './sceneGraph.js';
+import { OPTIMIZATIONS } from '@repo/shared/inference/optimizations';
+
+test('every catalog capability has a real scene attachment', () => {
+    const graph = inferenceScene(createBlueprint());
+    assert.equal(graph.capabilities.length, OPTIMIZATIONS.length);
+    for (const item of graph.capabilities) {
+        assert.ok(graph.nodes.some(node => node.id === item.stage));
+        assert.equal(item.unavailable, !item.available);
+    }
+    assert.equal(graph.edges.find(item => item.id === 'decode-loop').kind, 'iteration');
+    assert.equal(graph.edges.find(item => item.id === 'kv-events').kind, 'state');
+});
 
 test('optimizations belong to a module or a relationship; they are not request stages', () => {
     const graph = inferenceScene(createBlueprint());
@@ -25,13 +37,6 @@ test('P/D enabling changes worker topology and transport without inventing a CPU
     assert.deepEqual(split.edges.find(edge => edge.id === 'kv-wire'), { id: 'kv-wire', inPlan: true, from: 'prefill-worker', to: 'decode-worker', kind: 'state', enabled: true });
     assert.equal(split.capabilities.find(node => node.id === 'cache').enabled, false);
     assert.equal(split.capabilities.find(node => node.id === 'transfer').enabled, true);
-});
-test('selecting a relationship reveals its endpoints and their placement, not unrelated hierarchy', () => {
-    const graph = inferenceScene({ ...createBlueprint(), pd: true });
-    assert.ok(sceneRelations(graph, null).visibleEdges.every(edge => edge.kind !== 'placement'));
-    const relation = sceneRelations(graph, 'transfer');
-    for (const id of ['prefill', 'decode', 'prefill-worker', 'decode-worker']) assert.ok(relation.highlighted.has(id));
-    assert.ok(!relation.visibleEdges.some(edge => edge.id === 'router-service'));
 });
 test('optional components remain distinguishable from enabled deployment components', () => {
     const graph = inferenceScene(createBlueprint(), 'Test cluster');
@@ -118,34 +123,6 @@ test('dense source catalogs keep preview markers inside tiles without losing sel
         assert.ok(new Set(graph.nodes.filter(item => item.tier === tier.id).map(item => item.colorIndex)).size > 1);
     }
 });
-
-test('stage disclosure accounts for every source capability in combined and P/D plans', () => {
-    for (const pd of [false, true]) {
-        const graph = inferenceScene({ ...createBlueprint(), pd, sourceGuides: [{ id: 'new-source-addon', title: 'New source addon', hasAssets: true }] });
-        const groups = servingStageGroups(graph);
-        assert.deepEqual(new Set(groups.flatMap(group => group.capabilities.map(cap => cap.id))), new Set(graph.capabilities.map(cap => cap.id)));
-        assert.equal(groups.filter(group => group.primary).length, pd ? 3 : 2);
-        const platform = groups.find(group => group.id === 'pods');
-        assert.ok(platform.capabilities.some(cap => cap.id === 'scaling'));
-        assert.ok(platform.capabilities.some(cap => cap.id === 'guide:new-source-addon'));
-        assert.ok(!groups.find(group => group.id === 'routing').capabilities.some(cap => cap.id === 'cache'));
-        for (const group of groups) assert.equal(new Set(group.capabilities.map(cap => cap.id)).size, group.capabilities.length);
-    }
-});
-
-test('shared KV settings attach to both compute roles without becoming request stages', () => {
-    const graph = inferenceScene({ ...createBlueprint(), pd: true });
-    const groups = servingStageGroups(graph);
-    for (const id of ['prefill', 'decode']) {
-        const cache = groups.find(group => group.id === id).capabilities.find(cap => cap.id === 'cache');
-        assert.deepEqual(cache.stages, ['prefill', 'decode']);
-        assert.equal(cache.enabled, false);
-        assert.equal(cache.kind, 'Optimization');
-    }
-    assert.ok(!groups.some(group => group.id === 'cache'));
-    assert.ok(!groups.find(group => group.id === 'prefill').capabilities.some(cap => cap.id === 'speculation'));
-});
-
 
 test('compact overview accounts for every optimization exactly once and keeps them off the request path', () => {
     const graph = inferenceScene({ ...createBlueprint(), prefixCaching: 'enabled', chunkedPrefill: 'enabled' });

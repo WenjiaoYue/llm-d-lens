@@ -74,19 +74,25 @@ class PlanningSnapshotStore:
         for directory in self._base_dir.iterdir():
             if not directory.is_dir():
                 continue
-            snapshots = sorted(directory.glob('*.json'), reverse=True)
+            snapshots = sorted(directory.glob("*.json"), reverse=True)
             if not snapshots:
                 continue
             try:
                 payload = json.loads(snapshots[0].read_text())
             except (OSError, ValueError):
-                logging.getLogger(__name__).exception('Unable to read optimization snapshot %s', snapshots[0].name)
+                logging.getLogger(__name__).exception("Unable to read optimization snapshot %s", snapshots[0].name)
                 continue
-            saved = payload.get('optimization_run')
-            if saved and (saved.get('optimization') or {}).get('status') in {'running', 'cleanup_failed', 'interrupted'}:
+            saved = payload.get("optimization_run")
+            if saved and (saved.get("optimization") or {}).get("status") in {
+                "running",
+                "cleanup_failed",
+                "interrupted",
+            }:
                 run = AgenticDeploymentRun.model_validate(saved)
-                run.optimization['status'] = 'interrupted'
-                run.optimization['error'] = 'The service stopped during testing. Clean up the recorded test deployments before starting again.'
+                run.optimization["status"] = "interrupted"
+                run.optimization["error"] = (
+                    "The service stopped during testing. Clean up the recorded test deployments before starting again."
+                )
                 run.status = AgenticDeploymentStatus.FAILED
                 result.append(run)
         return result

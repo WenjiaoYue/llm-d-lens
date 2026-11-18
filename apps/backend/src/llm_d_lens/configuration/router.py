@@ -26,6 +26,7 @@ from llm_d_lens.auth.access import current_principal, filter_by_cluster, require
 from llm_d_lens.core.exceptions import DomainError
 from llm_d_lens.deploy.capabilities import deployment_capabilities
 
+from .decision_engine import build_plan
 from .errors import ConfigurationError
 from .models import (
     ConfigurationArtifactRecord,
@@ -36,7 +37,6 @@ from .models import (
     SaveRequest,
     SaveResponse,
 )
-from .decision_engine import build_plan
 from .plan_models import ConfigurationPlan, PlanRequest
 from .service import (
     delete_configuration_artifact,

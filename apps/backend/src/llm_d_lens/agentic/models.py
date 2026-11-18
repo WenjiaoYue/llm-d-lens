@@ -38,7 +38,9 @@ class AgenticExecutionPolicy(BaseModel):
     max_optimization_iterations: int = Field(default=0, ge=0, le=3)
     max_benchmark_runs: int = Field(default=0, ge=0, le=4)
     max_total_duration_minutes: int = Field(default=60, ge=1, le=180)
-    allow_trials: bool = Field(default=False, description="Permit separately approved trial deployments; planning never starts trials.")
+    allow_trials: bool = Field(
+        default=False, description="Permit separately approved trial deployments; planning never starts trials."
+    )
 
 
 class AgenticDeploymentCreateRequest(StandardKubernetesServiceRequest):
@@ -49,7 +51,8 @@ class AgenticDeploymentCreateRequest(StandardKubernetesServiceRequest):
     planner_prompt: str | None = Field(default=None, max_length=2_000)
     ai_provider_id: str | None = Field(default=None, max_length=200)
     planning_mode: Literal["manual", "agentic"] = Field(
-        default="agentic", description=(
+        default="agentic",
+        description=(
             "Manual maximizes source-verified optimization coverage without AI; "
             "Agentic recommends among shared compatible combinations."
         ),
@@ -96,7 +99,9 @@ class AgenticCandidateSelectionRequest(BaseModel):
     role: Literal["decode", "prefill"] = "decode"
     replicas: int | None = Field(default=None, ge=1, le=128)
     tensor_parallel_size: int | None = Field(default=None, ge=1, le=128)
-    render_resources: bool = Field(default=False, description="Render and validate the selected configuration without deploying.")
+    render_resources: bool = Field(
+        default=False, description="Render and validate the selected configuration without deploying."
+    )
     compare_combinations: bool = Field(
         default=False,
         description=(
@@ -110,7 +115,10 @@ class AgenticCandidateSelectionRequest(BaseModel):
     max_num_seqs: int | None = Field(default=None, ge=1, le=4096)
     max_num_batched_tokens: int | None = Field(default=None, ge=256, le=131072)
     native_cpu_cache_gib: float | None = Field(
-        default=None, gt=0, le=1024, allow_inf_nan=False,
+        default=None,
+        gt=0,
+        le=1024,
+        allow_inf_nan=False,
         description="Revise CPU KV cache GiB per model replica, checked against current free host memory.",
     )
 
