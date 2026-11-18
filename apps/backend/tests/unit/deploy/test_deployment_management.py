@@ -148,6 +148,16 @@ def test_execution_save_reloads_after_concurrent_metadata_update(tmp_path, confl
     assert persisted.status == (DeploymentStatus.DEPLOYING if conflicts == 3 else DeploymentStatus.READY)
 
 
+def test_execution_provenance_patch_keeps_cluster_session(tmp_path) -> None:
+    store = JsonDeploymentRunStore(tmp_path)
+    execution = _execution("execution-patch", DeploymentStatus.READY, "serving")
+    store.save_execution(execution)
+    store.update_execution_provenance(execution.execution_id, {"runtime_verification": {"status": "pass"}})
+    provenance = store.get_execution(execution.execution_id).provenance
+    assert provenance["cluster_session_id"] == "session-1"
+    assert provenance["runtime_verification"] == {"status": "pass"}
+
+
 def test_execution_save_does_not_retry_other_persistence_errors(tmp_path) -> None:
     """Do not disguise unrelated database failures as transient version conflicts."""
     store = JsonDeploymentRunStore(tmp_path)

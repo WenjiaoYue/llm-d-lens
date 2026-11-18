@@ -6,6 +6,175 @@ description: The main deployment run, execution, and case APIs behind Lens Deplo
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
+## Reviewed DisaggregatedSet plans
+
+DS, resource-budget and inferred equal-device baseline configurations require preparation
+and explicit digest confirmation. Preparing does not
+create a Run or Kubernetes resources. The plan is owner- and cluster-bound, stores final
+workload YAML, namespace, Router values and a checksum-verified local Chart archive, and
+is consumed atomically with Run creation. Repeating the same successful confirmation
+returns the original Run. Changing configuration, runtime settings or cluster requires
+a new plan; renewing only the session for the same cluster does not.
+
+<Tabs>
+<TabItem value="rest" label="REST API">
+
+| Endpoint | Contract |
+| --- | --- |
+| `POST /api/v1/deployments/plans` | Accepts `DeploymentRunCreateRequest`. Requires create permission, active target session and cluster access. Returns `id`, `digest`, `clusterId`, `status`, `createdAt`, `runId`, `preflight`, and `cases`; invalid inputs return 422. |
+| `GET /api/v1/deployments/plans/{plan_id}` | Requires read permission, exact plan ownership and cluster access. Returns the saved review view, not refreshed preflight; unavailable plans return 404. Archive bytes and local paths are excluded. |
+| `POST /api/v1/deployments/executions/{execution_id}/restart-plan` | Requires run-create permission, case-execute scope and cluster access. Optional body `{"cluster_session_id":"SESSION_ID"}` renews the same-cluster session with session-rebind permission. A stopped/failed prepared execution returns `{"status":"awaiting_review","plan":{...},"request":{...}}`; unsupported or Evaluation-owned executions return 409. No cleanup or execution occurs. |
+| `POST /api/v1/deployments/runs` | Submit the original request plus `prepared_plan_id`, `expected_plan_digest`, and `acknowledge_unknown`. Rechecks preflight and refuses changed bindings, failed constraints or unacknowledged unknowns with 409. |
+| `GET /api/v1/deployments/topology?cluster_id=ID` | Requires create permission and cluster access. Returns Node labels, allocatable resources, conditions and taints, plus Pod node, phase and effective `resourceRequests`. Unavailable/incomplete inventory returns 503. |
+| `POST /api/v1/deployments/executions/{execution_id}/verify` | Requires case-execute scope and cluster access. Body `{"smoke":false}` reads evidence; `true` also sends bounded inference and may establish a port-forward. Returns independent `kubernetes`, `placement`, `routing`, `kvTransfer`, `pods`, `observedAt` and optional `inference`. Unsupported executions return 409; unavailable cluster evidence returns 503. |
+
+After preparing an existing deployment request, retain it unchanged and add:
+
+```json
+{
+  "prepared_plan_id": "ID returned by preparation",
+  "expected_plan_digest": "sha256:digest returned by preparation",
+  "acknowledge_unknown": true
+}
+```
+
+Each review case includes `manifest`, `namespaceManifest`, `manifestChecksum`, `namespace`,
+`routerManifest`, `routerValues`, `chartChecksum`, auxiliary `resources` and `sourceCommit`.
+`storageResources` contains reviewed satellite PV/PVC manifests; changed storage definitions
+or existing PV name collisions are rejected. `secretReference` identifies the configured
+credential source without its bytes; this does not freeze credential rotation. Unsupported
+dynamic-PVC mirroring into a new deployment namespace is rejected during preparation.
+`preflight.status` is `pass`, `fail` or `unknown`. A modeled
+placement witness is not a reservation: admission, quota, concurrent scheduling,
+rollout surge and unsupported constraints remain unknown. Unknown acknowledgment
+does not override a failed constraint.
+`preflight.assignments` entries carry `domain` when the placement policy uses a topology
+key. `preflight.slicePreview` lists one entry per DisaggregatedSet case with `caseIndex`,
+`workload`, `slices`, `maxFeasibleSlices` (free-resource estimate for the case's policy;
+`null` when unknown), `placementPolicy`, `sliceRouting` (`prefer` when the frozen Router
+values contain the affinity scorer), `roles`, `sliceRequests`, `acceleratorResources` and
+`placement` (modeled Pods per Slice with node and domain).
+
+Cases also expose optional `comparisonBudget`. The existing case
+restart endpoint returns the same review response for prepared deployments and rejects
+inline model tokens; rotate the configured Secret source instead. Submit the returned
+`request` plus the new plan ID/digest to `POST /runs`. Old resources remain untouched.
+Smoke verification adds `captureErrors`, `after`, and an `artifact` inventory with
+immutable report checksums. Passive reads return `lastProbe` when one is saved.
+The verify request also accepts `metrics_only` (mutually exclusive with `smoke`): it reads
+current per-Pod model-server metric counters without sending any inference request or
+persisting a report, returning `metrics` keyed by Pod name plus `metricsCollectedAt`.
+Counter values are snapshots at collection time, not rates.
+
+</TabItem>
+<TabItem value="python" label="Python API">
+
+`llm_d_lens.deploy.prepared_plans` exposes `prepare(manager, request, owner_user_id=...)`,
+`public_plan(plan)` and `consume(manager, request, owner_user_id=...)`. These internal
+callables assume the HTTP caller has enforced action permission and cluster access.
+
+```python
+from llm_d_lens.deploy.contracts import DeploymentRunCreateRequest
+from llm_d_lens.deploy.prepared_plans import prepare, public_plan, consume
+
+async def prepare_for_review(manager, request_body, owner_user_id):
+  request = DeploymentRunCreateRequest.model_validate(request_body)
+  plan = await prepare(manager, request, owner_user_id=owner_user_id)
+  return public_plan(plan)
+
+async def execute_reviewed(manager, original_body, reviewed_plan, owner_user_id):
+  request = DeploymentRunCreateRequest.model_validate({
+    **original_body,
+    "prepared_plan_id": reviewed_plan["id"],
+    "expected_plan_digest": reviewed_plan["digest"],
+    "acknowledge_unknown": True,
+  })
+  return await consume(manager, request, owner_user_id=owner_user_id)
+```
+
+The authenticated route callables support restart preparation and verification:
+
+```python
+from llm_d_lens.deploy.router import (
+  prepare_execution_restart, verify_deployment_execution, RuntimeVerificationRequest,
+)
+
+async def review_restart(execution_id, authenticated_request):
+  return await prepare_execution_restart(execution_id, authenticated_request)
+
+async def probe_execution(execution_id, authenticated_request):
+  return await verify_deployment_execution(
+    execution_id, RuntimeVerificationRequest(smoke=True), authenticated_request,
+  )
+```
+
+</TabItem>
+</Tabs>
+
+Verification reports observed ownership and Node topology, not physical-fabric
+certification. HTTP success and aggregate metric deltas do not prove request-specific
+P/D routing or KV transfer; those dimensions remain unknown without correlated evidence.
+For instrumented vLLM 0.26.0 NIXL pull workers, a positive verdict requires a unique
+response-to-decode request mapping, remote producer request identity, nonempty receive
+completion and producer acknowledgements for every TP rank, stable Pod/engine identities,
+matching DS ownership/revision and no observed failure/recompute fallback. Evidence
+records actual Pod UIDs, same-Slice/domain observations and block counts. A cross-Slice
+pair is observable evidence, not a violation of the soft routing preference. Other
+versions/connectors, missing ranks, full-cache-hit notifications without transfer and
+incomplete capture remain unknown. This certifies only the bounded probe request.
+Frozen execution skips Helm CRD installation and hooks. Install compatible controllers
+and CRDs separately. Review accepts only classified namespaced resource kinds, rejects
+embedded Secret objects (including nested Lists), and rejects other namespaces.
+The only separately generated cluster-scoped resources in this plan are the reviewed
+storage satellite PVs; arbitrary cluster-scoped YAML is not accepted.
+Namespace ownership markers guard cleanup against deleting a
+pre-existing or replaced namespace.
+
+### Guide configuration inputs
+
+The UI-only `POST /api/guide-planning/prepare` accepts `guide`, `accelerator` and
+`modelServer`, and returns `ready`, full `commit` and `capabilities.disaggregatedSet`.
+For DS sources with optional `clusterId` and `model`, `recommendation` contains
+`guideDefault` (`slices`, `placementPolicy`), `capacity` (`sliceRequests`,
+`acceleratorResources`, `podsPerSlice`, `maxSlices.None`, `schedulableNodes` and
+`topologyKeys` with per-domain `domainDetails`, `feasibleDomains` and
+`exclusiveTopologyDomains`, and `unmodeled`, which lists `DRA` when Slice Pods request
+accelerators through ResourceClaims that the estimate does not count), a suggested `placementPolicy` with `maxSlices` and `reasons`,
+and `history` of recent succeeded same-model Evaluation cases on that cluster
+(`slices`, P/D shape, `accelerators`, `maximumStableQps`, `throughputTps`, `accelerator`,
+`guideCommit`, `slaTargets`, `workloadLabel` and `evidenceKey`, which groups runs with the same
+request shape and SLO targets regardless of rate stages). It never selects a Slice count; capacity is estimated for the Guide default
+roles and is not a reservation.
+`POST /api/guide-planning/plan` additionally accepts `expectedSourceCommit` for official
+sources and `disaggregatedSet`:
+
+```json
+{"disaggregatedSet":{"slices":2,"placementPolicy":{"type":"ExclusiveSlice","topology":"topology.kubernetes.io/zone"},"sliceRouting":"prefer"}}
+```
+
+The planner returns `disaggregatedSet` and `workloadSummary` with expanded Pod count and
+resource requests. With a cluster session, DS plans also return `sliceCapacity` (the same
+shape as `recommendation.capacity`, computed for the rendered roles; `null` when inventory is
+unavailable). Role replicas are **per Slice**; group size expands leader/worker
+Pods, and resource requests, not tensor parallelism, determine demand. Legal multiple
+Slices are retained. External scaling with multiple Slices is rejected. `sliceRouting`
+is `inherit` or `prefer`; the latter requires supported llm-d Router 1.0 single-EPP
+profiles and adds a soft prefill affinity scorer, not a strict routing guarantee.
+Official and remote custom sources render from fixed Git snapshots; external Kustomize
+dependencies must be vendored. Local inputs and referenced files are copied before
+rendering. Local provenance uses `revisionKind="content-snapshot"`, `snapshotChecksum`
+(SHA-256) and its first 40 hex characters in `commit`, not the dirty tree's Git HEAD.
+`POST /api/v1/configurations/render` accepts `candidate_config.disaggregated_set`,
+stored as `content.disaggregatedSet`. `workloadSummary`
+also includes a `disaggregatedSet` boolean for custom-source capability discovery.
+Python callers use `CandidateConfig`/`GuideSource` in `llm_d_lens.configuration.models`
+and `render_configuration(RenderRequest.model_validate(request_body))` in
+`llm_d_lens.configuration.service`; the same fields and validation apply.
+
+The Python route callables are `llm_d_lens.deploy.guide_planning.prepare(request)` and
+`plan(request)`; both take a Starlette `Request` carrying the JSON body and established
+cluster/session context. Prefer the browser workflow for these UI-only endpoints.
+
 When specifying an operator preference for deployment planning, use English, such as
 `prefer prefix cache`, `more GPU for performance`, or `use fewer GPU resources`.
 The deterministic planner matches English preference keywords; Chinese keyword aliases

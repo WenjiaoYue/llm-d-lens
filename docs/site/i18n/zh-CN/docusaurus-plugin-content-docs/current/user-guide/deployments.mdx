@@ -5,6 +5,68 @@ description: 查找部署、确认就绪状态、查看日志并删除不再使�
 
 打开 **Deployments（部署）**，确认模型是否就绪、排查失败原因或管理已有部署。
 
+## DisaggregatedSet 审核
+
+所选 Guide 支持 DisaggregatedSet 时，配置直接暴露真实 API 字段：`spec.slices`、
+`spec.placementPolicy.type`/`.topology`，以及 **EPP Topology Affinity**
+（`topology-affinity-scorer` 或 `topology-affinity-filter` 插件）。Prefill 和 decode 副本数都是每 Slice 的数量。资源摘要展开全部 Slice
+和 leader/worker Pod，不把 TP 当作加速器资源数量。
+
+Deploy 和 Evaluation 的 P/D 配置都会在拓扑设置下方显示
+**Slice Configuration（Slice 配置）**。只有来源被识别为 DS 后才启用参数；加载中、准备失败和
+Guide 不包含 DS 时都会明确提示。**Recheck Slice support** 可重新检查官方来源，标题处显示固定的 Guide commit。
+仅选择 P/D 不会将基于 Deployment 的 Guide 自动转换为 DisaggregatedSet。
+
+Slice 数和放置策略从 Guide 默认值开始；EPP Topology Affinity 默认选择 Scorer：
+
+- **Max feasible（最大可行 Slice 数）**按所选放置策略根据当前空闲资源估算：`None` 按装箱计算，
+  `ExclusiveSlice` 统计可各容纳一个 Slice 的域，`ExclusiveTopology` 再排除已被其他 DisaggregatedSet
+  使用的域。点击 **Generate YAML** 之前按 Guide 默认角色估算，之后按生成的角色估算。这不是预留。
+- **Recommended（推荐 Slice 数）**只在有匹配证据时出现：同模型、同 Guide、同集群、同加速器、
+  每 Slice P/D 副本数与 TP 相同，且记录了 SLO 稳定速率的成功 Evaluation 用例。输入 **Target load（目标负载）**
+  后，取当前上限内实测速率满足目标的最少 Slice 数。实测使用了不同负载或 SLO 目标时，在
+  **Evidence（证据负载与 SLO）**中选择其一，不同组的结果不会混用；否则显示
+  `No verified recommendation — Guide default: N`。仅凭吞吐量永远不会选定 Slice 数。
+- **预估资源**按所选 Slice 数乘以每 Slice 请求量；预算检查使用的加速器总量包含全部 Slice。
+- **Placement（拓扑与放置）**选择放置类型，从已发现的节点标签中选择拓扑键（或填写其他键），
+  并展示每个域的节点、空闲加速器及能否容纳一个 Slice。Guide 通过 DRA claim 申请加速器时，估算不计入这部分，
+  域改为显示空闲 CPU 和内存，并提示上限只按 CPU、内存和 Pod 数计算。自定义标签会被标注，因为 Lens 无法验证其
+  是否反映物理拓扑；节点标签由集群管理员修改，本页不修改。发现的放置方案以 **Suggested（建议）**提供。
+- **EPP Topology Affinity** 只有 **Scorer** 和 **Filter** 两个选项。Scorer 为同 Slice 候选加分；
+  Filter 在存在匹配项时保留同 Slice 候选。缺少对端拓扑或没有匹配候选时会放行全部候选，
+  因此 Filter 并不保证严格的同 Slice 路由。生成配置时，未设置或旧的继承设置会转为 Scorer，
+  已有的 Filter 选择会保留。
+- **Evaluation evidence（评测证据）**列出近期实测结果，标注每 Slice 形态相同的记录，**Apply** 会复制该结果的
+  Slice 数、放置策略和 P/D 参数。
+
+部署 DS 配置会在原部署流程中运行预检，不再打开额外的审核弹窗。检查通过后直接部署；
+失败或未知约束显示在页面内的 **Deployment checks（部署检查）** 区域。
+其中的 **Slice deployment preview（Slice 部署预览）**显示所选与可行
+Slice 数、每 Slice 角色、加速器请求总量、放置策略、EPP 路由，以及模拟的 Slice→域、Pod→节点
+放置（实际调度器可能选择其他节点）。工作负载 YAML、Router values 和校验和可在 **Deployment resources（部署资源）** 中展开查看。
+失败约束阻止执行（包括找不到可行放置的 Slice 数），未知约束需要明确确认，并不代表资源已预留。修改集群或部署输入必须重新
+审核。最终计划冻结渲染输入和 Chart 字节，不安装缺失的 DS/LWS 控制器或 CRD。官方 Guide
+快照要求将 Kustomize 依赖纳入源码。
+
+本地来源会冻结资源、补丁、生成器输入和 Router values，并记录内容校验和，不将脏文件
+误报为 Git HEAD。远程自定义 Kustomize 从精确 commit 快照渲染；外部依赖和越界路径必须
+先纳入源码。独立部署的 DS 停止或失败后，可用 **restart-plan API（重试计划接口）**
+准备新摘要，不删除旧资源；确认后创建新运行。Evaluation 所有的部署通过工作流重试。
+
+Evaluation 在已审核的 DS 部署开始压测前自动执行有界推理探测。在评估详情的 **Deployments（部署）**
+页签中，**Runtime verification（运行时验证）**分别显示 Kubernetes 就绪、Slice 放置、P/D 路由及 KV
+传输的状态和原因。**Recorded evidence（已记录证据）**展示采集的 Pod/Node 与请求证据。
+部署验证 API 还支持显式推理探测和只读指标快照；指标快照不是实时速率。
+Pod 就绪、HTTP 成功、同 Slice 标签和聚合 KV 计数都不能证明单个
+请求的传输。缺少关联证据时，路由/KV 状态保持未知。这些检查不认证物理网络带宽或在线滚动升级安全。
+
+对于已注入探针的 vLLM 0.26.0 NIXL pull worker，验证会将响应 ID 与所有 TP rank 的接收完成、
+发送端确认关联，检查 Pod/引擎稳定性及 P/D revision，并排除传输失败后重算。报告记录实际
+P/D Pod、是否同 Slice/域及传输块数，以带校验和的部署证据持久化；重新打开详情仍可查看。
+不支持的版本、连接器或不完整证据保持未知。
+
+修改 Slice 数仍需新建配置并重新审核。
+
 ## 打开部署创建流程
 
 1. 在左侧导航中，打开**部署**。

@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from .disaggregated_set import validate_disaggregated_sets
 from .managed_environment import admin_managed_environment_names
 
 
@@ -450,6 +451,7 @@ def _validate_kv_topic(tokens: list[str], deployment_name: str, expected_model: 
 
 def validate_manifest_facts(configuration_content: dict[str, Any], manifest: str) -> None:
     """Reject explicit Configuration facts that the rendered manifest does not prove."""
+    validate_disaggregated_sets(_documents(manifest), configuration_content.get("disaggregatedSet"))
     model = configuration_content.get("model")
     expected_model = model.get("name") if isinstance(model, dict) else None
     if not isinstance(expected_model, str) or not expected_model:
@@ -492,7 +494,6 @@ def validate_manifest_facts(configuration_content: dict[str, Any], manifest: str
             expected_replicas = _positive_int(component["replicaCount"], f"{role} replica count")
             actual_replicas = sum(
                 _positive_int(workload.get("replicas", 1), f"{name} replica count")
-                * _positive_int(workload.get("slices", 1), f"{name} slice count")
                 for workload, _container, name, _role_name, _tokens in role_workloads
             )
             if actual_replicas != expected_replicas:
