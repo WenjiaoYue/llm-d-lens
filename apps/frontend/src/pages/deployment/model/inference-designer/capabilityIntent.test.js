@@ -101,3 +101,12 @@ test('accelerator support limits engine/provider variants and picks the supporte
     const unknown = expandCapabilityIntent({ ...catalog, guides: [...catalog.guides, pd] }, ['pd'], { capabilities: {}, accelerator: 'other' });
     assert.ok(unknown.errors.some(error => /MODEL_SERVER/.test(error)));
 });
+
+test('prefix affinity insertion leaves decode scheduling unchanged', () => {
+    const config = { plugins: [{ type: 'token-load-scorer' }], schedulingProfiles: ['default', 'prefill', 'decode'].map(name => ({ name, plugins: [{ pluginRef: 'token-load-scorer' }] })) };
+    const content = yaml.dump({ router: { epp: { pluginsCustomConfig: { 'pd.yaml': yaml.dump(config) } } } });
+    const defaults = [{ type: 'approx-prefix-cache-producer' }, { type: 'prefix-cache-affinity-filter' }];
+    const changed = yaml.load(yaml.load(applyRouterCapabilities(content, { affinity: true }, defaults)).router.epp.pluginsCustomConfig['pd.yaml']);
+    assert.deepEqual(changed.schedulingProfiles[2], config.schedulingProfiles[2]);
+    assert.ok(changed.schedulingProfiles.slice(0, 2).every(profile => profile.plugins.some(plugin => plugin.pluginRef === 'prefix-cache-affinity-filter')));
+});

@@ -2,12 +2,8 @@ import { useEffect, useState } from 'react';
 import { routerParameterDocument, changeRouterParameter } from '../../model/inference-designer/routerParameters';
 import { nodeRouterFields } from '../../model/inference-designer/nodeParameters';
 import { InferenceParameterField, ParameterGroups } from './InferenceParameterField';
-import { Button, Input, Select } from '../../../../shared/ui/index';
-
-function RouterValue({ leaf, onCommit }) {
-    const [value, setValue] = useState(String(leaf.value));
-    return leaf.type === 'boolean' ? <Select aria-label={leaf.title || leaf.key} value={String(leaf.value)} onChange={event => onCommit(event.target.value)}><option value="true">true</option><option value="false">false</option></Select> : <Input aria-label={leaf.title || leaf.key} value={value} onChange={event => setValue(event.target.value)} onBlur={() => { if (value !== String(leaf.value)) onCommit(value); }} />;
-}
+import { Button } from '../../../../shared/ui/index';
+import { InferenceParameterInput } from './InferenceParameterInput';
 
 export function InferenceRouterParameters({ draft, change, onLoad, busy, canLoad, onError, entity, embedded = false, hiddenKeys = [] }) {
     useEffect(() => () => onError(''), [onError]);
@@ -22,7 +18,7 @@ export function InferenceRouterParameters({ draft, change, onLoad, busy, canLoad
         {draft.routerSourceCommit && <p className="inference-flow-help">Source: {draft.routerSourceCommit.slice(0, 12)} · {draft.routerSourceKey}</p>}
         {(parseError || error) && <p role="alert">{parseError || error}</p>}
         {entity && !leaves.length && !parseError && <p className="inference-empty">This source declares no explicit tuning values for this optimization. Plugin defaults remain inherited. Open Source YAML below to add explicit settings supported by this source revision.</p>}
-        {leaves.length > 0 && <ParameterGroups fields={leaves} searchLabel="Find a router parameter" render={leaf => <InferenceParameterField key={leaf.id} field={leaf}><RouterValue key={JSON.stringify([leaf.id, leaf.value])} leaf={leaf} onCommit={value => {
+        {leaves.length > 0 && <ParameterGroups fields={leaves} searchLabel="Find a router parameter" render={leaf => <InferenceParameterField key={leaf.id} field={leaf}><InferenceParameterInput key={JSON.stringify([leaf.id, leaf.value])} leaf={leaf} onCommit={value => {
                 try { change({ routerValues: changeRouterParameter(draft.routerValues, leaf, value) }); setError(''); onError(''); } catch (reason) { setError(reason.message); onError(reason.message); }
             }} /></InferenceParameterField>} />}
 

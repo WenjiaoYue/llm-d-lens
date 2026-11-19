@@ -82,6 +82,7 @@ export function candidateCompositionDraft(run, candidate, catalog, profile, entr
             maxModelLen: run.request.max_model_len, maxNumSeqs: run.request.max_num_seqs,
             maxNumBatchedTokens: run.request.max_num_batched_tokens, gpuMemoryUtilization: run.request.gpu_memory_utilization,
             podPlacement: run.request.placement_replicas || 'prefer-same-node',
+            nodeLabel: run.request.placement_node_label || undefined,
             // Source overrides render an empty value as a bare flag; the legacy path spells it "true".
             customParameters: run.request.vllm_arguments.map(item => ({ ...item, value: BARE_FLAGS.has(item.name) && item.value === 'true' ? '' : item.value, target: 'both', kind: 'argument' })),
         },

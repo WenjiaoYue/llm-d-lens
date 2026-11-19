@@ -35,6 +35,7 @@ from llm_d_lens.deploy.source_composition import (
 from llm_d_lens.hardware.registry import all_profiles
 from llm_d_lens.infrastructure.artifacts.manifests import text_checksum
 
+from .benchmark_evidence import source_recipe_identity
 from .facts import resolve_planning_facts
 from .models import AgenticDeploymentStatus
 
@@ -247,9 +248,17 @@ def candidate_from_bundle(candidate, bundle):
             for child in children:
                 if child.get("kv_connector") == "OffloadingConnector":
                     cache_capacities.add(child["kv_connector_extra_config"]["cpu_bytes_to_use"] / 1024**3)
+    if len(cache_capacities) > 1:
+        raise ValueError("A shared deployment plan cannot represent different CPU cache capacities across roles.")
     if "decode" not in roles:
         raise ValueError("The rendered configuration has no serving or decode workload.")
     values = candidate.model_dump()
+    provenance = json.loads(next(file["content"] for file in bundle["files"] if file["name"] == "provenance.json"))
+    values["provider_ref"] = source_recipe_identity(
+        [item["path"] for item in provenance["components"]], has_prefill="prefill" in roles
+    )
+    if values["provider_ref"] is None:
+        raise ValueError("A shared deployment plan requires an unambiguous source recipe matching the rendered roles.")
     for role in ("prefill", "decode"):
         prefix = "prefill_" if role == "prefill" else ""
         workload, tokens = roles.get(role, ({}, []))
@@ -349,6 +358,14 @@ async def render_source_plan(service, run_id, payload, request):
                 intent = dict(body.get("deploymentIntent") or {})
                 intent["maxDevices"] = original.request.requirements.hard_constraints.get("maxAccelerators") or ""
                 body["deploymentIntent"] = intent
+                body["_placement"] = {
+                    "replicas": original.request.placement_replicas,
+                    **(
+                        {"nodeLabel": original.request.placement_node_label}
+                        if original.request.placement_node_label
+                        else {}
+                    ),
+                }
                 if isinstance(body.get("runtimeConfiguration"), dict):
                     body["runtimeConfiguration"] = {
                         **body["runtimeConfiguration"],

@@ -93,6 +93,26 @@ _CPU_CACHE_MARKER = "native-cpu-cache:"
 _PREFIX_ROUTING_MARKER = "prefix-routing:"
 
 
+def source_recipe_identity(paths: list[str], *, has_prefill: bool) -> str | None:
+    recipes = {"optimized-baseline", "pd-disaggregation", "precise-prefix-cache-routing", "tiered-prefix-cache"}
+    found = {part for path in paths for part in path.split("/") if part in recipes}
+    primary = {
+        part
+        for path in paths
+        if not (
+            "tiered-prefix-cache" in path.split("/") and path.rstrip("/").endswith(("/native/cpu", "/native/cpu/base"))
+        )
+        for part in path.split("/")
+        if part in recipes
+    }
+    if primary:
+        found = primary
+    if len(found) != 1:
+        return None
+    recipe = found.pop()
+    return recipe if (recipe == "pd-disaggregation") == has_prefill else None
+
+
 def composition_markers(native_cpu_cache_gib: float | None, prefix_routing: bool | None) -> tuple[str, ...]:
     """Optimization markers that identify a serving composition in benchmark records and queries."""
     markers = (f"{_CPU_CACHE_MARKER}{native_cpu_cache_gib:g}GiB",) if native_cpu_cache_gib else ()

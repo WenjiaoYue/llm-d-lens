@@ -10,11 +10,13 @@ export function defaultInferenceEndpoint(endpoints = []) {
         if (/metrics|monitor/.test(name) || CONTROL_PORTS.has(port)
             || (/(^|-)epp($|-)/.test(name) && ![80, 443].includes(port))) return -Infinity;
         let value = 0;
-        if (/gateway|router|inference/.test(name)) value += 20;
+        if (/gateway|router/.test(name)) value += 40;
+        else if (/inference/.test(name)) value += 20;
         if ([80, 443, 8000, 8080].includes(port)) value += 10;
         return value;
     };
     const ranked = [...endpoints].sort((left, right) => score(right) - score(left));
+    if (ranked[1] && ranked[1].value !== ranked[0].value && score(ranked[0]) === score(ranked[1])) return '';
     return ranked[0] && Number.isFinite(score(ranked[0])) && (score(ranked[0]) > 0 || endpoints.length === 1) ? ranked[0].value : '';
 }
 

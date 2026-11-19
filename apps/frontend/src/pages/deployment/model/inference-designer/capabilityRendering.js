@@ -72,6 +72,7 @@ export function applyRouterCapabilities(content, overrides = {}, defaults = []) 
                     plugin = structuredClone(definition); config.plugins.push(plugin);
                 }
                 if (type === types.at(-1)) for (const profile of config.schedulingProfiles || []) {
+                    if (id === 'affinity' && !['default', 'prefill'].includes(profile.name)) continue;
                     profile.plugins ||= [];
                     const ref = plugin.name || plugin.type;
                     if (!profile.plugins.some(item => item.pluginRef === ref)) profile.plugins.push({ pluginRef: ref });

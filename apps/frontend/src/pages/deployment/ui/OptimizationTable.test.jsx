@@ -3,6 +3,7 @@ import test from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { OptimizationTable } from './OptimizationTable.jsx';
 import { optimizationRows } from '../model/deploymentPlan.js';
+import { OPTIMIZATIONS } from '@repo/shared/inference/optimizations';
 
 const choice = (capability_id, extra = {}) => ({ capability_id, label: capability_id, checked: true, auto: false, intended: true, reason: 'Planned.', ...extra });
 const plan = {
@@ -70,4 +71,16 @@ test('the compact corner list shows only optimization names and settings', () =>
     assert.match(html, /aria-label="Adjust Chunked prefill"/);
     assert.match(html, /Show optimizations in the center/);
     assert.doesNotMatch(html, /<table|type="checkbox"|Parameters/);
+});
+
+test('recipe-controlled capabilities expose settings instead of enabled no-op checkboxes', () => {
+    const recipes = OPTIMIZATIONS.filter(option => option.selection === 'recipe');
+    assert.ok(recipes.length > 0);
+    const recipePlan = { ...plan, decisions: recipes.map(option => ({ capability_id: option.id, label: option.label, status: 'enabled' })) };
+    const rows = optimizationRows(recipePlan, null).filter(row => recipes.some(option => option.id === row.id));
+    assert.ok(rows.every(row => row.toggleable === false));
+    const html = renderToStaticMarkup(<OptimizationTable plan={recipePlan} onOpen={() => {}} onToggle={async () => true} />);
+    const inputs = html.match(/<input[^>]*title="Controlled by source settings[^>]*>/g) || [];
+    assert.equal(inputs.length, recipes.length);
+    assert.ok(inputs.every(input => input.includes('disabled=""')));
 });

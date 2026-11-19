@@ -19,6 +19,7 @@ from llm_d_lens.agentic.benchmark_evidence import (
     ModelDescriptor,
     RuntimeFingerprint,
     composition_markers,
+    source_recipe_identity,
 )
 from llm_d_lens.db.dao.agentic_benchmark_record import BenchmarkRecordDao, BenchmarkRecordDaoError
 from llm_d_lens.deploy.contracts import DeployableConfiguration
@@ -192,13 +193,15 @@ def configuration_snapshot(run: dict) -> tuple[DeployableConfiguration, Candidat
         import yaml
 
         from llm_d_lens.configuration.manifest_facts import vllm_argument_value, workload_roles
+        from llm_d_lens.deploy.source_composition import rendered_optimizations
 
         manifest = (content.get("officialGuide") or {}).get("renderedManifest")
         if not isinstance(manifest, str) or not manifest.strip():
             raise ValueError("Source evidence requires the saved rendered manifest")
         roles = {}
         cache_capacities = set()
-        for workload in workload_roles(list(yaml.safe_load_all(manifest))):
+        parsed = list(yaml.safe_load_all(manifest))
+        for workload in workload_roles(parsed):
             for container in workload["pod"].get("containers", []):
                 if container.get("name") != "modelserver":
                     continue
@@ -217,11 +220,18 @@ def configuration_snapshot(run: dict) -> tuple[DeployableConfiguration, Candidat
                 for child in connector.get("kv_connector_extra_config", {}).get("connectors", [connector]):
                     if child.get("kv_connector") == "OffloadingConnector":
                         cache_capacities.add(child["kv_connector_extra_config"]["cpu_bytes_to_use"] / 1024**3)
+        if len(cache_capacities) > 1:
+            raise ValueError("Source evidence cannot represent different CPU cache capacities across roles")
         decode, prefill = roles.get("decode", {}), roles.get("prefill", {})
-        # Match the provider recipes that planning candidates keep, while markers retain composition details.
-        topology = "pd-disaggregation" if prefill else "optimized-baseline"
+        source = (content.get("officialGuide") or {}).get("source") or {}
+        topology = source_recipe_identity(source.get("files") or [], has_prefill=bool(prefill))
+        if topology is None:
+            raise ValueError("Source evidence requires an unambiguous source recipe matching the rendered roles")
         cpu_cache = next(iter(cache_capacities)) if len(cache_capacities) == 1 else None
-        prefix_routing = "prefix-cache-affinity-filter" in manifest
+        prefix_routing = any(
+            item["id"] == "affinity" and item["state"] == "configured"
+            for item in rendered_optimizations(parsed, source.get("commit", ""))["features"]
+        )
     candidate = CandidateConfiguration.model_validate(
         {
             "topology": topology,

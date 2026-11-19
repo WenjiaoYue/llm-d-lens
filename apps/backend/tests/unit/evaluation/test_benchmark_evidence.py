@@ -100,7 +100,10 @@ def test_source_evidence_derives_topology_from_reviewed_manifest(run):
 
     content = run["deployment_configuration"]["content"]
     content.pop("decode")
-    content["officialGuide"] = {"renderedManifest": bundle()["files"][0]["content"]}
+    content["officialGuide"] = {
+        "renderedManifest": bundle()["files"][0]["content"],
+        "source": {"files": ["guides/optimized-baseline/fixture"]},
+    }
     run["deployment_configuration"].update(provider_ref="source-composition", checksum=configuration_checksum(content))
     _, candidate = evidence.configuration_snapshot(run)
     assert candidate.decode_tp == 1
@@ -109,6 +112,44 @@ def test_source_evidence_derives_topology_from_reviewed_manifest(run):
     content["officialGuide"]["renderedManifest"] = ""
     run["deployment_configuration"]["checksum"] = configuration_checksum(content)
     with pytest.raises(ValueError, match="saved rendered manifest"):
+        evidence.configuration_snapshot(run)
+
+
+@pytest.mark.parametrize("recipe", ["optimized-baseline", "precise-prefix-cache-routing", "tiered-prefix-cache"])
+@pytest.mark.parametrize("mounted,referenced", [(False, True), (True, False), (True, True)])
+def test_source_evidence_keeps_recipe_and_requires_referenced_router_config(run, recipe, mounted, referenced):
+    import yaml
+
+    from llm_d_lens.agentic.source_plan import bundle_documents
+    from llm_d_lens.deploy.source_composition import dump
+    from tests.unit.agentic.test_source_plan import bundle
+
+    parsed = bundle_documents(bundle())
+    pod = parsed[1]["spec"]["template"]["spec"]
+    if mounted:
+        pod["volumes"] = [{"name": "router", "configMap": {"name": "router"}}]
+    config = {
+        "kind": "EndpointPickerConfig",
+        "plugins": [{"type": "prefix-cache-affinity-filter"}],
+        "schedulingProfiles": [{"plugins": [{"pluginRef": "prefix-cache-affinity-filter"}] if referenced else []}],
+    }
+    parsed.append(
+        {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "router"},
+            "data": {"policy.yaml": yaml.safe_dump(config)},
+        }
+    )
+    content = run["deployment_configuration"]["content"]
+    content["officialGuide"] = {"renderedManifest": dump(parsed), "source": {"files": [f"guides/{recipe}/fixture"]}}
+    run["deployment_configuration"].update(provider_ref="source-composition", checksum=configuration_checksum(content))
+    _, candidate = evidence.configuration_snapshot(run)
+    assert candidate.topology == recipe
+    assert f"prefix-routing:{'on' if mounted and referenced else 'off'}" in candidate.optimizations
+    content["officialGuide"]["source"]["files"] = []
+    run["deployment_configuration"]["checksum"] = configuration_checksum(content)
+    with pytest.raises(ValueError, match="unambiguous source recipe"):
         evidence.configuration_snapshot(run)
 
 

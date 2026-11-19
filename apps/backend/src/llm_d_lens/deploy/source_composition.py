@@ -633,6 +633,8 @@ def router_controls(parsed: list[dict], catalog: dict, overrides: dict) -> None:
                             if plugin_type == types[-1]:
                                 ref = plugin.get("name") or plugin["type"]
                                 for profile in config.get("schedulingProfiles", []):
+                                    if identifier == "affinity" and profile.get("name") not in {"default", "prefill"}:
+                                        continue
                                     refs = profile.setdefault("plugins", [])
                                     if not any(entry.get("pluginRef") == ref for entry in refs):
                                         refs.append({"pluginRef": ref})
@@ -1003,6 +1005,24 @@ async def check_target(request, body: dict, parsed: list[dict]) -> dict:
     pods = await run_kubectl(["get", "pods", "--all-namespaces", "-o", "json"], timeout=20, cluster_id=session_id)
     if not nodes.ok or not pods.ok:
         raise GuideError("Could not verify current cluster device availability.", 502)
+    constrained = any(
+        workload["kind"] == "DisaggregatedSet"
+        or workload["pod"].get("nodeSelector")
+        or workload["pod"].get("nodeName")
+        or workload["pod"].get("affinity", {}).get("nodeAffinity")
+        for workload in workload_roles(parsed)
+    )
+    if constrained:
+        from .placement_preflight import placement_preflight
+
+        placement = placement_preflight(
+            parsed, json.loads(nodes.stdout).get("items", []), json.loads(pods.stdout).get("items", [])
+        )
+        if placement["status"] == "fail":
+            raise GuideError(
+                "Placement validation failed: " + "; ".join(item["message"] for item in placement["errors"])
+            )
+        warnings.extend(placement["unmodeled"])
     for node in json.loads(nodes.stdout).get("items", []):
         if node.get("spec", {}).get("unschedulable") or not any(
             condition.get("type") == "Ready" and condition.get("status") == "True"
@@ -1162,6 +1182,22 @@ async def resolve_slice_layout(request, body: dict, parsed: list[dict]) -> dict 
     }
 
 
+def apply_reviewed_placement(parsed: list[dict], runtime: dict, placement: dict | None = None) -> list[dict]:
+    from .providers.target_node import apply_placement, configured_target_node, pin_manifest_to_node
+
+    content = dump(parsed)
+    if placement is None and runtime.get("podPlacement") is not None:
+        placement = {"replicas": runtime["podPlacement"]}
+        if runtime.get("nodeLabel"):
+            placement["nodeLabel"] = runtime["nodeLabel"]
+    if placement is not None:
+        content, _ = apply_placement(content, placement)
+    target = configured_target_node()
+    if target:
+        content, _ = pin_manifest_to_node(content, target)
+    return documents(content)
+
+
 async def compose(request, body: dict, shared: dict | None = None) -> dict:
     if not isinstance(body.get("clusterId"), str) or not body["clusterId"]:
         raise GuideError("Select a target cluster.")
@@ -1291,6 +1327,7 @@ async def compose(request, body: dict, shared: dict | None = None) -> dict:
     slice_layout = await resolve_slice_layout(request, body, parsed)
     lap("slice_layout")
     validate_engine_parameters(parsed)
+    parsed = apply_reviewed_placement(parsed, body.get("runtimeConfiguration") or {}, body.get("_placement"))
     base_checksum = checksum(dump(parsed))
     if "finalConfiguration" in body and body["finalConfiguration"] is not None:
         edited = body["finalConfiguration"]
@@ -1301,6 +1338,7 @@ async def compose(request, body: dict, shared: dict | None = None) -> dict:
             raise GuideError("Final YAML must retain the deployment namespace.")
         bind_model(parsed, binding, body.get("runtimeImage") if body.get("runtimeImageOverride") else None)
         validate_engine_parameters(parsed)
+        parsed = apply_reviewed_placement(parsed, body.get("runtimeConfiguration") or {}, body.get("_placement"))
 
     def resolved(text):
         if re.search(r"\$\{[A-Z][A-Z0-9_]*\}|REPLACE_MODEL_SERVER_IMAGE", text):

@@ -43,3 +43,12 @@ test('P/D Envoy traffic entry is selected despite sharing the EPP Service name',
     assert.equal(defaultInferenceEndpoint(endpoints), 'pd-disaggregation-epp:80');
     assert.equal(defaultInferenceEndpoint([{ value: 'metrics:80', serviceName: 'metrics', port: 80 }]), '');
 });
+
+test('gateway outranks inference model services and ambiguous entries require a choice', () => {
+    const model = { value: 'inference-model:8000', serviceName: 'inference-model', port: 8000 };
+    const gateway = { value: 'inference-gateway:80', serviceName: 'inference-gateway', port: 80 };
+    assert.equal(defaultInferenceEndpoint([model, gateway]), gateway.value);
+    assert.equal(defaultInferenceEndpoint([gateway, model]), gateway.value);
+    const other = { value: 'other-router:80', serviceName: 'other-router', port: 80 };
+    assert.equal(defaultInferenceEndpoint([gateway, other]), '');
+});

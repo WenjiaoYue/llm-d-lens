@@ -19,7 +19,8 @@ export function OptimizationTable({ plan, candidate, mode = 'manual', disabled =
     const settings = row => <Button size="icon" variant="ghost" disabled={disabled} title={`Adjust ${row.label}`} aria-label={`Adjust ${row.label}`} onClick={() => onOpen(row.id)}><Settings2 size={14} /></Button>;
     const checkbox = row => pending === row.id ? <Spinner size="xs" />
         : <input type="checkbox" className="h-4 w-4 cursor-pointer accent-[var(--brand-accent)] disabled:cursor-not-allowed" checked={row.checked} aria-label={`${row.checked ? 'Disable' : 'Enable'} ${row.label}`}
-            disabled={disabled || !onToggle || Boolean(pending)} onChange={event => toggle(row, event.target.checked)} />;
+            title={row.toggleable ? undefined : 'Controlled by source settings; use the settings button.'}
+            disabled={disabled || !onToggle || !row.toggleable || Boolean(pending)} onChange={event => toggle(row, event.target.checked)} />;
     const enabledCount = rows.filter(row => row.state === 'Enabled').length;
     const dot = row => <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ background: row.state === 'Enabled' ? '#10b981' : NOT_APPLIED[row.state] ? '#f59e0b' : 'var(--text-muted)' }} />;
     if (compact) return <section aria-label="Plan optimizations" className="flex max-h-full w-full flex-col self-start overflow-hidden rounded-xl border border-theme-border bg-theme-card shadow-lg ring-1 ring-[color-mix(in_srgb,var(--brand-accent)_25%,transparent)]">

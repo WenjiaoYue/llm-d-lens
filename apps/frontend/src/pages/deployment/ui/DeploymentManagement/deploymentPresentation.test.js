@@ -1,7 +1,14 @@
+import { deploymentBenchmarkRequest, derivePodStatusGroup, effectiveStatusGroup, effectiveStatusLabel, expectedModelPodCount, successfulPagePods, summarizeStatuses } from './deploymentPresentation.js';
+
+test('summary receives only successful results from the currently polled page', () => {
+    const cached = { current: [], failed: [], stale: [] };
+    assert.deepEqual(successfulPagePods(['current', 'failed', 'unpolled'], cached, { failed: 'Forbidden' }), { current: [] });
+    assert.deepEqual(successfulPagePods([], cached, {}), {});
+    assert.deepEqual(successfulPagePods(['failed'], cached, {}), { failed: [] });
+});
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { deploymentBenchmarkRequest, derivePodStatusGroup, effectiveStatusGroup, effectiveStatusLabel, expectedModelPodCount, summarizeStatuses } from './deploymentPresentation.js';
 
 test('benchmark requests target the execution with a preset sweep and optional P95 targets', () => {
     const request = deploymentBenchmarkRequest({ execution_id: 'exec-1' }, { preset: 'long-input', ttftMs: '500', tpotMs: '' });

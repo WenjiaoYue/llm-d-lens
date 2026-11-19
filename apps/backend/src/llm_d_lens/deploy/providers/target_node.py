@@ -122,26 +122,34 @@ def apply_placement(manifest: str, placement: dict[str, Any]) -> tuple[str, int]
             if replicas != "balanced":
                 affinity = pod_spec.setdefault("affinity", {})
             if replicas == "same-node":
-                affinity.setdefault("podAffinity", {}).setdefault(
+                terms = affinity.setdefault("podAffinity", {}).setdefault(
                     "requiredDuringSchedulingIgnoredDuringExecution", []
-                ).append(term)
-            elif replicas == "balanced":
-                pod_spec.setdefault("topologySpreadConstraints", []).append(
-                    {
-                        "maxSkew": 1,
-                        "topologyKey": "kubernetes.io/hostname",
-                        "whenUnsatisfiable": "DoNotSchedule",
-                        "labelSelector": selector,
-                    }
                 )
+                if term not in terms:
+                    terms.append(term)
+            elif replicas == "balanced":
+                constraint = {
+                    "maxSkew": 1,
+                    "topologyKey": "kubernetes.io/hostname",
+                    "whenUnsatisfiable": "DoNotSchedule",
+                    "labelSelector": selector,
+                }
+                constraints = pod_spec.setdefault("topologySpreadConstraints", [])
+                if constraint not in constraints:
+                    constraints.append(constraint)
             elif replicas == "spread":
-                affinity.setdefault("podAntiAffinity", {}).setdefault(
+                terms = affinity.setdefault("podAntiAffinity", {}).setdefault(
                     "requiredDuringSchedulingIgnoredDuringExecution", []
-                ).append(term)
+                )
+                if term not in terms:
+                    terms.append(term)
             if replicas in {"none", "prefer-same-node"}:
-                affinity.setdefault("podAffinity", {}).setdefault(
+                terms = affinity.setdefault("podAffinity", {}).setdefault(
                     "preferredDuringSchedulingIgnoredDuringExecution", []
-                ).append({"weight": 100, "podAffinityTerm": term})
+                )
+                preferred = {"weight": 100, "podAffinityTerm": term}
+                if preferred not in terms:
+                    terms.append(preferred)
             if node_label is not None:
                 selector_labels = pod_spec.setdefault("nodeSelector", {})
                 if not isinstance(selector_labels, dict) or (
@@ -182,11 +190,31 @@ def pin_manifest_to_node(manifest: str, target_node: str) -> tuple[str, int]:
                 pod_spec = template["spec"]
         elif kind == "CronJob" and isinstance(spec, dict):
             pod_spec = spec.get("jobTemplate", {}).get("spec", {}).get("template", {}).get("spec")
+        elif kind in {"DisaggregatedSet", "LeaderWorkerSet"} and isinstance(spec, dict):
+            if kind == "DisaggregatedSet":
+                if (spec.get("slices") or 1) > 1 and (spec.get("placementPolicy") or {}).get("type", "None") != "None":
+                    raise ValueError("Target node conflicts with slice placement in different topology domains")
+                groups = [
+                    (role.get("spec") or {}).get("leaderWorkerTemplate") or {} for role in spec.get("roles") or []
+                ]
+            else:
+                groups = [spec.get("leaderWorkerTemplate") or {}]
+            for group in groups:
+                for name in ("leaderTemplate", "workerTemplate"):
+                    template = group.get(name)
+                    if isinstance(template, dict):
+                        pin_resource({"kind": "Pod", "spec": template.get("spec")})
+            return
 
         if isinstance(pod_spec, dict):
             selector = pod_spec.setdefault("nodeSelector", {})
             if not isinstance(selector, dict):
                 raise ValueError(f"{kind} nodeSelector must be a mapping")
+            if (
+                selector.get("kubernetes.io/hostname", target_node) != target_node
+                or pod_spec.get("nodeName", target_node) != target_node
+            ):
+                raise ValueError(f"{kind} target node conflicts with the existing node selection")
             selector["kubernetes.io/hostname"] = target_node
             pinned += 1
 

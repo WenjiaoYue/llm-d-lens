@@ -44,6 +44,34 @@ def content():
     }
 
 
+@pytest.mark.asyncio
+async def test_source_placement_must_be_reviewed_and_is_not_applied_twice(monkeypatch, tmp_path):
+    import llm_d_lens.deploy.providers.configuration_manifest as module
+    from llm_d_lens.deploy.providers.target_node import apply_placement
+
+    monkeypatch.setattr(module, "accelerator_supported", lambda _: True)
+    monkeypatch.setattr(module, "configured_target_node", lambda: None)
+    monkeypatch.setattr(module, "instrument_manifest", lambda artifact, _: artifact)
+    adapter = SourceCompositionAdapter(AsyncMock(), "llmd-", 30, output_root=tmp_path)
+    value = content()
+    value.update(
+        _deployment_namespace="llmd-reviewed",
+        _placement={"replicas": "same-node", "nodeLabel": {"key": "pool", "value": "selected"}},
+    )
+    with pytest.raises(ValueError, match="Placement changed after review"):
+        await adapter.render(adapter.discover(), value)
+    manifest, _ = apply_placement(value["officialGuide"]["renderedManifest"], value["_placement"])
+    value["officialGuide"].update(renderedManifest=manifest, manifestChecksum=text_checksum(manifest))
+    artifact = await adapter.render(adapter.discover(), value)
+    assert artifact.deployment_contract["placementApplied"] is True
+    from pathlib import Path
+
+    rendered = list(yaml.safe_load_all(Path(artifact.manifest_ref).read_text()))
+    pod = next(item for item in rendered if item["kind"] == "Deployment")["spec"]["template"]["spec"]
+    assert pod["nodeSelector"]["pool"] == "selected"
+    assert len(pod["affinity"]["podAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"]) == 1
+
+
 def router_documents(namespace="__PRISM_NAMESPACE__"):
     return [
         {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "router-epp", "namespace": namespace}},

@@ -247,6 +247,39 @@ def test_dra_budget_and_live_usable_inventory_are_both_enforced(monkeypatch):
         asyncio.run(composition.check_target(None, body, parsed))
 
 
+def test_selected_node_capacity_is_checked_instead_of_cluster_total(monkeypatch):
+    parsed = [workload(replicas=2)]
+    pod = parsed[0]["spec"]["template"]["spec"]
+    pod["containers"][0]["resources"] = {"limits": {"nvidia.com/gpu": 1}}
+    parsed = composition.apply_reviewed_placement(
+        parsed, {"podPlacement": "same-node", "nodeLabel": {"key": "pool", "value": "selected"}}
+    )
+    nodes = [
+        {
+            "metadata": {"name": name, "labels": {"pool": name}},
+            "status": {
+                "conditions": [{"type": "Ready", "status": "True"}],
+                "allocatable": {"nvidia.com/gpu": str(count), "pods": "110"},
+            },
+        }
+        for name, count in (("selected", 1), ("other", 8))
+    ]
+
+    async def session(*_):
+        return SimpleNamespace(server_id="fixture")
+
+    async def kubectl(args, **kwargs):
+        return SimpleNamespace(ok=True, stdout=json.dumps({"items": nodes if args[1] == "nodes" else []}))
+
+    monkeypatch.setattr(composition, "validate_planning_session", session)
+    monkeypatch.setattr(composition, "run_kubectl", kubectl)
+    body = {"clusterId": "fixture", "clusterSessionId": "session"}
+    with pytest.raises(GuideError, match="Placement validation failed"):
+        asyncio.run(composition.check_target(None, body, parsed))
+    nodes[0]["status"]["allocatable"]["nvidia.com/gpu"] = "2"
+    assert asyncio.run(composition.check_target(None, body, parsed))["demand"] == {"nvidia.com/gpu": 2}
+
+
 def test_catalog_keeps_all_definitions_and_new_source_guides_visible():
     catalog = catalog_module.optimization_catalog(
         [{"id": "models/new-model", "title": "New model recipe", "support": {}}], "a" * 40
@@ -500,6 +533,8 @@ def test_source_checkout_is_extracted_once_per_commit(source_tree, monkeypatch):
 
 
 def test_python_composition_round_trip_and_stale_edits(source_tree, monkeypatch):
+    monkeypatch.setenv("PRISM_K8S_TARGET_NODE", "chosen")
+
     async def authorized(request, body):
         return source_tree, await catalog_module.inventory(source_tree)
 
@@ -507,6 +542,8 @@ def test_python_composition_round_trip_and_stale_edits(source_tree, monkeypatch)
         return BINDING
 
     async def target(request, body, parsed):
+        pod = next(item for item in parsed if item["kind"] == "Deployment")["spec"]["template"]["spec"]
+        assert pod["nodeSelector"] == {"kubernetes.io/hostname": "chosen"}
         return {"warnings": [], "level": "device-count", "demand": {}, "available": {}}
 
     monkeypatch.setattr(composition, "authorized_inventory", authorized)
@@ -731,3 +768,25 @@ def test_router_policies_and_unreferenced_configs():
     pod["volumes"] = []
     facts = composition.rendered_optimizations(parsed, "a" * 40)
     assert next(item for item in facts["features"] if item["id"] == "load-routing")["state"] == "not-declared"
+
+
+def test_prefix_affinity_insertion_preserves_decode_profile():
+    config = {
+        "kind": "EndpointPickerConfig",
+        "plugins": [
+            {"type": "token-load-scorer"},
+            {"type": "approx-prefix-cache-producer"},
+            {"type": "prefix-cache-affinity-filter"},
+        ],
+        "schedulingProfiles": [
+            {"name": name, "plugins": [{"pluginRef": "token-load-scorer"}]} for name in ("default", "prefill", "decode")
+        ],
+    }
+    parsed = [{"kind": "ConfigMap", "data": {"policy.yaml": yaml.safe_dump(config)}}]
+    composition.router_controls(parsed, {"assets": []}, {"affinity": True})
+    updated = yaml.safe_load(parsed[0]["data"]["policy.yaml"])
+    assert updated["schedulingProfiles"][2] == config["schedulingProfiles"][2]
+    assert all(
+        {"pluginRef": "prefix-cache-affinity-filter"} in profile["plugins"]
+        for profile in updated["schedulingProfiles"][:2]
+    )

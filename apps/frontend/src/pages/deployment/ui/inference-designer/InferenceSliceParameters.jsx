@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Input, Select } from '../../../../shared/ui/index';
 import { listDeploymentNodeLabels } from '../../../optimization/ui/OptimizationWorkspace/remoteDeployBackend';
-import { podPlacementConflict, sliceTopologyKeys } from '../../model/inference-designer/sliceLayout';
+import { automaticSliceSizing, matchesSliceRecommendation, podPlacementConflict, sliceTopologyKeys } from '../../model/inference-designer/sliceLayout';
 
 const TYPES = [
     ['None', 'None: scheduler decides'],
@@ -30,6 +30,9 @@ export function InferenceSliceParameters({ draft, change, recommendation, disabl
     const policy = runtime.placementPolicy || { type: 'None' };
     const update = values => change({ runtimeConfiguration: { ...runtime, ...values } });
     const number = (key, input) => {
+        if (key === 'slices' && input.value.trim() === '') {
+            setError(''); update(automaticSliceSizing(runtime)); return;
+        }
         const value = Number(input.value);
         if (!Number.isSafeInteger(value) || value < 1 || (key === 'slices' && value > 64)) {
             setError(`${key} must be a whole number${key === 'slices' ? ' from 1 to 64' : ' of at least 1'}; kept ${runtime[key] ?? 'Auto'}.`);
@@ -39,8 +42,7 @@ export function InferenceSliceParameters({ draft, change, recommendation, disabl
         setError(''); update({ [key]: value });
     };
     const devices = (runtime.slices || 1) * ((runtime.prefillReplicas || 0) * (runtime.prefillTp || 1) + (runtime.replicas || 1) * (runtime.tp || 1));
-    const matches = recommendation && recommendation.slices === runtime.slices
-        && recommendation.placementPolicy?.type === policy.type && (recommendation.placementPolicy?.topology || '') === (policy.topology || '');
+    const matches = matchesSliceRecommendation(runtime, recommendation);
     const auto = runtime.slices === undefined && !runtime.placementPolicy;
     const conflict = podPlacementConflict(runtime.podPlacement, runtime.slices || 1, policy);
     const hostnameBlocked = podPlacementConflict(runtime.podPlacement, runtime.slices || 1, { type: 'ExclusiveSlice', topology: 'kubernetes.io/hostname' });

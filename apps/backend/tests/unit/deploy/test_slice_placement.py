@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -8,7 +9,7 @@ from llm_d_lens.deploy import slice_placement
 from llm_d_lens.deploy import source_composition as composition
 from llm_d_lens.deploy.guide_planning import GuideError
 from llm_d_lens.deploy.providers.configuration_manifest import prepare_single_slice_disaggregated_set_manifest
-from llm_d_lens.deploy.providers.target_node import apply_placement
+from llm_d_lens.deploy.providers.target_node import apply_placement, pin_manifest_to_node
 
 
 def node(name, free, *, rack=None, occupied=False):
@@ -173,6 +174,28 @@ def test_pod_placement_applies_to_disaggregated_roles_and_rejects_slice_conflict
     with pytest.raises(ValueError, match="different topology domain"):
         apply_placement(yaml.safe_dump(document), {"replicas": "same-node"})
     apply_placement(yaml.safe_dump(document), {"replicas": "spread"})
+
+
+def test_target_node_pins_all_role_templates_and_rejects_conflicts():
+    document = disaggregated_set()
+    for role in document["spec"]["roles"]:
+        group = role["spec"]["leaderWorkerTemplate"]
+        group["leaderTemplate"] = deepcopy(group["workerTemplate"])
+    rendered, count = pin_manifest_to_node(yaml.safe_dump(document), "chosen")
+    assert count == 4
+    pinned = yaml.safe_load(rendered)
+    for role in pinned["spec"]["roles"]:
+        for template in ("leaderTemplate", "workerTemplate"):
+            assert (
+                role["spec"]["leaderWorkerTemplate"][template]["spec"]["nodeSelector"]["kubernetes.io/hostname"]
+                == "chosen"
+            )
+    with pytest.raises(ValueError, match="existing node selection"):
+        pin_manifest_to_node(rendered, "another")
+    document["spec"]["slices"] = 2
+    document["spec"]["placementPolicy"] = {"type": "ExclusiveSlice", "topology": "topology.kubernetes.io/zone"}
+    with pytest.raises(ValueError, match="conflicts with slice placement"):
+        pin_manifest_to_node(yaml.safe_dump(document), "chosen")
 
 
 def test_manifest_keeps_its_declared_slice_count():

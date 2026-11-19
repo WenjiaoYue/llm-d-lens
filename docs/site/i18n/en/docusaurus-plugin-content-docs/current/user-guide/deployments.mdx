@@ -208,12 +208,26 @@ Disabling native CPU cache retains its capacity for re-enabling.
 A changed source revision requires an
 explicit decision to discard source edits and adopt the current revision.
 
+Rejected numeric edits restore the last accepted value and display the validation error.
+Clearing an explicit **Slices** count returns to automatic sizing while preserving total
+Prefill and Decode replicas. A layout is **Recommended** only when both role counts,
+slice count and placement policy match the recommendation.
+Pod placement and target-node selectors are included before the source snapshot is reviewed;
+selected-node capacity is checked rather than relying only on total cluster capacity.
+A later placement change requires regenerating the reviewed configuration.
+Source-plan evidence requires an identifiable source recipe and a representable CPU-cache
+capacity; ambiguous recipes or differing role cache capacities are rejected rather than
+treated as baseline/cache-free evidence. Prefix affinity is detected from mounted,
+profile-referenced router configuration, and enabling it leaves Decode profiles unchanged.
+
 A compact strip above the serving flow summarizes topology, accelerators, optimization
 count and status. **Review & deploy** opens one dialog with **Overview**, **Parameters**
 and **YAML** tabs. Overview shows accelerators, topology, cluster,
 model cache, the optimizations enabled in the final YAML, checks, warnings and
-**Confirm deployment**. Lens selects the **Inference Service** automatically, excluding EPP control
-and metrics ports; with a single choice it is shown read-only. A Service named `epp` can still supply the HTTP entry on port 80 or 443;
+**Confirm deployment**. Lens selects the **Inference Service** automatically, preferring gateway/router
+Services over generic inference-model Services and excluding EPP control and metrics ports.
+Equally ranked entries require an explicit choice; with a single choice it is shown read-only.
+A Service named `epp` can still supply the HTTP entry on port 80 or 443;
 change it only if needed. **Parameters** shows one card per Guide recipe (Guide-level variables
 such as the model server; adding or removing Guides is under an advanced disclosure) and one card
 per workload with only replicas, container images, resources, engine flags and environment
@@ -230,7 +244,9 @@ empty top-right area, so it never covers stages or reduces the diagram width. Ea
 settings button that opens its parameters in place. Select the
 expand button to swap: the full table moves to the center and the flow becomes a corner thumbnail
 (select it to swap back). The table lists every optimization with a checkbox; checking or
-unchecking it rebuilds and rechecks the plan. Enabling or disabling one of these optimizations in
+unchecking a supported switch rebuilds and rechecks the plan. Recipe-controlled settings such
+as quantization and pipeline parallelism have disabled checkboxes; use their settings button
+to edit the owning source configuration. Enabling or disabling a supported optimization in
 the flow does the same, so the flow and the table stay in sync. Checked optimizations the plan does not apply
 show a status and the reason on their row. The table also lists optimizations that come with the
 Guide recipe (for example the token load scorer, or the KV transport used by Prefill / Decode

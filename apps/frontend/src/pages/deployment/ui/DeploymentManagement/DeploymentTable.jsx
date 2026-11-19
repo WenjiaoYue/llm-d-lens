@@ -12,6 +12,7 @@ import {
     effectiveStatusLabel,
     statusDotClassForGroup,
     statusGroup,
+    successfulPagePods,
 } from './deploymentPresentation';
 import { getDeploymentExecutionPods } from '../../../optimization';
 import { DeploymentMonitoringButton } from './DeploymentMonitoringButton';
@@ -282,7 +283,9 @@ export function DeploymentTable({ items, mutatingId, connectingEndpointId = '', 
     const [podsLoadingId, setPodsLoadingId] = useState('');
     const [podsErrorById, setPodsErrorById] = useState({});
     const pollTimerRef = useRef(null);
-    useEffect(() => { onPodsChange?.(podsById); }, [podsById, onPodsChange]);
+    const executionIdsKey = items.filter((item) => !item.pending && item.execution_id)
+        .map((item) => item.execution_id).join('|');
+    useEffect(() => { onPodsChange?.(successfulPagePods(executionIdsKey.split('|'), podsById, podsErrorById)); }, [executionIdsKey, podsById, podsErrorById, onPodsChange]);
     const highlighted = (item) => Boolean(highlightName) && [item.name, item.display_name, item.namespace].some((value) => value && String(value).includes(highlightName));
 
     const fetchPodsFor = async (executionId, silent = false) => {
@@ -310,8 +313,6 @@ export function DeploymentTable({ items, mutatingId, connectingEndpointId = '', 
 
     // Poll pods for the visible page so the status dot reflects live service
     // availability and reduced capacity, not only the slower backend record.
-    const executionIdsKey = items.filter((item) => !item.pending && item.execution_id)
-        .map((item) => item.execution_id).join('|');
     useEffect(() => {
         if (pollTimerRef.current) clearInterval(pollTimerRef.current);
         const executionIds = executionIdsKey ? executionIdsKey.split('|') : [];

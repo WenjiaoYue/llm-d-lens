@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBlueprint } from './blueprint';
 import { DEFAULT_DEPLOYMENT_INTENT, MANUAL_PRIORITY, deploymentIntentErrors, objectivePriority, recommendOptimizations } from './optimizationPolicy';
-import { isDisaggregatedDraft, sliceTopologyKeys } from './sliceLayout';
+import { automaticSliceSizing, isDisaggregatedDraft, matchesSliceRecommendation, sliceTopologyKeys } from './sliceLayout';
 import { compositionDisplayDraft } from './compositionPolicy';
 
 const catalog = {
@@ -76,4 +76,16 @@ test('slice topology keys run narrow to wide and P/D display reads Disaggregated
     const content = `kind: DisaggregatedSet\nspec:\n  slices: 2\n  roles: ${JSON.stringify([role('prefill', 1, 2), role('decode', 3, 4)])}\n`;
     const display = compositionDisplayDraft({}, { sourceComposition: true, files: [{ name: 'deployment.yaml', content }] });
     assert.deepEqual([display.slices, display.prefillReplicas, display.prefillTp, display.replicas, display.tp], ['2', '1', '2', '3', '4']);
+});
+
+test('returning to automatic slices preserves total replicas and recommendation tracks both roles', () => {
+    const runtime = { slices: 3, prefillReplicas: 2, replicas: 4, placementPolicy: { type: 'None' } };
+    const automatic = { ...runtime, ...automaticSliceSizing(runtime) };
+    assert.equal(automatic.slices, undefined);
+    assert.equal(automatic.prefillReplicas, 6);
+    assert.equal(automatic.replicas, 12);
+    assert.deepEqual(automaticSliceSizing(automatic), automaticSliceSizing(runtime));
+    assert.equal(matchesSliceRecommendation(runtime, runtime), true);
+    assert.equal(matchesSliceRecommendation({ ...runtime, prefillReplicas: 3 }, runtime), false);
+    assert.equal(matchesSliceRecommendation({ ...runtime, replicas: 5 }, runtime), false);
 });

@@ -495,6 +495,18 @@ class ConfigurationManifestAdapter:
                 overrides, definition.guide_id
             )
             deployment_contract = dict(deployment)
+            if definition.guide_id == "source-composition":
+                reviewed = manifest
+                if overrides.get("_placement") is not None:
+                    reviewed, _ = apply_placement(reviewed, overrides["_placement"])
+                target = configured_target_node()
+                if target:
+                    from .target_node import pin_manifest_to_node
+
+                    reviewed, _ = pin_manifest_to_node(reviewed, target)
+                if list(yaml.safe_load_all(reviewed)) != list(yaml.safe_load_all(manifest)):
+                    raise ValueError("Placement changed after review; regenerate the source configuration.")
+                deployment_contract["placementApplied"] = True
             bundle = (overrides.get("officialGuide") or {}).get("deploymentBundle")
             if bundle is not None:
                 validate_deployment_bundle(bundle, definition.guide_id, str(source.get("commit") or ""))
@@ -550,8 +562,6 @@ class ConfigurationManifestAdapter:
             )
         composition = overrides.get("guideComposition")
         if composition and not self._is_exact(overrides):
-            import yaml
-
             from llm_d_lens.configuration.guide_composition import compose_native_cpu_cache
             from llm_d_lens.deploy.guide_planning import GuideError, select_manifest_paths
 

@@ -2,6 +2,10 @@
 // GET /api/v1/deployments/executions. Kept free of JSX and network code so the
 // same rules can be reused by the table, the detail modal and the stat cards.
 
+export function successfulPagePods(executionIds, podsById, errorsById) {
+    return Object.fromEntries(executionIds.filter(id => id && !errorsById[id] && Object.hasOwn(podsById, id)).map(id => [id, podsById[id]]));
+}
+
 export const STATUS_GROUPS = {
     ready: 'Ready',
     succeeded: 'Ready',

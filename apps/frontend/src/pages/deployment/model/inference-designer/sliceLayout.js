@@ -12,6 +12,17 @@ export function sliceTopologyKeys(labels) {
 
 export const isDisaggregatedDraft = draft => Boolean(draft?.runtimeConfiguration?.prefillReplicas);
 
+export function automaticSliceSizing(runtime) {
+    const slices = runtime.slices ?? 1;
+    return { slices: undefined, prefillReplicas: runtime.prefillReplicas == null ? undefined : runtime.prefillReplicas * slices, replicas: runtime.replicas == null ? undefined : runtime.replicas * slices };
+}
+
+export function matchesSliceRecommendation(runtime, recommendation) {
+    const policy = runtime.placementPolicy || { type: 'None' };
+    return Boolean(recommendation && ['slices', 'prefillReplicas', 'replicas'].every(key => recommendation[key] === runtime[key])
+        && recommendation.placementPolicy?.type === policy.type && (recommendation.placementPolicy?.topology || '') === (policy.topology || ''));
+}
+
 /** Mirrors the server rule: exclusive slices conflict with pinning all Pods to one node; node-scoped slices also conflict with separating Pods. */
 export function podPlacementConflict(podPlacement, slices, policy) {
     if (!policy || policy.type === 'None') return '';

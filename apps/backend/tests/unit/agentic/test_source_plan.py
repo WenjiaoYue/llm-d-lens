@@ -1,5 +1,6 @@
 import asyncio
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -69,7 +70,9 @@ def bundle(features=("prefix",)):
             {"name": "deployment.yaml", "content": dump(docs)},
             {
                 "name": "provenance.json",
-                "content": json.dumps({"modelBinding": binding, "components": [{"path": "guides/base"}]}),
+                "content": json.dumps(
+                    {"modelBinding": binding, "components": [{"path": "guides/optimized-baseline/fixture"}]}
+                ),
             },
         ],
     }
@@ -343,6 +346,66 @@ def test_final_resources_clear_removed_seed_optimizations(workflow):
     result = source.candidate_from_bundle(candidate, bundle())
     assert result.native_cpu_cache_gib is None
     assert result.prefix_routing is False
+
+
+@pytest.mark.parametrize("recipe", ["optimized-baseline", "precise-prefix-cache-routing", "tiered-prefix-cache"])
+def test_rendered_candidate_uses_source_recipe_identity(workflow, recipe):
+    _, run, _ = workflow
+    rendered = bundle()
+    provenance = json.loads(rendered["files"][1]["content"])
+    provenance["components"] = [{"path": f"guides/{recipe}/fixture"}]
+    rendered["files"][1]["content"] = json.dumps(provenance)
+    assert source.candidate_from_bundle(run.candidates[0], rendered).provider_ref == recipe
+    provenance["components"].append({"path": "guides/tiered-prefix-cache/modelserver/fixture/vllm/native/cpu"})
+    rendered["files"][1]["content"] = json.dumps(provenance)
+    assert source.candidate_from_bundle(run.candidates[0], rendered).provider_ref == recipe
+    if recipe != "tiered-prefix-cache":
+        provenance["components"][-1]["path"] += "-unknown"
+        rendered["files"][1]["content"] = json.dumps(provenance)
+        with pytest.raises(ValueError, match="unambiguous source recipe"):
+            source.candidate_from_bundle(run.candidates[0], rendered)
+    provenance["components"] = [{"path": "custom/unknown"}]
+    rendered["files"][1]["content"] = json.dumps(provenance)
+    with pytest.raises(ValueError, match="unambiguous source recipe"):
+        source.candidate_from_bundle(run.candidates[0], rendered)
+
+
+def test_mixed_cpu_cache_capacities_are_not_reported_as_cache_free(workflow):
+    from llm_d_lens.agentic.benchmark_context import configuration_snapshot
+    from llm_d_lens.infrastructure.artifacts.manifests import configuration_checksum
+
+    _, run, _ = workflow
+    rendered = bundle()
+    parsed = source.bundle_documents(rendered)
+    prefill = deepcopy(parsed[1])
+    prefill["metadata"]["name"] = "prefill"
+    parsed.append(prefill)
+    for workload, capacity in ((parsed[1], 8), (prefill, 16)):
+        workload["spec"]["template"]["spec"]["containers"][0]["args"].append(
+            "--kv-transfer-config="
+            + json.dumps(
+                {
+                    "kv_connector": "OffloadingConnector",
+                    "kv_connector_extra_config": {"cpu_bytes_to_use": capacity * 1024**3},
+                }
+            )
+        )
+    rendered["files"][0]["content"] = dump(parsed)
+    with pytest.raises(ValueError, match="different CPU cache capacities"):
+        source.candidate_from_bundle(run.candidates[0], rendered)
+    content = {"officialGuide": {"renderedManifest": dump(parsed)}}
+    with pytest.raises(ValueError, match="different CPU cache capacities"):
+        configuration_snapshot(
+            {
+                "deployment_configuration": {
+                    "type": "baseline",
+                    "format": "manifest",
+                    "provider_ref": "source-composition",
+                    "checksum": configuration_checksum(content),
+                    "content": content,
+                }
+            }
+        )
 
 
 def test_midflight_legacy_selection_invalidates_source_render(workflow, monkeypatch):

@@ -1,6 +1,7 @@
 import yaml from 'js-yaml';
 import { OPTIMIZATIONS } from '@repo/shared/inference/optimizations';
 import { OPTIMIZATION_CONTROLS } from '../api/agenticDeploymentBackend';
+import { capabilityTogglePatch } from './inference-designer/deploymentSelection';
 
 /** Presentation of one optimization choice from the preview API or a plan's optimization_choices. */
 export function optimizationChoiceState(choice, checked = choice?.checked ?? true) {
@@ -33,7 +34,7 @@ export function optimizationRows(plan, candidate, mode = 'manual') {
     const rows = OPTIMIZATION_CONTROLS.map(([id, fallbackLabel]) => {
         const choice = choices.get(id);
         const decision = decisions.find(item => item.capability_id === id);
-        const row = { id, label: fallbackLabel, selectable: true, checked: choice ? choice.checked : !forbidden.has(id), parameters: optimizationParameters(id, candidate) };
+        const row = { id, label: fallbackLabel, selectable: true, toggleable: true, checked: choice ? choice.checked : !forbidden.has(id), parameters: optimizationParameters(id, candidate) };
         if (!row.checked) return { ...row, state: 'Off', tone: 'neutral', reason: choice?.reason || 'Turned off by you.' };
         if (ACTIVE_DECISIONS.has(decision?.status)) return { ...row, state: 'Enabled', tone: 'success', reason: decision.reason };
         if (mode === 'manual' && choice?.auto && !choice.intended) return { ...row, state: 'Auto: off', tone: 'neutral', reason: choice.reason };
@@ -46,8 +47,9 @@ export function optimizationRows(plan, candidate, mode = 'manual') {
     const others = decisions.filter(item => (ACTIVE_DECISIONS.has(item.status) || item.status === 'user_disabled') && !selectable.has(item.capability_id))
         .map(item => {
             const on = ACTIVE_DECISIONS.has(item.status);
-            return { id: item.capability_id, label: item.label, selectable: false, checked: on, state: on ? 'Enabled' : 'Off', tone: on ? 'success' : 'neutral', reason: item.reason, parameters: [],
-                detail: OPTIMIZATIONS.find(option => option.id === (item.catalog_id || item.capability_id))?.detail };
+            const option = OPTIMIZATIONS.find(option => option.id === (item.catalog_id || item.capability_id));
+            const toggleable = Boolean(capabilityTogglePatch({ ...option, id: option?.id || item.capability_id, enabled: on }, plan?.source_draft || {}));
+            return { id: item.capability_id, label: item.label, selectable: false, toggleable, checked: on, state: on ? 'Enabled' : 'Off', tone: on ? 'success' : 'neutral', reason: item.reason, parameters: [], detail: option?.detail };
         });
     return [...rows, ...others];
 }
