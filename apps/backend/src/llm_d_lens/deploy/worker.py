@@ -360,16 +360,16 @@ class DeploymentRunWorker:
         run = self._store.get_run(run_id)
         if run is None:
             raise ValueError("deployment run not found")
-        case = next(item for item in run.cases if item.id == case_id)
-        if cleaned.status in {DeploymentStatus.CLEANED, DeploymentStatus.CLEANED_UP}:
-            case.status = DeploymentCaseStatus.CLEANED
-        else:
+        if cleaned.status not in {DeploymentStatus.CLEANED, DeploymentStatus.CLEANED_UP}:
             raise ValueError(
                 "previous deployment namespace could not be cleaned; reconnect the original cluster session "
                 "before retrying"
             )
-        self._store.save_run(run)
         retry = DeploymentPlanService(self._store).retry_case(run_id, case_id)
+        run = self._store.get_run(run_id)
+        case = next(item for item in run.cases if item.id == case_id)
+        case.status = DeploymentCaseStatus.CLEANED
+        self._store.save_run(run)
         asyncio.create_task(self._execute_retry(run_id, retry.id, model_token))
         return retry
 

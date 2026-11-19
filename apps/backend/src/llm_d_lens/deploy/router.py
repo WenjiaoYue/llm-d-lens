@@ -36,6 +36,7 @@ from llm_d_lens.deploy.executions import (
     DeploymentExecutionNotFoundError,
     DeploymentScaleError,
     ensure_execution_endpoint,
+    execution_deployment_plan,
     find_execution_context,
     list_execution_contexts,
     scale_deployment_execution,
@@ -715,7 +716,9 @@ async def list_runs(request: Request = None, query: str = ""):
     summary="List deployment executions without creating new port-forwards.",
     description=(
         "List deployment executions without creating new port-forwards. Use this to discover execution ids, "
-        "readiness, cluster affinity, and endpoint metadata."
+        "readiness, cluster affinity, and endpoint metadata. Missing serving fields are supplemented from stored "
+        "rendered vLLM manifests; flat runtime parameters describe decode (or aggregated serving), not prefill. "
+        "Unspecified or unparseable parameters remain unknown."
     ),
     operation_id="list_deployment_executions",
 )
@@ -750,7 +753,9 @@ async def list_executions(
     summary="Get one deployment execution by execution id.",
     description=(
         "Get one deployment execution by execution id. Use this to inspect the current deployment status, namespace, "
-        "provenance, and endpoint metadata."
+        "provenance, and endpoint metadata. Missing serving fields are supplemented from stored rendered vLLM "
+        "manifests; flat runtime parameters describe decode (or aggregated serving), not prefill. "
+        "Unspecified or unparseable parameters remain unknown."
     ),
     operation_id="get_deployment_execution",
 )
@@ -761,6 +766,30 @@ async def get_execution(execution_id: str, request: Request = None):
         raise HTTPException(status_code=404, detail="deployment execution not found")
     _require_execution_permission(current_principal(request), context, "deployment:run:read")
     return context.api_payload()
+
+
+@router.get(
+    "/executions/{execution_id}/plan",
+    summary="Get the deployment plan and rendered Kubernetes YAML of one execution.",
+    description=(
+        "Get the deployment plan and rendered Kubernetes YAML of one execution. Returns the configuration "
+        "artifacts the deployment was created from (`configuration_artifacts`, each with its `kind`, "
+        "`provider_ref` and inline `content`) and the rendered multi-document manifest that Lens applied "
+        "(`manifest`), so the plan can be audited or re-applied with `kubectl apply -f`. `manifest` is null while "
+        "the execution is still pending or when the rendered file is no longer stored or cannot be parsed. Secret "
+        "`data` and `stringData` values, including Secrets in `List.items` and manifests embedded in artifact "
+        "content, are replaced with `<redacted>`; restore real values or remove those Secret objects before "
+        "re-applying the manifest. Returns 404 when the execution does not exist."
+    ),
+    operation_id="get_deployment_execution_plan",
+)
+async def get_execution_plan(execution_id: str, request: Request = None):
+    """Return the stored configuration plan and rendered manifest of one execution."""
+    context = find_execution_context(execution_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="deployment execution not found")
+    _require_execution_permission(current_principal(request), context, "deployment:run:read")
+    return execution_deployment_plan(context)
 
 
 def _resolve_execution_cluster_id(context) -> str | None:

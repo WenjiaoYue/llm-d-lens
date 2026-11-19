@@ -677,6 +677,10 @@ def _rebind_retry_session(workflow: dict) -> None:
     workflow["cluster_session_id"] = session.id
 
 
+def _guide_benchmark_specification(guide: str | None) -> str:
+    return "guides/optimized-baseline" if guide in {None, "baseline-vllm", "source-composition"} else f"guides/{guide}"
+
+
 def _benchmark_specification(case: dict) -> str:
     configured = os.environ.get("LLM_D_BENCH_SPECIFICATION_FILE")
     if configured:
@@ -685,11 +689,11 @@ def _benchmark_specification(case: dict) -> str:
         return "guides/optimized-baseline"
     embedded = _embedded_configuration(case)
     if embedded is not None:
-        return f"guides/{embedded.provider_ref}"
+        return _guide_benchmark_specification(embedded.provider_ref)
     artifact = get_configuration_artifact(case.get("configuration_artifact_id", ""))
     if artifact is not None:
-        return f"guides/{artifact.deployable_configuration.provider_ref}"
-    return f"guides/{case['spec']['guide']}"
+        return _guide_benchmark_specification(artifact.deployable_configuration.provider_ref)
+    return _guide_benchmark_specification(case["spec"]["guide"])
 
 
 def _configuration_facts(case: dict) -> dict:
@@ -4119,9 +4123,8 @@ async def create_run(request: EvaluateRunRequest, http_request: Request = None) 
         _run_api_keys[run["id"]] = request.api_key
     _hydrate_benchmark_context(run)
     if "specification_file" not in request.model_fields_set:
-        guide = run.get("guide")
-        run["specification_file"] = os.environ.get("LLM_D_BENCH_SPECIFICATION_FILE") or (
-            f"guides/{guide}" if guide and guide != "baseline-vllm" else "guides/optimized-baseline"
+        run["specification_file"] = os.environ.get("LLM_D_BENCH_SPECIFICATION_FILE") or _guide_benchmark_specification(
+            run.get("guide")
         )
     run["benchmark"]["specification_file"] = run["specification_file"]
     _save(run)
