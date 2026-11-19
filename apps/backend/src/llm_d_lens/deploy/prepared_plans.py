@@ -70,7 +70,9 @@ def plan_documents(plan: DeploymentPreparedPlan, index: int | None = None) -> li
     for case in cases:
         documents.extend(case["artifact"]["deployment_contract"].get("preparedStorage", []))
         documents.extend(item for item in yaml.safe_load_all(case["manifest"]) if isinstance(item, dict))
-        bundle = case["artifact"]["deployment_contract"]["deploymentBundle"]
+        bundle = case["artifact"]["deployment_contract"].get("deploymentBundle")
+        if bundle is None and case["artifact"].get("guide_id") == "source-composition":
+            continue
         documents.extend(item for item in yaml.safe_load_all(bundle["frozen"]["manifest"]) if isinstance(item, dict))
         for asset in bundle["resources"]:
             documents.extend(item for item in yaml.safe_load_all(asset["content"]) if isinstance(item, dict))
@@ -138,7 +140,7 @@ def slice_preview(plan: DeploymentPreparedPlan, case_index: int, assignments, no
     name = (workload.get("metadata") or {}).get("name", "")
     policy = spec.get("placementPolicy") or {"type": "None"}
     capacity = slice_capacity(documents, nodes, pods)
-    helm = item["artifact"]["deployment_contract"]["deploymentBundle"]["helm"]
+    helm = (item["artifact"]["deployment_contract"].get("deploymentBundle") or {}).get("helm", {})
     values = "\n".join(str(layer.get("content") or "") for layer in helm.get("values") or [])
     slices: dict[int, list[dict]] = {}
     for assignment in assignments:
@@ -266,7 +268,7 @@ async def prepare(manager, request, *, owner_user_id: str | None = None) -> Depl
 def public_plan(plan: DeploymentPreparedPlan) -> dict:
     cases = []
     for item in plan.payload["artifacts"]:
-        bundle = item["artifact"]["deployment_contract"]["deploymentBundle"]
+        bundle = item["artifact"]["deployment_contract"].get("deploymentBundle")
         secret = (item["context"].get("deployment_policy") or {}).get("model_secret") or {"mode": "none"}
         cases.append(
             {
@@ -279,10 +281,10 @@ def public_plan(plan: DeploymentPreparedPlan) -> dict:
                     key: secret[key] for key in ("mode", "sourceNamespace", "sourceName") if key in secret
                 },
                 "manifestChecksum": item["artifact"]["manifest_checksum"],
-                "routerManifest": bundle["frozen"]["manifest"],
-                "routerValues": bundle["helm"]["values"][-1]["content"],
-                "chartChecksum": bundle["frozen"]["chartChecksum"],
-                "resources": bundle["resources"],
+                "routerManifest": bundle["frozen"]["manifest"] if bundle else "",
+                "routerValues": bundle["helm"]["values"][-1]["content"] if bundle else "",
+                "chartChecksum": bundle["frozen"]["chartChecksum"] if bundle else None,
+                "resources": bundle["resources"] if bundle else [],
                 "sourceCommit": item["artifact"]["source_ref"],
             }
         )

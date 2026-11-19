@@ -44,7 +44,7 @@ Slice 数和放置策略从 Guide 默认值开始；EPP Topology Affinity 默认
 其中的 **Slice deployment preview（Slice 部署预览）**显示所选与可行
 Slice 数、每 Slice 角色、加速器请求总量、放置策略、EPP 路由，以及模拟的 Slice→域、Pod→节点
 放置（实际调度器可能选择其他节点）。工作负载 YAML、Router values 和校验和可在 **Deployment resources（部署资源）** 中展开查看。
-失败约束阻止执行（包括找不到可行放置的 Slice 数），未知约束需要明确确认，并不代表资源已预留。修改集群或部署输入必须重新
+失败约束阻止执行（包括找不到可行放置的 Slice 数）。预检无法得出结论时需要明确确认。可行放置并不预留资源或保证集群准入。修改集群或部署输入必须重新
 审核。最终计划冻结渲染输入和 Chart 字节，不安装缺失的 DS/LWS 控制器或 CRD。官方 Guide
 快照要求将 Kustomize 依赖纳入源码。
 
@@ -153,6 +153,7 @@ Pod 放置和目标节点选择条件会在源码快照审阅前写入，并检�
 流程图上方的横向摘要集中显示拓扑、加速卡、优化数量与状态。
 **Review & deploy** 打开一个窗口，包含 **Overview**、**Parameters** 和 **YAML** 标签页。
 Overview 显示加速卡、拓扑、集群、模型缓存、最终 YAML 中启用的优化、检查项、警告和 **Confirm deployment** 确认操作。
+在 Manual 和 Agentic 模式下，点击 **Confirm deployment** 后自动预检。找到可行放置且无错误时直接提交；未纳入放置模型的条件只作提示。集群信息不完整或搜索无法得出结论时才提示 **Accept risks and deploy**；明确失败仍会阻止部署。
 Lens 自动选择 **Inference Service（推理服务）**，优先 gateway/router Service 而非普通 inference-model Service，
 并排除 EPP 控制端口和指标端口。同分入口需要明确选择；只有一个选项时以只读方式显示。
 名称含 `epp` 的 Service 仍可通过 80 或 443 端口提供 HTTP 入口，仅在需要时修改。

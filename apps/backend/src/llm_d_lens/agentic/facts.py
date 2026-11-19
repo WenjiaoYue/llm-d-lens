@@ -81,7 +81,14 @@ class PlanningHardwareSnapshot:
             self._task = asyncio.create_task(build_overview(registry.require_cluster(cluster_id)))
         if self._task.cancelled():
             raise TimeoutError("Planning hardware discovery was cancelled; no snapshot is available")
-        return deepcopy(await self._task)
+        from kubernetes.aio.config.config_exception import ConfigException
+
+        try:
+            return deepcopy(await self._task)
+        except ConfigException as error:
+            raise ValueError(
+                "Cannot read hardware from the selected cluster. Check its kubeconfig and authentication, then retry."
+            ) from error
 
 
 def _hardware_model_key(model: str, profile: HardwareProfile) -> tuple[str, ...]:

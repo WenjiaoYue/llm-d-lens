@@ -460,7 +460,11 @@ Send `{"configuration_checksum":"<reviewed configuration checksum>"}`; a missing
 or stale checksum also returns `409`. Concurrent approval or candidate mutation
 is rejected while approval is in progress.
 Capacity is refreshed before submitting the stored configuration to Deploy.
-The response contains `deployment_run_id`. Generation is not a guarantee of
+For DisaggregatedSet configurations the first approval returns `configuration_plan.validation.preparedDeployment`
+without starting a deployment. Inspect its cases and preflight, then submit the same approval (including the
+selected `endpoint` for source compositions) with `prepared_plan_id` set to its `id` and `expected_plan_digest`
+set to its `digest`. Unknown preflight constraints require explicit `acknowledge_unknown: true`; failed checks block execution.
+The execution response contains `deployment_run_id`. Generation is not a guarantee of
 admission or readiness. Legacy approval remains compatible.
 
 Shared plans reject the legacy `/refine` prompt-only operation with `409`:

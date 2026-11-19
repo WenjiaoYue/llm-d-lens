@@ -42,7 +42,9 @@ def test_two_slices_fit_two_domains_without_claiming_full_scheduler_validation()
         [document()], [node("a1", "a", 4), node("a2", "a", 2), node("b1", "b", 4), node("b2", "b", 2)], []
     )
     assert report["modeledConstraints"] == "pass"
-    assert report["status"] == "unknown"
+    assert report["status"] == "pass"
+    assert "Physical topology source is unverified" in report["unmodeled"]
+    assert any("quota" in reason for reason in report["unmodeled"])
     assert len(report["assignments"]) == 6
     domains = {(item["slice"], item["domain"]) for item in report["assignments"]}
     assert len(domains) == 2 and {domain for _, domain in domains} == {"a", "b"}

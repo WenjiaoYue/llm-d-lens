@@ -375,7 +375,9 @@ Manual 保留不同已支持方案 / 缓存能力族并调用
 新的共享方案必须先生成并审阅资源，否则返回 `409`。
 提交 `{"configuration_checksum":"<reviewed configuration checksum>"}`；
 缺失或过期的校验和也返回 `409`。审批期间会拒绝重复审批及候选修改。
-提交已保存配置给 Deploy 前会刷新资源容量，响应包含 `deployment_run_id`。
+提交前会刷新资源容量。对 DisaggregatedSet 配置，首次审批返回 `configuration_plan.validation.preparedDeployment`，不会启动部署。
+审阅其中的资源与预检结果后，再次提交相同的审批请求（源码组合需保留所选 `endpoint`），将 `prepared_plan_id` 设为返回的 `id`，`expected_plan_digest` 设为返回的 `digest`。
+预检结果未知时须显式提交 `acknowledge_unknown: true`；预检失败不可执行。启动成功后返回 `deployment_run_id`。
 生成成功不保证准入或就绪，旧审批行为保持兼容。
 
 共享方案对旧的纯提示词 `/refine` 操作返回 `409`，应修改结构化需求并创建新计划。

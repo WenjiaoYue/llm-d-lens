@@ -56,12 +56,13 @@ Slice count and placement start from the Guide defaults; EPP Topology Affinity d
 Deploying a DS configuration runs preflight checks in the existing deployment flow,
 without an additional review dialog. Passed checks proceed directly to deployment;
 failures and unknown constraints appear inline under **Deployment checks**.
+In Manual and Agentic plan review, **Confirm deployment** submits the plan when preflight finds a placement and no errors. Conditions outside the placement model remain advisory. Incomplete inventory or an inconclusive search still prompts **Accept risks and deploy**.
 Its **Slice deployment preview**
 shows selected versus feasible Slices, the roles per Slice, total accelerator requests,
 placement, EPP routing and the modeled Slice-to-domain and Pod-to-node placement (the real
 scheduler may choose other nodes). Check workload YAML, Router
 values and checksums under **Deployment resources** when inspecting the preflight evidence. Failed constraints block
-execution, including a Slice count with no feasible placement; unknown constraints require explicit acknowledgment and are not reservations.
+execution, including a Slice count with no feasible placement. An inconclusive result requires explicit acknowledgment. A feasible placement does not reserve resources or guarantee admission.
 Changing cluster or deployment inputs requires another review. The final plan freezes
 rendered inputs and Chart bytes; it does not install missing DS/LWS controllers or CRDs.
 Official Guide snapshots require vendored Kustomize dependencies.

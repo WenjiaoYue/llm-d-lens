@@ -595,7 +595,24 @@ def apply_source_record(run, record, *, rejected):
         run.decision = None
 
 
-async def approve_source_plan(service, run, *, owner_user_id, request):
+async def reviewed_deployment(manager, run, deployment_request, owner_user_id, approval):
+    from llm_d_lens.deploy.prepared_plans import prepare, public_plan, requires_prepared_plan
+
+    if requires_prepared_plan(deployment_request.configurations):
+        if not (approval and approval.prepared_plan_id):
+            if run.configuration_plan is None:
+                raise ValueError("Generate a configuration plan before reviewing this deployment.")
+            plan = await prepare(manager, deployment_request, owner_user_id=owner_user_id)
+            review = run.model_copy(deep=True)
+            review.configuration_plan.validation["preparedDeployment"] = public_plan(plan)
+            return None, review
+        deployment_request.prepared_plan_id = approval.prepared_plan_id
+        deployment_request.expected_plan_digest = approval.expected_plan_digest
+        deployment_request.acknowledge_unknown = approval.acknowledge_unknown
+    return await manager.start_run(deployment_request, owner_user_id=owner_user_id), None
+
+
+async def approve_source_plan(service, run, *, owner_user_id, request, approval=None):
     if request is None:
         raise ValueError("Source deployment requires an authorized request context.")
     plan = run.configuration_plan
@@ -626,7 +643,9 @@ async def approve_source_plan(service, run, *, owner_user_id, request):
     configuration = source_configuration(run, plan.source_bundle, run.source_endpoint)
     from llm_d_lens.deploy.application import deployment_run_manager
 
-    deployment = await deployment_run_manager.start_run(
+    deployment, review = await reviewed_deployment(
+        deployment_run_manager,
+        run,
         DeploymentRunCreateRequest(
             configurations=[configuration],
             runtime_binding=RuntimeBinding(
@@ -638,6 +657,7 @@ async def approve_source_plan(service, run, *, owner_user_id, request):
             ),
             provenance={
                 "deployment_source": {"kind": "source-composition"},
+                "cluster_server_id": session.server_id,
                 "cluster_session_id": session.id,
                 "deployment_name": run.request.deployment_name,
                 "agentic_deployment_run_id": run.id,
@@ -645,8 +665,11 @@ async def approve_source_plan(service, run, *, owner_user_id, request):
                 "review_checksum": plan.configuration["checksum"],
             },
         ),
-        owner_user_id=owner_user_id,
+        owner_user_id,
+        approval,
     )
+    if review is not None:
+        return review
     run.deployment_run_id = deployment.id
     run.status = AgenticDeploymentStatus.DEPLOYING
     run.updated_at = datetime.now(UTC)

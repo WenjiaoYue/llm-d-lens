@@ -166,8 +166,8 @@ async def stream_agentic_deployment(
             request, on_progress=on_progress, principal_id=principal_id, principal=principal
         ),
         expected_errors=(ValueError,),
-        failure_message="Unable to generate an Agentic recommendation.",
-        on_unexpected_error=lambda: logger.exception("Agentic recommendation generation failed"),
+        failure_message="Unable to generate a deployment plan.",
+        on_unexpected_error=lambda: logger.exception("Deployment plan generation failed"),
     )
 
 
@@ -398,7 +398,9 @@ async def stream_refine_agentic_deployment(
         "Use this only after reviewing the selected candidate and evidence. Shared requirements-based plans "
         "require generated resources and a matching configuration_checksum in the JSON body; stale or missing "
         "review evidence returns 409. Source compositions also require endpoint to identify a reviewed generated "
-        "Service. Capacity and model-cache binding are refreshed before deploying the stored reviewed manifest."
+        "Service. Deployments requiring preflight first return configuration_plan.validation.preparedDeployment "
+        "without starting a run. Confirm with its prepared_plan_id (id) and expected_plan_digest (digest); "
+        "unknown constraints require acknowledge_unknown=true. Capacity and model-cache binding are refreshed."
     ),
     operation_id="approve_agentic_plan",
 )
@@ -440,8 +442,11 @@ async def approve_agentic_deployment(
                 owner_user_id=owner_for_create(current_principal(request)),
                 http_request=request,
                 source_endpoint=approval.endpoint,
+                approval=approval,
             )
-        return await service.approve(run_id, owner_user_id=owner_for_create(current_principal(request)))
+        return await service.approve(
+            run_id, owner_user_id=owner_for_create(current_principal(request)), approval=approval
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:

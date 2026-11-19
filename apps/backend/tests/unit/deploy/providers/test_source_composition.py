@@ -132,19 +132,24 @@ def test_router_rbac_rejects_privilege_expansion_and_external_subjects(change):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("state", ["new", "owned", "foreign", "changed", "partial-failure", "pending-gc", "raced-gc"])
+@pytest.mark.parametrize(
+    "state", ["new", "prepared", "owned", "foreign", "changed", "partial-failure", "pending-gc", "raced-gc"]
+)
 async def test_router_rbac_is_namespace_owned_and_never_overwrites_foreign_resources(monkeypatch, tmp_path, state):
     import llm_d_lens.deploy.providers.configuration_manifest as module
     from llm_d_lens.deploy.runtime.composition import RestrictedKubectlRunner
 
     live = {}
     owner = {"apiVersion": "v1", "kind": "Namespace", "name": "llmd-owned", "uid": "namespace-uid"}
+    namespace_metadata = {"uid": owner["uid"]}
     guard = RestrictedKubectlRunner(tmp_path / "kubectl", "llmd-")
 
     async def command(argv):
         guard._validate(argv)
+        if argv[:3] == ["kubectl", "create", "--filename"]:
+            namespace_metadata.update(yaml.safe_load(Path(argv[-1]).read_text())["metadata"])
         if argv[:3] == ["kubectl", "get", "namespace"]:
-            return 0, json.dumps({"metadata": {"uid": owner["uid"]}}), ""
+            return 0, json.dumps({"metadata": namespace_metadata}), ""
         if argv[1] == "get":
             return 0, json.dumps(live[argv[2]]) if argv[2] in live else "", ""
         if argv[:3] == ["kubectl", "create", "--namespace"]:
@@ -186,6 +191,25 @@ async def test_router_rbac_is_namespace_owned_and_never_overwrites_foreign_resou
     rendered = list(yaml.safe_load_all(Path(artifact.manifest_ref).read_text()))
     rbac = adapter.router_rbac(rendered, "llmd-owned")
     assert len(rbac) == 2
+    if state == "prepared":
+        from dataclasses import replace
+
+        frozen = tmp_path / "plan" / "workload.yaml"
+        frozen.parent.mkdir()
+        frozen.write_bytes(Path(artifact.manifest_ref).read_bytes())
+        module.register_artifacts(frozen.parent, owner_type="deployment-plan", owner_id="plan")
+        artifact = replace(
+            artifact,
+            manifest_ref=str(frozen),
+            deployment_contract={
+                **artifact.deployment_contract,
+                "preparedNamespace": {
+                    "apiVersion": "v1",
+                    "kind": "Namespace",
+                    "metadata": {"name": "llmd-owned", "labels": {"lens.io/prepared-request": "plan"}},
+                },
+            },
+        )
     if state in {"owned", "foreign", "changed"}:
         for doc in deepcopy(rbac):
             doc["metadata"]["ownerReferences"] = [{**owner, "uid": "foreign" if state == "foreign" else owner["uid"]}]
@@ -201,6 +225,9 @@ async def test_router_rbac_is_namespace_owned_and_never_overwrites_foreign_resou
             return
     else:
         await adapter.deploy(artifact, execution)
+        if state == "prepared":
+            assert {path.name for path in frozen.parent.iterdir()} == {"manifest.json", "workload.yaml"}
+            assert sum(call.args[0][:3] == ["kubectl", "create", "--filename"] for call in runner.await_args_list) == 1
         assert len(live) == 2
         assert all(doc["metadata"]["ownerReferences"] == [owner] for doc in live.values())
         if state == "owned":
