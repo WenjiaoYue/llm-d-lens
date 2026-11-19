@@ -126,6 +126,9 @@ class AgenticCandidateSelectionRequest(BaseModel):
 
 
 class AgenticApprovalRequest(BaseModel):
+    prepared_plan_id: str | None = Field(default=None, description="ID of the frozen deployment plan reviewed.")
+    expected_plan_digest: str | None = Field(default=None, description="Digest returned with the frozen plan.")
+    acknowledge_unknown: bool = Field(default=False, description="Accept listed unknown preflight constraints.")
     configuration_checksum: str = Field(
         min_length=1, description="Checksum of the exact generated configuration reviewed by the user."
     )

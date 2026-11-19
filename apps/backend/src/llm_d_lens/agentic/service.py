@@ -1947,7 +1947,7 @@ class AgenticDeploymentService:
         return run
 
     async def approve(
-        self, run_id: str, *, owner_user_id: str | None = None, http_request=None, source_endpoint: str | None = None
+        self, run_id: str, *, owner_user_id: str | None = None, http_request=None, source_endpoint: str | None = None, approval=None
     ) -> AgenticDeploymentRun:
         if run_id in self._approving:
             raise ValueError("Deployment approval is already in progress.")
@@ -1966,12 +1966,12 @@ class AgenticDeploymentService:
                 if source_endpoint not in {item["value"] for item in run.configuration_plan.endpoints}:
                     raise ValueError("Choose a reviewed inference Service before deployment.")
                 run.source_endpoint = source_endpoint
-                return await approve_source_plan(self, run, owner_user_id=owner_user_id, request=http_request)
-            return await self._approve(run_id, owner_user_id=owner_user_id)
+                return await approve_source_plan(self, run, owner_user_id=owner_user_id, request=http_request, approval=approval)
+            return await self._approve(run_id, owner_user_id=owner_user_id, approval=approval)
         finally:
             self._approving.discard(run_id)
 
-    async def _approve(self, run_id: str, *, owner_user_id: str | None = None) -> AgenticDeploymentRun:
+    async def _approve(self, run_id: str, *, owner_user_id: str | None = None, approval=None) -> AgenticDeploymentRun:
         run = self._runs.get(run_id)
         if run is None:
             raise KeyError("agentic deployment run not found")
@@ -2082,28 +2082,33 @@ class AgenticDeploymentService:
             or run.updated_at != previous_updated_at
         ):
             raise ValueError("Agentic plan changed during approval; reload the current plan")
-        run.status = AgenticDeploymentStatus.DEPLOYING
-        run.updated_at = datetime.now(UTC)
+        from .source_plan import reviewed_deployment
+
         try:
-            deployment = await deployment_run_manager.start_run(
+            deployment, review = await reviewed_deployment(
+                deployment_run_manager, run,
                 DeploymentRunCreateRequest(
                     configurations=[configuration],
                     runtime_binding=RuntimeBinding(placement=placement, runtime_class=run.request.runtime_class),
                     provenance={
                         "deployment_source": {"kind": "agentic-deployment"},
+                        "cluster_server_id": session.server_id,
                         "cluster_session_id": session.id,
                         "deployment_name": run.request.deployment_name,
                         "agentic_deployment_run_id": run.id,
                     },
                 ),
-                owner_user_id=owner_user_id,
+                owner_user_id, approval,
             )
+            if review is not None:
+                return review
         except (Exception, asyncio.CancelledError):
             run.status = AgenticDeploymentStatus.FAILED
             run.error = "Deployment submission did not complete; verify deployment runs before creating a new plan."
             run.updated_at = datetime.now(UTC)
             raise
         run.deployment_run_id = deployment.id
+        run.status = AgenticDeploymentStatus.DEPLOYING
         run.updated_at = datetime.now(UTC)
         if run.request.requirements is not None:
             self._snapshot_store.save(run, run.request.planning_facts, event="deployment-approved")

@@ -292,7 +292,7 @@ def placement_preflight(
         )
     unmodeled.add("Admission, quota, competing scheduling and rollout surge are not reserved or simulated")
     report["unmodeled"] = sorted(unmodeled)
-    report["status"] = "fail" if errors else "unknown" if unmodeled else "pass"
     report["modeledConstraints"] = "pass" if found else "unknown" if exhausted else "fail"
+    report["status"] = report["modeledConstraints"]
     report["searchSteps"] = attempts
     return report

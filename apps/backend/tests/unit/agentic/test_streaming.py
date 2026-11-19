@@ -44,7 +44,7 @@ async def test_progress_precedes_one_complete_event(monkeypatch, mode):
         ("create", ValueError("invalid"), "invalid"),
         ("refine", ValueError("invalid"), "invalid"),
         ("refine", KeyError("missing"), "'missing'"),
-        ("create", KeyError("missing"), "Unable to generate an Agentic recommendation."),
+        ("create", KeyError("missing"), "Unable to generate a deployment plan."),
         ("refine", RuntimeError("internal detail"), "Unable to recalculate the Agentic recommendation."),
     ],
 )

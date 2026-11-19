@@ -740,6 +740,8 @@ class ConfigurationManifestAdapter:
         from llm_d_lens.deploy.providers.deployment_bundle import freeze_deployment_bundle
 
         bundle = artifact.deployment_contract.get("deploymentBundle")
+        if bundle is None and artifact.guide_id == "source-composition":
+            return artifact
         if bundle is None:
             raise ValueError("Prepared deployment requires a saved Router deployment bundle")
         runner = getattr(self._delegate, "_bundle_command_runner", None)
@@ -765,6 +767,8 @@ class ConfigurationManifestAdapter:
     async def validate_prepared_router(self, artifact: GuideDeploymentArtifact, namespace: str) -> None:
         from llm_d_lens.deploy.providers.deployment_bundle import validate_frozen_bundle
 
+        if artifact.guide_id == "source-composition" and "deploymentBundle" not in artifact.deployment_contract:
+            return
         await validate_frozen_bundle(
             artifact.deployment_contract["deploymentBundle"],
             guide=artifact.guide_id,
@@ -773,14 +777,7 @@ class ConfigurationManifestAdapter:
             command_runner=self._delegate._bundle_command_runner,
         )
 
-    async def deploy(self, artifact: GuideDeploymentArtifact, execution_context: dict[str, Any]) -> dict[str, Any]:
-        if not {"readinessDeployments", "endpoint"} <= artifact.deployment_contract.keys():
-            return await self._delegate.deploy(artifact, execution_context)
-        if Path(artifact.manifest_ref or "").is_dir():
-            # Legacy Guide adapters may return a Kustomize overlay directory
-            # rather than an immutable Configuration manifest file.
-            return await self._delegate.deploy(artifact, execution_context)
-        namespace = self._namespace(execution_context)
+    async def _create_namespace(self, artifact, namespace):
         prepared_namespace = artifact.deployment_contract.get("preparedNamespace")
         if prepared_namespace:
             namespace_path = Path(artifact.manifest_ref).parent / "namespace.yaml"
@@ -790,6 +787,17 @@ class ConfigurationManifestAdapter:
             status, stdout, stderr = await self._runner(["kubectl", "create", "namespace", namespace])
         if status != 0 and (prepared_namespace or "alreadyexists" not in (stdout + stderr).lower()):
             raise RuntimeError((stderr or stdout or "namespace creation failed").strip())
+
+    async def deploy(self, artifact: GuideDeploymentArtifact, execution_context: dict[str, Any], *, namespace_created=False) -> dict[str, Any]:
+        if not {"readinessDeployments", "endpoint"} <= artifact.deployment_contract.keys():
+            return await self._delegate.deploy(artifact, execution_context)
+        if Path(artifact.manifest_ref or "").is_dir():
+            # Legacy Guide adapters may return a Kustomize overlay directory
+            # rather than an immutable Configuration manifest file.
+            return await self._delegate.deploy(artifact, execution_context)
+        namespace = self._namespace(execution_context)
+        if not namespace_created:
+            await self._create_namespace(artifact, namespace)
         manifest = Path(artifact.manifest_ref or "").read_text(encoding="utf-8")
         model_token = execution_context.get("model_token")
         if "name: llm-d-hf-token" in manifest and model_token:
@@ -1273,11 +1281,18 @@ class SourceCompositionAdapter(ConfigurationManifestAdapter):
     async def deploy(self, artifact, execution_context):
         namespace = self._namespace(execution_context)
         documents = list(yaml.safe_load_all(Path(artifact.manifest_ref).read_text(encoding="utf-8")))
+        if artifact.deployment_contract.get("preparedNamespace"):
+            content = Path(artifact.manifest_ref).read_text(encoding="utf-8")
+            if text_checksum(content) != artifact.manifest_checksum:
+                raise ValueError("Prepared workload checksum changed before deployment")
+            directory = self._output_root / artifact.manifest_checksum.removeprefix("sha256:")
+            directory.mkdir(parents=True, exist_ok=True)
+            path = directory / "source-workload.yaml"
+            path.write_text(content, encoding="utf-8")
+            artifact = replace(artifact, manifest_ref=str(path))
         rbac = self.router_rbac(documents, namespace)
         if rbac:
-            status, stdout, stderr = await self._runner(["kubectl", "create", "namespace", namespace])
-            if status and "alreadyexists" not in (stdout + stderr).lower():
-                raise RuntimeError(stderr or stdout or "Namespace creation failed")
+            await self._create_namespace(artifact, namespace)
             status, stdout, stderr = await self._runner(
                 ["kubectl", "get", "namespace", namespace, "--namespace", namespace, "-o", "json"]
             )
@@ -1368,7 +1383,7 @@ class SourceCompositionAdapter(ConfigurationManifestAdapter):
             )
             if status:
                 raise RuntimeError(stderr or stdout or "Namespace labels could not be applied")
-        return await super().deploy(artifact, execution_context)
+        return await super().deploy(artifact, execution_context, namespace_created=bool(rbac))
 
     async def cleanup(self, execution, artifact, *, force=False):
         result = await super().cleanup(execution, artifact, force=force)

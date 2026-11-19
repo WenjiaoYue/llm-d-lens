@@ -147,7 +147,7 @@ export function RetrievalEvidenceSources({ run }) {
     });
 }
 
-export function DeploymentSummary({ run, draft, deploymentRun, busy, locked, editing, cleanupRequired, onDeploy, onCheck, onRequirements, onOpen, endpoint, onEndpointChange, confirmLabel = 'Deploy' }) {
+export function DeploymentSummary({ run, draft, deploymentRun, busy, locked, deployBlocked, editing, cleanupRequired, onDeploy, onCheck, onRequirements, onOpen, endpoint, onEndpointChange, confirmLabel = 'Deploy' }) {
     const plan = run.configuration_plan;
     const checked = Boolean(deploymentPlanManifest(plan)) && plan?.validation?.status === 'resources_checked';
     const submitted = Boolean(run.deployment_run_id);
@@ -207,7 +207,7 @@ export function DeploymentSummary({ run, draft, deploymentRun, busy, locked, edi
                 </Select><span className="mt-1 block text-xs font-normal text-theme-muted">The Kubernetes Service that receives requests and is probed for readiness. Lens picks the router entry. The other choices are every port of every generated Service (for example EPP control or metrics ports); picking one can fail the readiness probe or bypass routing.</span>
             </label>)}
             {submitted ? onOpen && <Button size="md" className="w-full" onClick={onOpen}>Open deployment</Button> : <>
-                <Button size="md" className="w-full" disabled={locked || editing || !plan || endpointMissing} isLoading={busy} onClick={checked ? onDeploy : onCheck}>{checked ? confirmLabel : 'Retry checks'}</Button>
+                <Button size="md" className="w-full" disabled={locked || editing || !plan || endpointMissing || (checked && deployBlocked)} isLoading={busy} onClick={checked ? onDeploy : onCheck}>{checked ? confirmLabel : 'Retry checks'}</Button>
                 {checked && <Button variant="secondary" className="w-full" disabled={locked || editing || busy} onClick={onCheck}>Recheck resources</Button>}
                 <Button variant="ghost" className="w-full" disabled={locked || editing} onClick={onRequirements}>Change workload &amp; limits</Button>
                 <p className="text-xs leading-relaxed text-theme-muted">Deploys exactly this configuration.</p>
@@ -269,7 +269,7 @@ export function DeploymentWorkflow({ draft, mode = 'agentic', embedded = false, 
     const accept = (value, keepReview = false) => {
         if (!mounted.current) return;
         setRun(value);
-        setApproval(current => keepReview && current ? { ...current, runId: value.id, checksum: value.configuration_plan?.configuration?.checksum } : null);
+        setApproval(current => keepReview && current ? { runId: value.id, checksum: value.configuration_plan?.configuration?.checksum } : null);
         const endpoints = value.configuration_plan?.endpoints || [];
         setEndpoint(current => endpoints.some(item => item.value === current) ? current : defaultInferenceEndpoint(endpoints));
         sessionStorage.setItem(key, value.id);
@@ -337,8 +337,14 @@ export function DeploymentWorkflow({ draft, mode = 'agentic', embedded = false, 
         const version = ++requestVersion.current;
         setBusy(true); setError('');
         try {
-            const value = await api(`/api/agentic-deployments/${encodeURIComponent(run.id)}/${action}`, body);
+            const url = `/api/agentic-deployments/${encodeURIComponent(run.id)}/${action}`;
+            let value = await api(url, body);
             if (!mounted.current || version !== requestVersion.current) return null;
+            const prepared = value.configuration_plan?.validation?.preparedDeployment;
+            if (action === 'approve' && !body.prepared_plan_id && !value.deployment_run_id && prepared?.preflight.status === 'pass') {
+                value = await api(url, { ...body, prepared_plan_id: prepared.id, expected_plan_digest: prepared.digest, acknowledge_unknown: false });
+                if (!mounted.current || version !== requestVersion.current) return null;
+            }
             accept(value);
             if (checkResources) {
                 try {
@@ -382,7 +388,14 @@ export function DeploymentWorkflow({ draft, mode = 'agentic', embedded = false, 
             setApproval(null); setError('The configuration changed. Review the current plan before deploying.'); return;
         }
         try {
-            const result = await mutate('approve', { configuration_checksum: approval.checksum, ...(plan.source_bundle ? { endpoint } : {}) });
+            const result = await mutate('approve', { configuration_checksum: approval.checksum, ...(plan.source_bundle ? { endpoint } : {}), ...(approval.prepared ? {
+                prepared_plan_id: approval.prepared.id, expected_plan_digest: approval.prepared.digest, acknowledge_unknown: approval.prepared.preflight.status === 'unknown',
+            } : {}) });
+            const prepared = result?.configuration_plan?.validation?.preparedDeployment;
+            if (prepared && !result.deployment_run_id) {
+                setApproval({ runId: result.id, checksum: approval.checksum, prepared });
+                return;
+            }
             if (!result?.deployment_run_id) return;
             setApproval(null);
             // Execution status lives in the Deployments job list, not inside the plan.
@@ -415,9 +428,18 @@ export function DeploymentWorkflow({ draft, mode = 'agentic', embedded = false, 
                         : editing ? 'Apply or discard your changes first.' : !plan ? 'No configuration generated yet.' : '';
     const enabled = plan?.decisions?.filter(item => ['enabled', 'dependency'].includes(item.status)) || [];
     const sourceReview = Boolean(plan?.source_bundle && plan.source_draft);
+    const frozenPlan = approval?.prepared;
+    const preflightStatus = frozenPlan?.preflight.status;
     const summary = run && <>
-        <DeploymentSummary run={run} draft={draft} deploymentRun={deploymentRun} busy={busy} locked={locked || approval?.checksum !== plan?.configuration?.checksum} editing={editing} cleanupRequired={cleanupRequired} endpoint={endpoint}
-            onEndpointChange={setEndpoint} onDeploy={deploy} confirmLabel="Confirm deployment" onCheck={render} onRequirements={reset} />
+        {frozenPlan && <section className="space-y-2 text-sm">
+            <strong>{preflightStatus === 'unknown' ? 'Deployment not started: scheduling constraints need review' : `Deployment preflight: ${preflightStatus}`}</strong>
+            {preflightStatus === 'unknown' && <ul className="list-disc pl-5">{frozenPlan.preflight.unmodeled?.map(reason => <li key={reason}>{reason}</li>)}</ul>}
+            <code className="block break-all">{frozenPlan.digest}</code>
+            <details><summary>Frozen resources and placement checks</summary><pre className="max-h-80 overflow-auto">{JSON.stringify({ cases: frozenPlan.cases, preflight: frozenPlan.preflight }, null, 2)}</pre></details>
+            {preflightStatus === 'fail' && <ul role="alert" className="list-disc pl-5">{frozenPlan.preflight.errors?.map((error, index) => <li key={index}>{error.message || error.code}</li>)}</ul>}
+        </section>}
+        <DeploymentSummary run={run} draft={draft} deploymentRun={deploymentRun} busy={busy} locked={locked || approval?.checksum !== plan?.configuration?.checksum} deployBlocked={Boolean(frozenPlan) && !['unknown', 'pass'].includes(preflightStatus)} editing={editing} cleanupRequired={cleanupRequired} endpoint={endpoint}
+            onEndpointChange={value => { setEndpoint(value); if (frozenPlan) setApproval({ runId: run.id, checksum: approval.checksum }); }} onDeploy={deploy} confirmLabel={preflightStatus === 'unknown' ? 'Accept risks and deploy' : 'Confirm deployment'} onCheck={render} onRequirements={reset} />
         {error && <p role="alert" className="mt-3 text-sm">{error}</p>}
     </>;
     const reviewFooter = <div className="flex w-full flex-wrap justify-between gap-2">

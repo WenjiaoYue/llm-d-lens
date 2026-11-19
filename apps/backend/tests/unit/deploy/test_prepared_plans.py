@@ -32,6 +32,43 @@ def test_plan_digest_mismatch_cannot_create_run():
     assert dao.get(plan.id).status == "prepared"
 
 
+@pytest.mark.asyncio
+async def test_agentic_inline_router_waits_for_review_then_submits_exact_plan(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from llm_d_lens.agentic.models import AgenticApprovalRequest
+    from llm_d_lens.agentic.source_plan import reviewed_deployment
+    from llm_d_lens.deploy import prepared_plans
+    from llm_d_lens.deploy.contracts import DeploymentRunCreateRequest
+
+    manifest = "kind: DisaggregatedSet\nmetadata: {name: serving}\n"
+    configuration = DeployableConfiguration(type="pd", format="manifest", provider_ref="source-composition",
+        content={"officialGuide": {"renderedManifest": manifest}}, checksum="source")
+    request = DeploymentRunCreateRequest(configurations=[configuration])
+    plan = DeploymentPreparedPlan(cluster_id="cluster", digest="sha256:frozen", preflight={"status": "unknown"},
+        payload={"artifacts": [{"context": {"namespace": "serving"}, "manifest": manifest,
+            "artifact": {"guide_id": "source-composition", "deployment_contract": {}, "source_ref": "commit",
+                         "manifest_checksum": "source"}}]})
+    manager = SimpleNamespace(start_run=AsyncMock())
+    prepare = AsyncMock(return_value=plan)
+    monkeypatch.setattr(prepared_plans, "prepare", prepare)
+    run = Mock()
+    run.model_copy.return_value.configuration_plan.validation = {}
+    deployment, review = await reviewed_deployment(manager, run, request, "owner", None)
+    assert deployment is None
+    manager.start_run.assert_not_awaited()
+    frozen = review.configuration_plan.validation["preparedDeployment"]
+    assert frozen["cases"][0]["manifest"] == manifest
+    assert prepared_plans.plan_documents(plan)[0]["kind"] == "DisaggregatedSet"
+    approval = AgenticApprovalRequest(configuration_checksum="source", prepared_plan_id=frozen["id"],
+        expected_plan_digest=frozen["digest"], acknowledge_unknown=True)
+    await reviewed_deployment(manager, run, request, "owner", approval)
+    prepare.assert_awaited_once_with(manager, request, owner_user_id="owner")
+    manager.start_run.assert_awaited_once_with(request, owner_user_id="owner")
+    assert (request.prepared_plan_id, request.expected_plan_digest, request.acknowledge_unknown) == (plan.id, plan.digest, True)
+
+
 @pytest.mark.parametrize(
     "kind,metadata",
     [
