@@ -788,7 +788,9 @@ class ConfigurationManifestAdapter:
         if status != 0 and (prepared_namespace or "alreadyexists" not in (stdout + stderr).lower()):
             raise RuntimeError((stderr or stdout or "namespace creation failed").strip())
 
-    async def deploy(self, artifact: GuideDeploymentArtifact, execution_context: dict[str, Any], *, namespace_created=False) -> dict[str, Any]:
+    async def deploy(
+        self, artifact: GuideDeploymentArtifact, execution_context: dict[str, Any], *, namespace_created=False
+    ) -> dict[str, Any]:
         if not {"readinessDeployments", "endpoint"} <= artifact.deployment_contract.keys():
             return await self._delegate.deploy(artifact, execution_context)
         if Path(artifact.manifest_ref or "").is_dir():

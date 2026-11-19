@@ -444,7 +444,9 @@ async def approve_agentic_deployment(
                 source_endpoint=approval.endpoint,
                 approval=approval,
             )
-        return await service.approve(run_id, owner_user_id=owner_for_create(current_principal(request)), approval=approval)
+        return await service.approve(
+            run_id, owner_user_id=owner_for_create(current_principal(request)), approval=approval
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:

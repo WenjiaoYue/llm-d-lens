@@ -644,7 +644,8 @@ async def approve_source_plan(service, run, *, owner_user_id, request, approval=
     from llm_d_lens.deploy.application import deployment_run_manager
 
     deployment, review = await reviewed_deployment(
-        deployment_run_manager, run,
+        deployment_run_manager,
+        run,
         DeploymentRunCreateRequest(
             configurations=[configuration],
             runtime_binding=RuntimeBinding(
@@ -664,7 +665,8 @@ async def approve_source_plan(service, run, *, owner_user_id, request, approval=
                 "review_checksum": plan.configuration["checksum"],
             },
         ),
-        owner_user_id, approval,
+        owner_user_id,
+        approval,
     )
     if review is not None:
         return review

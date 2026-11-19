@@ -1947,7 +1947,13 @@ class AgenticDeploymentService:
         return run
 
     async def approve(
-        self, run_id: str, *, owner_user_id: str | None = None, http_request=None, source_endpoint: str | None = None, approval=None
+        self,
+        run_id: str,
+        *,
+        owner_user_id: str | None = None,
+        http_request=None,
+        source_endpoint: str | None = None,
+        approval=None,
     ) -> AgenticDeploymentRun:
         if run_id in self._approving:
             raise ValueError("Deployment approval is already in progress.")
@@ -1966,7 +1972,9 @@ class AgenticDeploymentService:
                 if source_endpoint not in {item["value"] for item in run.configuration_plan.endpoints}:
                     raise ValueError("Choose a reviewed inference Service before deployment.")
                 run.source_endpoint = source_endpoint
-                return await approve_source_plan(self, run, owner_user_id=owner_user_id, request=http_request, approval=approval)
+                return await approve_source_plan(
+                    self, run, owner_user_id=owner_user_id, request=http_request, approval=approval
+                )
             return await self._approve(run_id, owner_user_id=owner_user_id, approval=approval)
         finally:
             self._approving.discard(run_id)
@@ -2086,7 +2094,8 @@ class AgenticDeploymentService:
 
         try:
             deployment, review = await reviewed_deployment(
-                deployment_run_manager, run,
+                deployment_run_manager,
+                run,
                 DeploymentRunCreateRequest(
                     configurations=[configuration],
                     runtime_binding=RuntimeBinding(placement=placement, runtime_class=run.request.runtime_class),
@@ -2098,7 +2107,8 @@ class AgenticDeploymentService:
                         "agentic_deployment_run_id": run.id,
                     },
                 ),
-                owner_user_id, approval,
+                owner_user_id,
+                approval,
             )
             if review is not None:
                 return review

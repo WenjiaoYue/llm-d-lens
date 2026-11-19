@@ -132,7 +132,9 @@ def test_router_rbac_rejects_privilege_expansion_and_external_subjects(change):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("state", ["new", "prepared", "owned", "foreign", "changed", "partial-failure", "pending-gc", "raced-gc"])
+@pytest.mark.parametrize(
+    "state", ["new", "prepared", "owned", "foreign", "changed", "partial-failure", "pending-gc", "raced-gc"]
+)
 async def test_router_rbac_is_namespace_owned_and_never_overwrites_foreign_resources(monkeypatch, tmp_path, state):
     import llm_d_lens.deploy.providers.configuration_manifest as module
     from llm_d_lens.deploy.runtime.composition import RestrictedKubectlRunner
@@ -196,9 +198,18 @@ async def test_router_rbac_is_namespace_owned_and_never_overwrites_foreign_resou
         frozen.parent.mkdir()
         frozen.write_bytes(Path(artifact.manifest_ref).read_bytes())
         module.register_artifacts(frozen.parent, owner_type="deployment-plan", owner_id="plan")
-        artifact = replace(artifact, manifest_ref=str(frozen), deployment_contract={**artifact.deployment_contract,
-            "preparedNamespace": {"apiVersion": "v1", "kind": "Namespace", "metadata": {
-                "name": "llmd-owned", "labels": {"lens.io/prepared-request": "plan"}}}})
+        artifact = replace(
+            artifact,
+            manifest_ref=str(frozen),
+            deployment_contract={
+                **artifact.deployment_contract,
+                "preparedNamespace": {
+                    "apiVersion": "v1",
+                    "kind": "Namespace",
+                    "metadata": {"name": "llmd-owned", "labels": {"lens.io/prepared-request": "plan"}},
+                },
+            },
+        )
     if state in {"owned", "foreign", "changed"}:
         for doc in deepcopy(rbac):
             doc["metadata"]["ownerReferences"] = [{**owner, "uid": "foreign" if state == "foreign" else owner["uid"]}]
