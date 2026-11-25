@@ -167,7 +167,11 @@ def composed_cache_config(connector, *, pd=False):
         raise ValueError("Composed KV connector must be an object.")
     if pd:
         children = connector.get("kv_connector_extra_config", {}).get("connectors")
-        transport_role = children[0].get("kv_role") if isinstance(children, list) and children and isinstance(children[0], dict) else None
+        transport_role = (
+            children[0].get("kv_role")
+            if isinstance(children, list) and children and isinstance(children[0], dict)
+            else None
+        )
         if (
             connector.get("kv_connector") != "MultiConnector"
             or not isinstance(children, list)
