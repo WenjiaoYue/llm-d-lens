@@ -54,6 +54,7 @@ from llm_d_lens.infrastructure.kubernetes import router as cluster_router
 from llm_d_lens.infrastructure.network import hostinfo as _hostinfo
 from llm_d_lens.mcp.router import router as mcp_router
 from llm_d_lens.model_cache.router import router as model_cache_router
+from llm_d_lens.model_catalog.router import router as model_catalog_router
 from llm_d_lens.model_service.router import admin_router as model_service_admin_router
 from llm_d_lens.model_service.router import internal_router as model_service_internal_router
 from llm_d_lens.model_service.router import public_router as model_service_public_router
@@ -92,12 +93,14 @@ async def _remember_serving_port(request, call_next):
     server = request.scope.get("server")
     if server and len(server) > 1:
         _hostinfo.remember_serving_port(server[1])
+        _hostinfo.remember_serving_tls(request.scope.get("scheme") == "https")
     return await call_next(request)
 
 
 # Seed the serving port from the server's own launch args so startup/background
 # Gateway reconciles build the right `host:port` before the first request.
 _hostinfo.remember_serving_port(_hostinfo.serving_port_from_argv())
+_hostinfo.remember_serving_tls(_hostinfo.serving_tls_from_argv())
 
 
 @app.exception_handler(ClusterOverviewError)
@@ -350,6 +353,7 @@ app.include_router(accelerator_router)
 app.include_router(gpu_driver_router)
 app.include_router(storage_router)
 app.include_router(model_cache_router)
+app.include_router(model_catalog_router)
 app.include_router(ai_providers_router)
 app.include_router(model_service_router)
 app.include_router(model_service_admin_router)

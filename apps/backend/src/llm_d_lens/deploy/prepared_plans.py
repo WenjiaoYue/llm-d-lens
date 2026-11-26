@@ -328,40 +328,47 @@ async def prepare(manager, request, *, owner_user_id: str | None = None) -> Depl
         if (configuration.provenance.get("cluster_ref") or {}).get("id") != session.server_id:
             raise ValueError("Configuration must be regenerated for the selected cluster")
     run = DeploymentPlanService(manager.store).build_run(bound)
-    worker = manager._worker(run)
-    artifacts = []
-    for case in run.cases:
-        artifact, context = await worker.prepare_case(case)
-        manifest = Path(artifact.manifest_ref).read_text(encoding="utf-8")
-        comparison = bound.configurations[case.source_configuration_ordinal].content.get("comparisonBudget")
-        if comparison:
-            actual = workload_summary(list(yaml.safe_load_all(manifest)))
-            if actual["unmodeled"] or actual["resourceRequests"].get(comparison["resource"]) != comparison["quantity"]:
-                raise ValueError("Rendered baseline accelerator requests do not match the source DS comparison budget")
-            context["comparison_budget"] = comparison
-        validate_review_resources(
-            [item for item in yaml.safe_load_all(manifest) if item is not None], context["namespace"]
+    # The frozen namespace must be the administrator-verified one, or non-admin identities hit 403.
+    async with manager.verified_namespace_binding(run, bound, session.server_id, owner_user_id):
+        worker = manager._worker(run)
+        artifacts = []
+        for case in run.cases:
+            artifact, context = await worker.prepare_case(case)
+            manifest = Path(artifact.manifest_ref).read_text(encoding="utf-8")
+            comparison = bound.configurations[case.source_configuration_ordinal].content.get("comparisonBudget")
+            if comparison:
+                actual = workload_summary(list(yaml.safe_load_all(manifest)))
+                if (
+                    actual["unmodeled"]
+                    or actual["resourceRequests"].get(comparison["resource"]) != comparison["quantity"]
+                ):
+                    raise ValueError(
+                        "Rendered baseline accelerator requests do not match the source DS comparison budget"
+                    )
+                context["comparison_budget"] = comparison
+            validate_review_resources(
+                [item for item in yaml.safe_load_all(manifest) if item is not None], context["namespace"]
+            )
+            frozen = asdict(artifact)
+            frozen["deployment_contract"]["preparedStorage"] = await storage_resources(context)
+            frozen["manifest_ref"] = None
+            frozen["manifest_checksum"] = text_checksum(manifest)
+            artifacts.append({"artifact": frozen, "manifest": manifest, "context": context})
+        payload = {
+            "schemaVersion": "deployment-plan.v1",
+            "requestIdentity": identity,
+            "run": run.model_dump(mode="json"),
+            "artifacts": artifacts,
+        }
+        plan = DeploymentPreparedPlan(
+            cluster_id=session.server_id,
+            owner_user_id=owner_user_id,
+            digest=configuration_checksum(payload),
+            payload=payload,
+            preflight={},
         )
-        frozen = asdict(artifact)
-        frozen["deployment_contract"]["preparedStorage"] = await storage_resources(context)
-        frozen["manifest_ref"] = None
-        frozen["manifest_checksum"] = text_checksum(manifest)
-        artifacts.append({"artifact": frozen, "manifest": manifest, "context": context})
-    payload = {
-        "schemaVersion": "deployment-plan.v1",
-        "requestIdentity": identity,
-        "run": run.model_dump(mode="json"),
-        "artifacts": artifacts,
-    }
-    plan = DeploymentPreparedPlan(
-        cluster_id=session.server_id,
-        owner_user_id=owner_user_id,
-        digest=configuration_checksum(payload),
-        payload=payload,
-        preflight={},
-    )
-    plan.preflight = await preflight(plan)
-    return DeploymentPlanDao().create(plan)
+        plan.preflight = await preflight(plan)
+        return DeploymentPlanDao().create(plan)
 
 
 def public_plan(plan: DeploymentPreparedPlan) -> dict:

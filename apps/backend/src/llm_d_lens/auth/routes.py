@@ -211,6 +211,10 @@ ROUTE_PERMISSIONS: tuple[RoutePermission, ...] = (
     RoutePermission("POST", "/api/simulation/trace-datasets/download", "simulation:dataset:download"),
     RoutePermission("GET", "/api/simulation/trace-datasets/{dataset_name}/timeline", "simulation:task:read"),
     # --- AI providers ---
+    RoutePermission("GET", "/api/v1/model-catalog", "model-catalog:entry:read"),
+    RoutePermission("POST", "/api/v1/model-catalog", "model-catalog:entry:create"),
+    RoutePermission("PUT", "/api/v1/model-catalog/{entry_id}", "model-catalog:entry:update"),
+    RoutePermission("DELETE", "/api/v1/model-catalog/{entry_id}", "model-catalog:entry:delete"),
     RoutePermission("GET", "/api/v1/ai-providers", "ai-provider:provider:read"),
     RoutePermission("POST", "/api/v1/ai-providers", "ai-provider:provider:create", session_only=True),
     RoutePermission("POST", "/api/v1/ai-providers/test", "ai-provider:provider:test"),
