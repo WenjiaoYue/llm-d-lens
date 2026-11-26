@@ -22,7 +22,8 @@ export const requirementCapability = id => ({
     'kv-transport': 'pd_disaggregation',
 }[id]);
 
-const UNSUPPORTED_KEY = 'lens-unsupported-source-combinations';
+// Bump the version whenever the backend composition adapter starts accepting new transports.
+const UNSUPPORTED_KEY = 'lens-unsupported-source-combinations:v2';
 // Rejections fixed by the pinned source transport, not by cluster state.
 const SOURCE_FIXED_REJECTIONS = [/Adding CPU KV cache to P\/D is not yet supported/];
 

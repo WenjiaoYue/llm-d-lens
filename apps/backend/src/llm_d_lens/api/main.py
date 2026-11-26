@@ -92,12 +92,14 @@ async def _remember_serving_port(request, call_next):
     server = request.scope.get("server")
     if server and len(server) > 1:
         _hostinfo.remember_serving_port(server[1])
+        _hostinfo.remember_serving_tls(request.scope.get("scheme") == "https")
     return await call_next(request)
 
 
 # Seed the serving port from the server's own launch args so startup/background
 # Gateway reconciles build the right `host:port` before the first request.
 _hostinfo.remember_serving_port(_hostinfo.serving_port_from_argv())
+_hostinfo.remember_serving_tls(_hostinfo.serving_tls_from_argv())
 
 
 @app.exception_handler(ClusterOverviewError)

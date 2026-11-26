@@ -134,6 +134,9 @@ def apply_runtime_overrides(container: dict, overrides: list[dict]):
             continue
         boolean_names = {"enable-auto-tool-choice", "enable-prefix-caching", "enforce-eager"}
         base_name = name.removeprefix("no-")
+        if base_name in boolean_names and value in {"true", "false"}:
+            negated = name.startswith("no-") == (value == "true")
+            name, value = (f"no-{base_name}" if negated else base_name), ""
         aliases = {name}
         if base_name in boolean_names and value == "":
             aliases = {base_name, f"no-{base_name}"}

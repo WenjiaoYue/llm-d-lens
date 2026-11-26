@@ -2804,7 +2804,7 @@ async def test_non_admin_bind_invalidates_stale_cache_patches_epp_online_and_ver
     assert handoff["reconcileStatus"] == "admin_handoff_required"
     assert handoff["markerNamespace"] == "lens-edit"
     # boot_ns IS permitted, so EPP plaintext patch ran online and is omitted from admin script.
-    assert "patch_epp_plaintext" not in handoff["adminScript"]
+    assert "patch_epp_transport" not in handoff["adminScript"]
     assert len(epp_patches) == 1
     assert epp_patches[0][:2] == ("qwen3-epp", boot_ns)
     assert "--secure-serving=false" in epp_patches[0][2]
@@ -2931,7 +2931,7 @@ async def test_verify_remediation_accepts_strict_epp_superset_marker_and_rejects
 
     # H1 generated before boot_ns RBAC was permitted (includes eppTargets).
     h1_handoff = await ops.create_remediation(cluster_id, mode="routes")
-    assert "patch_epp_plaintext" in h1_handoff.admin_script
+    assert "patch_epp_transport" in h1_handoff.admin_script
     marker_store[h1_handoff.marker_name] = {
         "metadata": {"labels": {"lens.llm-d.ai/cluster": cluster_id}},
         "data": {"desiredHash": h1_handoff.desired_hash, "status": "complete"},
@@ -2941,7 +2941,7 @@ async def test_verify_remediation_accepts_strict_epp_superset_marker_and_rejects
     permit_boot_ns = True
     h2_preview = await ops.get_remediation(cluster_id, mode="routes")
     assert h2_preview.desired_hash != h1_handoff.desired_hash
-    assert "patch_epp_plaintext" not in h2_preview.admin_script
+    assert "patch_epp_transport" not in h2_preview.admin_script
 
     # Negative check 1: untrusted cluster label on superset marker MUST still fail as stale.
     marker_store[h1_handoff.marker_name]["metadata"]["labels"]["lens.llm-d.ai/cluster"] = "evil-cluster"
@@ -4392,7 +4392,9 @@ async def test_verify_remediation_http_probe_header_and_advisory_vs_blocking(mon
             val = probe_mode[0]
             if isinstance(val, Exception):
                 raise val
-            return SimpleNamespace(status_code=int(val))
+            if val == "authz-503":
+                return SimpleNamespace(status_code=503, content=b"")
+            return SimpleNamespace(status_code=int(val), content=b"upstream error")
 
     monkeypatch.setattr(gateway_ops_module.httpx, "AsyncClient", _MockHttpClient)
     ops = GatewayOpsService(runner_factory=lambda _cid: _HttpRunner())
@@ -4410,6 +4412,12 @@ async def test_verify_remediation_http_probe_header_and_advisory_vs_blocking(mon
     assert res_503.route_checks[0]["status"] == "loading"
     assert res_503.route_checks[0]["advisory"] is True
     assert captured_headers[-1]["X-Gateway-Base-Model-Name"] == "qwen3"
+
+    # 1b. empty 503 is the ext_authz failure, not a loading backend
+    probe_mode[0] = "authz-503"
+    res_authz = await ops.verify_remediation(cluster_id, expected_hash=handoff.desired_hash)
+    assert res_authz.route_checks[0]["status"] == "degraded"
+    assert "authorization" in res_authz.route_checks[0]["detail"]
 
     # 2. 500 -> degraded (advisory, verified=True)
     probe_mode[0] = 500
@@ -6414,6 +6422,63 @@ async def test_reconcile_transport_failure_does_not_submit_model_routes(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_reconcile_isolates_unrepaired_router_from_healthy_models(monkeypatch):
+    healthy = _seed_member("cluster-a")
+    broken_group = ModelServiceGroupDao().create(
+        ModelServiceGroup(name="llama", model_ref="meta/llama", cluster_id="cluster-a", base_model="meta/llama")
+    )
+    ModelServiceMemberDao().create(
+        ModelServiceMember(
+            group_id=broken_group.id,
+            execution_id="exec-broken",
+            cluster_id="cluster-a",
+            target_namespace="ns2",
+            target_service="llama-epp",
+            target_port=8000,
+            pool_name="llama",
+            endpoint_kind="llm-d-epp",
+        )
+    )
+    broken_route = gateway_ops_module.resource_name(f"llama-{broken_group.id}")
+
+    class _Runner(_FakeRunner):
+        async def run(self, argv, **kwargs):
+            if list(argv[:3]) == ["kubectl", "get", "httproute"]:
+                self.calls.append((argv, kwargs.get("input")))
+                return _Result(stdout=broken_route)
+            return await super().run(argv, **kwargs)
+
+    calls = []
+    service = _service(calls=calls, runner_cls=_Runner)
+    monkeypatch.setattr(
+        gateway_ops_module,
+        "get_cluster",
+        lambda _: SimpleNamespace(
+            gateway_provider="istio", gateway_namespace="lens-gateway", gateway_name="lens-inference-gateway"
+        ),
+    )
+
+    async def ensure(_cluster_id, namespace, name, **_kwargs):
+        if namespace == "ns2":
+            raise gateway_ops_module.GatewayOpsError("rollout failed")
+        return True
+
+    monkeypatch.setattr(service, "_ensure_epp_transport", ensure)
+    operation = await service.reconcile_cluster_gateway("cluster-a")
+    assert operation.status == "failed"
+    assert "ns2/llama-epp: rollout failed" in operation.message
+    routes = [
+        doc["metadata"]["name"]
+        for argv, content in calls
+        if argv[:3] == ["kubectl", "apply", "-f"] and content
+        for doc in yaml.safe_load_all(content)
+        if doc and doc["kind"] == "HTTPRoute"
+    ]
+    assert routes == [gateway_ops_module.resource_name(f"qwen3-8b-cluster-a-{healthy.group_id}")]
+    assert not any(argv[:3] == ["kubectl", "delete", "httproute"] for argv, _ in calls)
+
+
+@pytest.mark.asyncio
 async def test_retry_waits_for_rollout_even_when_transport_already_matches(monkeypatch):
     runner = _TlsEppRunner([], secure=False, proxy_secure=False)
     service = GatewayOpsService(runner_factory=lambda _: runner)
@@ -6512,8 +6577,8 @@ def test_handoff_transport_preserves_independent_proxy(tmp_path, proxy, secure):
         epp_targets=[("ns", "qwen-epp")],
         ipp_release=None,
     )
-    assert script.index("patch_epp_plaintext ns qwen-epp") < script.index("kubectl apply -f - <<")
-    start = script.index("patch_epp_plaintext() {")
+    assert script.index("patch_epp_transport ns qwen-epp") < script.index("kubectl apply -f - <<")
+    start = script.index("EPP_SECURE_SERVING=")
     end = script.index("\n}\n", start) + 3
     calls_path = tmp_path / "calls.jsonl"
     mock = tmp_path / "kubectl"
@@ -6537,7 +6602,7 @@ def test_handoff_transport_preserves_independent_proxy(tmp_path, proxy, secure):
     )
     mock.chmod(0o755)
     result = subprocess.run(
-        ["bash", "-c", "set -euo pipefail\n" + script[start:end] + "\npatch_epp_plaintext ns qwen-epp\n"],
+        ["bash", "-c", "set -euo pipefail\n" + script[start:end] + "\npatch_epp_transport ns qwen-epp\n"],
         env={
             **os.environ,
             "PATH": f"{tmp_path}:{os.environ.get('PATH', '')}",

@@ -85,6 +85,7 @@ def test_tool_overrides_merge_individual_fields(extra, expected):
         {"extra": "revision=other"},
         {"extra": "enable-auto-tool-choice=maybe"},
         {"extra": "--enforce-eager"},
+        {"chatTemplate": "{{ messages }}\n{{ eos }}"},
     ],
 )
 def test_invalid_settings_rejected(settings):
@@ -137,6 +138,7 @@ def test_builtin_defaults_apply_to_api_requests_with_catalog_id():
     args = {item["name"]: item["value"] for item in request.vllm_arguments}
     assert args["enable-auto-tool-choice"] == "true"
     assert args["tool-call-parser"] == "qwen3_coder"
+    assert "revision" not in args
     assert request.model_catalog_snapshot["source"] == "builtin"
 
 
@@ -187,6 +189,23 @@ def test_disabling_tools_replaces_upstream_bare_flag(shell):
     assert "--enable-auto-tool-choice" not in tokens
     assert "--no-enable-auto-tool-choice" in tokens
     assert "--port=8000" in tokens
+
+
+@pytest.mark.parametrize("shell", [False, True])
+@pytest.mark.parametrize(
+    "value,expected", [("true", "--enable-auto-tool-choice"), ("false", "--no-enable-auto-tool-choice")]
+)
+def test_catalog_boolean_values_become_bare_flags(shell, value, expected):
+    from llm_d_lens.deploy.guide_runtime import apply_runtime_overrides
+
+    container = (
+        {"command": ["sh", "-c", "vllm serve model --enable-auto-tool-choice --port=8000"]}
+        if shell
+        else {"command": ["vllm", "serve", "model"], "args": ["--enable-auto-tool-choice", "--port=8000"]}
+    )
+    apply_runtime_overrides(container, [{"name": "enable-auto-tool-choice", "value": value, "kind": "argument"}])
+    tokens = (" ".join(container.get("command", []) + container.get("args", []))).split()
+    assert [token for token in tokens if "auto-tool-choice" in token] == [expected]
 
 
 def test_cache_selection_matches_revision():

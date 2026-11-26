@@ -22,6 +22,7 @@ from typing import Literal
 import yaml
 
 from llm_d_lens.infrastructure.hostos import current_host
+from llm_d_lens.infrastructure.network import hostinfo
 from llm_d_lens.model_service.contracts import MAX_BACKEND_WEIGHT
 from llm_d_lens.versions import gateway_provider_version
 
@@ -69,8 +70,15 @@ AUTHZ_TLS_DR_NAME = f"{AUTHZ_SERVICE_NAME}-tls"
 
 
 def authz_tls_insecure_enabled() -> bool:
-    """Whether to originate unverified TLS to the Istio authz backend."""
-    return os.environ.get(AUTHZ_TLS_INSECURE_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+    """Whether to originate unverified TLS to the Istio authz backend.
+
+    An explicit env value wins; otherwise follow whether Lens itself serves HTTPS,
+    since plain-HTTP ext_authz to an HTTPS backend fails every request with 503.
+    """
+    value = os.environ.get(AUTHZ_TLS_INSECURE_ENV, "").strip().lower()
+    if value:
+        return value in {"1", "true", "yes", "on"}
+    return hostinfo.current_serving_tls()
 
 
 def authz_path(cluster_id: str | None) -> str:

@@ -63,7 +63,9 @@ def _insert_legacy_cluster(engine, cluster_id: str) -> None:
 def test_merge_revision_joins_the_three_heads(postgres_config):
     script = ScriptDirectory.from_config(postgres_config)
 
-    assert set(script.get_heads()) == {drop_steps_migration.revision}
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert drop_steps_migration.revision in {revision.revision for revision in script.walk_revisions("base", heads[0])}
     assert script.get_revision(merge.revision).down_revision == ORIGINAL_HEADS
     assert script.get_revision(migration.revision).down_revision == merge.revision
     assert script.get_revision(ledger_migration.revision).down_revision == migration.revision

@@ -74,6 +74,9 @@ def serving_arguments(settings: ServingDefaults, overrides: list[dict[str, str]]
             parser = value
         else:
             values[name] = value
+    # Guide shell invocations cannot carry literal newlines, even quoted.
+    if any("\n" in value or "\r" in value for value in values.values()):
+        raise ValueError("Serving arguments must be single-line; use a file path for multi-line chat templates.")
     if enabled and not re.fullmatch(r"[a-z0-9_]+", parser):
         raise ValueError("Tool calling requires a valid tool call parser.")
     values["enable-auto-tool-choice"] = "true" if enabled else "false"

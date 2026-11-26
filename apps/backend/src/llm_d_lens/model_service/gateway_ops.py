@@ -670,6 +670,14 @@ def member_is_routable(member) -> bool:
     return not any(components.get(key) == "missing" for key in ("epp", "inferencePool", "modelServer"))
 
 
+def _member_epp_key(member) -> tuple[str, str] | None:
+    bare_pool = member_pool_name(member)
+    epp_name = member.epp_ref or (f"{bare_pool}-epp" if bare_pool else "")
+    if not epp_name:
+        return None
+    return split_pool_name(member.pool_name)[0] or member.target_namespace, epp_name
+
+
 def _member_configured_for_handoff(member) -> bool:
     """Declarative routability for Non-Admin handoff planning (ignores runtime health)."""
     return (
@@ -2928,11 +2936,13 @@ class GatewayOpsService:
                 original = deepcopy(config)
                 # The upstream agentgateway standalone config uses plaintext
                 # endpointPicker.host. Do not invent a TLS migration for it.
-                for bind in config.get("binds", []):
-                    for listener in bind.get("listeners", []):
-                        for route in listener.get("routes", []):
-                            for backend in route.get("backends", []):
-                                picker = backend.get("policies", {}).get("inferenceRouting", {}).get("endpointPicker")
+                for bind in config.get("binds") or []:
+                    for listener in bind.get("listeners") or []:
+                        for route in listener.get("routes") or []:
+                            for backend in route.get("backends") or []:
+                                picker = ((backend.get("policies") or {}).get("inferenceRouting") or {}).get(
+                                    "endpointPicker"
+                                )
                                 if picker:
                                     if secure or set(picker) != {"host"}:
                                         raise GatewayOpsError(
@@ -2940,7 +2950,7 @@ class GatewayOpsService:
                                             "redeploy with an Envoy proxy before publishing"
                                         )
                                     recognized = True
-                clusters = config.get("static_resources", {}).get("clusters", [])
+                clusters = (config.get("static_resources") or {}).get("clusters") or []
                 for cluster in clusters:
                     if cluster.get("name") != "ext_proc":
                         continue
@@ -2961,7 +2971,7 @@ class GatewayOpsService:
                         )
                     else:
                         cluster.pop("transport_socket", None)
-                    for check in cluster.get("health_checks", []):
+                    for check in cluster.get("health_checks") or []:
                         if secure:
                             check.setdefault("tls_options", {"alpn_protocols": ["h2"]})
                         else:
@@ -3353,27 +3363,26 @@ class GatewayOpsService:
             )
             routable_namespaces = {split_pool_name(m.pool_name)[0] or m.target_namespace for m in routable}
             if routable:
-                if gw_provider in ("istio", "agentgateway"):
-                    for member in routable:
-                        epp_ns = split_pool_name(member.pool_name)[0] or member.target_namespace
-                        if epp_ns not in caps.permitted_member_namespaces:
-                            continue
-                        bare_pool = member_pool_name(member)
-                        epp_name = member.epp_ref or (f"{bare_pool}-epp" if bare_pool else "")
-                        if epp_name and (epp_ns, epp_name) not in healed_epps:
-                            healed_epps.add((epp_ns, epp_name))
-                            try:
-                                await self._ensure_epp_transport(
-                                    cluster_id,
-                                    epp_ns,
-                                    epp_name,
-                                    secure_serving=epp_secure_serving(provider=gw_provider),
-                                    on_log=on_log,
-                                )
-                            except (GatewayOpsError, ValueError, OSError, TimeoutError) as error:
-                                raise GatewayOpsError(
-                                    f"Router {epp_ns}/{epp_name} transport reconciliation failed: {error}"
-                                ) from error
+                for member in routable:
+                    epp_ns = split_pool_name(member.pool_name)[0] or member.target_namespace
+                    if epp_ns not in caps.permitted_member_namespaces:
+                        continue
+                    bare_pool = member_pool_name(member)
+                    epp_name = member.epp_ref or (f"{bare_pool}-epp" if bare_pool else "")
+                    if epp_name and (epp_ns, epp_name) not in healed_epps:
+                        healed_epps.add((epp_ns, epp_name))
+                        try:
+                            await self._ensure_epp_transport(
+                                cluster_id,
+                                epp_ns,
+                                epp_name,
+                                secure_serving=epp_secure_serving(provider=gw_provider),
+                                on_log=on_log,
+                            )
+                        except (GatewayOpsError, ValueError, OSError, TimeoutError) as error:
+                            raise GatewayOpsError(
+                                f"Router {epp_ns}/{epp_name} transport reconciliation failed: {error}"
+                            ) from error
                 permitted_bindings = [
                     PoolBinding(
                         member_pool_name(m),
@@ -3794,7 +3803,8 @@ class GatewayOpsService:
             jsonpath_rows = '\'{range .spec.template.spec.containers[*]}{.name}{"\\t"}{.args[*]}{"\\n"}{end}\''
             lines.extend(
                 [
-                    "patch_epp_plaintext() {",
+                    f"EPP_SECURE_SERVING={str(epp_secure_serving(provider=gw_provider)).lower()}",
+                    "patch_epp_transport() {",
                     '  local ns="$1"',
                     '  local name="$2"',
                     "  local cidx=0",
@@ -3804,7 +3814,7 @@ class GatewayOpsService:
                     "  fi",
                     '  if kubectl get deploy "$name" -n "$ns" -o jsonpath='
                     + jsonpath_args
-                    + " 2>/dev/null | grep -Fq -- '--secure-serving=false'; then",
+                    + ' 2>/dev/null | grep -Fq -- "--secure-serving=$EPP_SECURE_SERVING"; then',
                     '    kubectl rollout status "deploy/$name" -n "$ns" --timeout=120s || return 1',
                     "    return 0",
                     "  fi",
@@ -3841,11 +3851,11 @@ class GatewayOpsService:
                     "      if [[ $found_flag -eq 1 ]]; then",
                     '        kubectl patch deploy "$name" -n "$ns" --type=json -p '
                     + '"[{\\"op\\":\\"replace\\",\\"path\\":\\"/spec/template/spec/containers/${cidx}'
-                    + '/args/${flag_idx}\\",\\"value\\":\\"--secure-serving=false\\"}]"',
+                    + '/args/${flag_idx}\\",\\"value\\":\\"--secure-serving=${EPP_SECURE_SERVING}\\"}]"',
                     "      else",
                     '        kubectl patch deploy "$name" -n "$ns" --type=json -p '
                     + '"[{\\"op\\":\\"add\\",\\"path\\":\\"/spec/template/spec/containers/${cidx}'
-                    + '/args/-\\",\\"value\\":\\"--secure-serving=false\\"}]"',
+                    + '/args/-\\",\\"value\\":\\"--secure-serving=${EPP_SECURE_SERVING}\\"}]"',
                     "      fi",
                     '      kubectl rollout status "deploy/$name" -n "$ns" --timeout=120s || return 1',
                     "      return 0",
@@ -3895,7 +3905,7 @@ class GatewayOpsService:
 
         # Verify EPP transport before publishing routes; retain independent proxies.
         for epp_ns, epp_name in epp_targets:
-            lines.append(f"patch_epp_plaintext {shlex.quote(epp_ns)} {shlex.quote(epp_name)}")
+            lines.append(f"patch_epp_transport {shlex.quote(epp_ns)} {shlex.quote(epp_name)}")
             lines.append(f"append_done {shlex.quote(f'patch-epp-{epp_ns}-{epp_name}')}")
         if epp_targets:
             lines.append("")
@@ -4167,34 +4177,34 @@ class GatewayOpsService:
                                     summary=f"Apply {doc_kind} {doc_ns}/{doc_name} for {group.name}",
                                 )
                             )
-                    if gw_provider in ("istio", "agentgateway"):
-                        for m in routable:
-                            bare_pool = member_pool_name(m)
-                            epp_name = m.epp_ref or (f"{bare_pool}-epp" if bare_pool else "")
-                            if not epp_name:
-                                continue
-                            epp_raw_ns = split_pool_name(m.pool_name)[0] or m.target_namespace
-                            epp_ns = _validate_dns1123_label(epp_raw_ns, "eppNamespace")
-                            epp_sub = _validate_dns1123_subdomain(epp_name, "eppName")
-                            key = (epp_ns, epp_sub)
-                            if key not in seen_all_epp:
-                                seen_all_epp.add(key)
-                                all_routable_epp_targets.append(key)
-                            if epp_raw_ns in effective_caps.permitted_member_namespaces:
-                                continue
-                            if key not in seen_epp:
-                                seen_epp.add(key)
-                                epp_targets.append(key)
-                                pending_ops.append(
-                                    PendingOperationItem(
-                                        id=f"patch-epp-{epp_ns}-{epp_sub}",
-                                        action="patch",
-                                        kind="Deployment",
-                                        namespace=epp_ns,
-                                        name=epp_sub,
-                                        summary=f"Ensure EPP {epp_ns}/{epp_sub} uses plaintext ext_proc",
-                                    )
+                    epp_transport = "TLS" if epp_secure_serving(provider=gw_provider) else "plaintext"
+                    for m in routable:
+                        bare_pool = member_pool_name(m)
+                        epp_name = m.epp_ref or (f"{bare_pool}-epp" if bare_pool else "")
+                        if not epp_name:
+                            continue
+                        epp_raw_ns = split_pool_name(m.pool_name)[0] or m.target_namespace
+                        epp_ns = _validate_dns1123_label(epp_raw_ns, "eppNamespace")
+                        epp_sub = _validate_dns1123_subdomain(epp_name, "eppName")
+                        key = (epp_ns, epp_sub)
+                        if key not in seen_all_epp:
+                            seen_all_epp.add(key)
+                            all_routable_epp_targets.append(key)
+                        if epp_raw_ns in effective_caps.permitted_member_namespaces:
+                            continue
+                        if key not in seen_epp:
+                            seen_epp.add(key)
+                            epp_targets.append(key)
+                            pending_ops.append(
+                                PendingOperationItem(
+                                    id=f"patch-epp-{epp_ns}-{epp_sub}",
+                                    action="patch",
+                                    kind="Deployment",
+                                    namespace=epp_ns,
+                                    name=epp_sub,
+                                    summary=f"Ensure EPP {epp_ns}/{epp_sub} uses {epp_transport} ext_proc",
                                 )
+                            )
                     for m in g_members:
                         if m in routable:
                             continue
@@ -5210,6 +5220,14 @@ class GatewayOpsService:
                                     advisory = bool(caps.can_read_gateway_namespace and k8s_routes_ok)
                                     if advisory:
                                         detail_msg = "Gateway route returned 404; K8s HTTPRoute is ready."
+                                elif code == 503 and not resp.content.strip():
+                                    # ext_authz status_on_error: Envoy never reached Lens' authorize endpoint.
+                                    r_status = "degraded"
+                                    advisory = True
+                                    detail_msg = (
+                                        "Gateway could not reach Lens authorization (empty 503); "
+                                        "run gateway repair so the authz hop matches Lens' HTTP/HTTPS scheme."
+                                    )
                                 elif code in (502, 503, 504):
                                     r_status = "loading"
                                     advisory = True
@@ -5873,11 +5891,9 @@ class GatewayOpsService:
         by_group = {}
         for member in self.members.list_by_cluster(cluster_id):
             by_group.setdefault(member.group_id, []).append(member)
-        # Repair both sides of the deployment transport before publishing routes.
-        try:
-            await self._heal_member_epps(cluster_id, provider=provider, on_log=on_log)
-        except (GatewayOpsError, ValueError, OSError, TimeoutError) as error:
-            return self._finish(operation, ok=False, message=f"Router transport reconciliation failed: {error}")
+        # Repair both sides of the deployment transport before publishing routes;
+        # a Router that cannot be repaired is withheld without blocking healthy ones.
+        unrepaired_epps = await self._heal_member_epps(cluster_id, provider=provider, on_log=on_log)
         applied_names: set[str] = set()
         rewrite_documents: list[str] = []
         applied_rewrites: set[tuple[str, str]] = set()
@@ -5893,6 +5909,18 @@ class GatewayOpsService:
             published = [m for m in cluster_members if member_is_routable(m)]
             if not published:
                 continue
+            route_name = resource_name(f"{group.name}-{group.id}")
+            if any(_member_epp_key(m) in unrepaired_epps for m in published):
+                # Leave this model's live route untouched until its Router transport is repaired.
+                applied_names.add(route_name)
+                applied_rewrites.update(
+                    (
+                        split_pool_name(m.pool_name)[0] or m.target_namespace or namespace,
+                        model_rewrite_name(route_name, member_pool_name(m)),
+                    )
+                    for m in published
+                )
+                continue
             bindings = [
                 PoolBinding(
                     member_pool_name(member),
@@ -5906,7 +5934,6 @@ class GatewayOpsService:
                 return self._finish(
                     operation, ok=False, message=f"model {group.name}: requires at most 16 distinct pools"
                 )
-            route_name = resource_name(f"{group.name}-{group.id}")
             public_model = group.base_model or group.model_ref
             applied_names.add(route_name)
             documents.append(
@@ -6025,6 +6052,16 @@ class GatewayOpsService:
                 return self._finish(
                     operation, ok=False, message=(deleted.stderr or "stale model map removal failed").strip()
                 )
+        if unrepaired_epps:
+            routers = "; ".join(f"{ns}/{name}: {error}" for (ns, name), error in sorted(unrepaired_epps.items()))
+            return self._finish(
+                operation,
+                ok=False,
+                message=(
+                    f"Router transport reconciliation failed for {routers}; their model routes were left unchanged "
+                    f"and {len(documents)} other model route(s) were reconciled"
+                ),
+            )
         _, existing_handoff = self._load_handoff_locked(cluster_id)
         if existing_handoff.get("reconcileStatus") == "admin_handoff_required":
             self._save_handoff_locked(
@@ -6352,34 +6389,42 @@ class GatewayOpsService:
             logger.warning("data-plane auto-heal IPP failed for %s: %s", cluster_id, error)
         try:
             await self._heal_member_epps(cluster_id)
-        except GatewayOpsError as error:
+        except Exception as error:  # noqa: BLE001 - best effort; the probe retries
             logger.warning("data-plane auto-heal Router failed for %s: %s", cluster_id, error)
 
     async def _heal_member_epps(
         self, cluster_id: str, *, provider: str | None = None, on_log: OnLog | None = None
-    ) -> None:
-        """Synchronize both EPP and retained standalone proxy for publication."""
+    ) -> dict[tuple[str, str], str]:
+        """Synchronize both EPP and retained standalone proxy for publication.
+
+        Returns the Routers whose transport could not be reconciled so callers
+        can withhold only those members instead of blocking the whole cluster.
+        """
         cluster = get_cluster(cluster_id)
         if cluster is None:
-            return
+            return {}
         provider = provider or cluster.gateway_provider or DEFAULT_PROVIDER
         secure = epp_secure_serving(provider=provider)
         groups = {group.id: group for group in self.groups.list()}
         healed: set[tuple[str, str]] = set()
+        failed: dict[tuple[str, str], str] = {}
         for member in self.members.list_by_cluster(cluster_id):
             group = groups.get(member.group_id)
-            if member.status == "disabled" or group is None or group.status == "disabled":
+            if group is None or group.status == "disabled" or not member_is_routable(member):
                 continue
-            bare_pool = member_pool_name(member)
-            epp_name = member.epp_ref or (f"{bare_pool}-epp" if bare_pool else "")
-            if not epp_name:
+            epp_key = _member_epp_key(member)
+            if epp_key is None or epp_key in healed:
                 continue
-            epp_ns = split_pool_name(member.pool_name)[0] or member.target_namespace
-            key = (epp_ns, epp_name)
-            if key in healed:
-                continue
-            healed.add(key)
-            await self._ensure_epp_transport(cluster_id, epp_ns, epp_name, secure_serving=secure, on_log=on_log)
+            healed.add(epp_key)
+            try:
+                await self._ensure_epp_transport(cluster_id, *epp_key, secure_serving=secure, on_log=on_log)
+            except (GatewayOpsError, ValueError, OSError, TimeoutError) as error:
+                failed[epp_key] = str(error)
+                message = f"Router {epp_key[0]}/{epp_key[1]} transport reconciliation failed: {error}"
+                logger.warning("%s (cluster %s)", message, cluster_id)
+                if on_log is not None:
+                    await on_log(message)
+        return failed
 
     @staticmethod
     def _non_admin_route_handoff_pending(saved_state: Mapping[str, Any], group_id: str) -> bool:
@@ -7085,6 +7130,7 @@ class GatewayOpsService:
         saved_state = dict(saved_op.detail_json or {}) if saved_op else {}
         handoff_ns = saved_state.get("markerNamespace")
         desired_hash = saved_state.get("desiredHash")
+        handoff_blocked = False
         if (
             caps.access_mode == "non_admin"
             or not caps.can_reconcile_routes
@@ -7400,8 +7446,13 @@ class GatewayOpsService:
                 )
             except GatewayValidationError:
                 pass
+            except GatewayOpsError as error:
+                logger.warning("handoff verification blocked by member transport for %s: %s", cluster_id, error)
+                handoff_blocked = True
         reconcile_status: GatewayReconcileStatus = (
-            "admin_handoff_required" if saved_state.get("reconcileStatus") == "admin_handoff_required" else "synced"
+            "admin_handoff_required"
+            if handoff_blocked or saved_state.get("reconcileStatus") == "admin_handoff_required"
+            else "synced"
         )
         fallback_mode_raw = saved_state.get("mode") or "routes"
         fallback_mode: GatewayRemediationMode = (

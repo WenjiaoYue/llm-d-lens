@@ -96,7 +96,8 @@ def resolve_deployment_model(request):
         }
     )
     arguments = serving_arguments(settings, request.vllm_arguments)
-    arguments.append({"name": "revision", "value": entry.revision})
+    if entry.revision != "main":
+        arguments.append({"name": "revision", "value": entry.revision})
     updates = {
         "model_catalog_id": entry.id,
         "model_catalog_version": entry.version,

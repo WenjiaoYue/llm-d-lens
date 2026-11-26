@@ -9,7 +9,7 @@ export default function ModelParametersForm({ value, onChange }) {
             <label className="text-xs font-medium text-theme-text">Reasoning parser<Input className="mt-1.5" value={value.reasoningParser} pattern="[a-z0-9_]*" placeholder="Runtime default" onChange={event => set('reasoningParser', event.target.value)} /></label>
             <label className="text-xs font-medium text-theme-text">Runtime dtype<Input className="mt-1.5" value={value.dtype} placeholder="Runtime default" onChange={event => set('dtype', event.target.value)} /></label>
         </div>
-        <label className="block text-xs font-medium text-theme-text">Chat template<Textarea className="mt-1.5 font-mono" rows={2} value={value.chatTemplate} placeholder="Runtime default; template text or a path inside the runtime container" onChange={event => set('chatTemplate', event.target.value)} /></label>
+        <label className="block text-xs font-medium text-theme-text">Chat template<Input className="mt-1.5 font-mono" value={value.chatTemplate} placeholder="Runtime default; template text or a path inside the runtime container" onChange={event => set('chatTemplate', event.target.value)} /></label>
         <label className="block text-xs font-medium text-theme-text">Additional vLLM arguments<Textarea className="mt-1.5 font-mono" rows={3} value={value.extra} placeholder={'kv-cache-dtype=fp8'} onChange={event => set('extra', event.target.value)} /></label>
         <p className="text-xs text-theme-muted">One name=value per line. Use the fields above for tool calling, parsers, dtype and chat template. Context, batching, memory and parallelism belong to the deployment plan.</p>
     </div>;

@@ -254,9 +254,7 @@ export default function ModelMarketPage({ onNavigate, isActive = true }) {
             <Panel id="deployment-target" padding="none" tone="soft">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-theme-border px-5 py-4">
                     <div className="flex min-w-0 items-center gap-3"><span className="deployment-mode-icon"><Box size={20} /></span><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wider text-theme-muted">{[selected.family, selected.dtype, selected.weightGiB && `${selected.weightGiB} GiB`].filter(Boolean).join(' · ')}</p><h2 className="truncate text-xl font-semibold tracking-tight">{selected.name}</h2></div></div>
-                    <label className="text-xs text-theme-muted">Publisher / organization<Select aria-label="Filter by publisher" value={publisher} onChange={event => setPublisher(event.target.value)}><option value="">All publishers</option>{publishers.map(value => <option key={value} value={value}>{value}</option>)}</Select></label>
-                <label className="text-xs text-theme-muted">Sort by<Select aria-label="Sort models" value={sort} onChange={event => setSort(event.target.value)}><option value="newest">Release date: newest first</option><option value="oldest">Release date: oldest first</option><option value="name">Name: A–Z</option></Select></label>
-                <span role="status">{!cluster ? null : loadingStorage || (checkingCache && !cacheReady) ? <Badge tone="info" size="md"><Spinner size="sm" />Checking model cache</Badge>
+                    <span role="status">{!cluster ? null : loadingStorage || (checkingCache && !cacheReady) ? <Badge tone="info" size="md"><Spinner size="sm" />Checking model cache</Badge>
                         : cacheReady ? <Badge tone="success" size="md"><CheckCircle2 size={13} />Model cache ready</Badge> : <Badge tone="warning" size="md">Model cache not ready</Badge>}</span>
                 </div>
                 <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
